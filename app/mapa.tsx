@@ -1,0 +1,945 @@
+import Carro from '@/components/Carro';
+import { useCarSelection } from '@/context/CarContext';
+import { carMaps } from '@/src/utils/carMaps';
+import React, { useEffect, useRef, useState } from 'react';
+import { LayoutAnimation, Platform, StyleSheet, Text, UIManager, View, useWindowDimensions } from 'react-native';
+
+type CarKey = keyof typeof carMaps;
+
+/* ================= CONFIGURAÇÕES DA FÍSICA E VELOCIDADE ================= */
+const GRAVITY = 0.8;
+const JUMP_FORCE = -15;
+const PLAYER_SIZE = 50;
+
+// Novas constantes de Corrida
+const MAX_SPEED = 12;
+const MIN_SPEED = 3;
+const IMPULSE_FORCE = 1.5;
+const ACCELERATION = 0.3;
+const FRICTION = 0.15;
+const NITRO_SPEED = 22;
+const NITRO_DURATION = 60 * 3;
+
+/* ================= CORES DISPONÍVEIS ================= */
+const AVAILABLE_BOT_COLORS = [
+  '#FF3B30', '#34C759', '#007AFF', '#FFCC00', '#FF9500', '#AF52DE', '#1C1C1E', '#F2F2F7',
+];
+
+export default function Mapa() {
+
+  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
+
+  if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  }
+
+  const { selectedCar, selectedColor } = useCarSelection();
+
+  const BASE_PLAYER_X = SCREEN_WIDTH * 0.4;
+  const GAP_BETWEEN_RACERS = 130;
+  const TOTAL_RACERS = 6;
+
+  type CardEffect = 'swap' | 'heavy_gravity' | 'invert_controls' | 'blind' | 'panic' | 'ghost' | 'score_boost';
+
+  type Block = {
+    id: any;
+    type: 'flat' | 'ramp';
+    x: number;
+    width: number;
+    y?: number;
+    startY?: number;
+    endY?: number;
+  };
+
+  const BOT_NAMES = [
+    'Relâmpago', 'Marquinhos', 'Trovão', 'Faísca', 'Brisa',
+    'Ventania', 'Cometa', 'Nitro', 'Sombra', 'Turbina', 'Rex'
+  ];
+
+  const CARD_CATEGORIES = {
+    HEAVY_ATTACK: ['swap', 'heavy_gravity', 'blind'],
+    LIGHT_ATTACK: ['invert_controls', 'panic'],
+    DEFENSE_BUFF: ['ghost', 'score_boost']
+  };
+
+  const COOLDOWNS = { HEAVY: 60 * 15, LIGHT: 60 * 8, DEFENSE: 60 * 12 };
+
+  const defaultStatus = { gravityMultiplier: 1, controlsInverted: false, isBlind: false, isPanicking: false, isGhost: false, scoreMultiplier: 1 };
+
+  const playerStatus = useRef({ ...defaultStatus });
+  const activeEffectsTimers = useRef<Partial<Record<CardEffect, number>>>({});
+
+  const isCrouchingRef = useRef(false);
+  const [isCrouching, setIsCrouching] = useState(false);
+
+  const playerSpeed = useRef(MIN_SPEED);
+  const nitroCharge = useRef(0);
+  const isNitroActive = useRef(false);
+  const nitroTimer = useRef(0);
+
+  const y = useRef(SCREEN_HEIGHT / 2);
+  const playerXRef = useRef(BASE_PLAYER_X);
+  const velocity = useRef(0);
+  const isGrounded = useRef(false);
+  const gameTime = useRef(0);
+
+  const raceTimeRef = useRef(0);
+  const timeRemainingRef = useRef(0);
+
+  const isCountingRef = useRef(false);
+
+
+  const blocksRef = useRef<Block[]>([
+    { id: 1, type: 'flat', x: 0, y: SCREEN_HEIGHT - 100, width: SCREEN_WIDTH * 1.5 }
+  ]);
+
+  const getRandomColor = () => AVAILABLE_BOT_COLORS[Math.floor(Math.random() * AVAILABLE_BOT_COLORS.length)];
+  const getRandomCarType = (): CarKey => {
+    const carKeys: CarKey[] = Object.keys(carMaps) as CarKey[];
+    return carKeys[Math.floor(Math.random() * carKeys.length)];
+  };
+
+  const botsRef = useRef([
+    { id: 'bot1', name: getRandomName(), deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'default', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
+    { id: 'bot2', name: getRandomName(), deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'gangster', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
+    { id: 'bot3', name: getRandomName(), deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'ninja', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
+    { id: 'bot4', name: getRandomName(), deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'pirate', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
+    { id: 'bot5', name: getRandomName(), deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'surfer', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
+  ]);
+
+
+  const [timeRemaining, setTimeRemaining] = useState(0);
+
+  const [nitroPercent, setNitroPercent] = useState(0);
+  const [isNitroReady, setIsNitroReady] = useState(false);
+  const [angle, setAngle] = useState(0);
+
+  const [playerY, setPlayerY] = useState(y.current);
+  const [playerX, setPlayerX] = useState(playerXRef.current);
+
+  const [bots, setBots] = useState(botsRef.current);
+  const [started, setStarted] = useState(false);
+  const [gameOver, setGameOver] = useState(false);
+  const [score, setScore] = useState(0);
+
+  const [countdownStep, setCountdownStep] = useState<number | string | null>(null);
+
+  const [cameraTransform, setCameraTransform] = useState({ x: 0, scale: 1 });
+  const [focusedDriver, setFocusedDriver] = useState<number | string | null>(null);
+
+  const [leaderboard, setLeaderboard] = useState<{ id: string, name: string }[]>([]);
+  const lastOrderRef = useRef('');
+
+  const [blocks, setBlocks] = useState(blocksRef.current);
+  const [isBlindActive, setIsBlindActive] = useState(false);
+  const [isGhostActive, setIsGhostActive] = useState(false);
+
+  const setupPositions = () => {
+    const positions = Array.from({ length: TOTAL_RACERS }, (_, i) => BASE_PLAYER_X - (i * GAP_BETWEEN_RACERS));
+    for (let i = positions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [positions[i], positions[j]] = [positions[j], positions[i]];
+    }
+
+    playerXRef.current = positions[0];
+    setPlayerX(positions[0]);
+
+    const groundY = SCREEN_HEIGHT - 100;
+    const startY = groundY - PLAYER_SIZE;
+
+    const newBots = [...botsRef.current];
+    for (let i = 0; i < 5; i++) {
+      newBots[i].x = positions[i + 1];
+      newBots[i].y = startY;
+      newBots[i].velocity = 0;
+      newBots[i].speed = MIN_SPEED;
+      newBots[i].status = { ...defaultStatus };
+      newBots[i].activeEffectsTimers = {};
+      newBots[i].deck = generateRandomDeck();
+      newBots[i].carType = getRandomCarType();
+      newBots[i].carColor = getRandomColor();
+      newBots[i].angle = 0;
+    }
+    botsRef.current = newBots;
+    setBots(newBots);
+
+    const randomSeconds = Math.floor(Math.random() * (180 - 60 + 1)) + 60;
+    raceTimeRef.current = randomSeconds;
+    timeRemainingRef.current = randomSeconds;
+    setTimeRemaining(randomSeconds);
+  };
+
+  /* ================= USE EFFECT DE PREPARAÇÃO DO INICIO ================= */
+  useEffect(() => {
+    if (!started && !isCountingRef.current && !gameOver) {
+      const groundY = SCREEN_HEIGHT - 100;
+      const startY = groundY - PLAYER_SIZE;
+
+      y.current = startY;
+      setPlayerY(y.current);
+
+      blocksRef.current = [{ id: 1, type: 'flat', x: -2000, y: groundY, width: SCREEN_WIDTH * 5 + 2000 }];
+      setBlocks(blocksRef.current);
+
+      setupPositions();
+
+      setTimeout(() => {
+        startRaceSequence();
+      }, 2000);
+    }
+  }, [SCREEN_HEIGHT, SCREEN_WIDTH]);
+
+  /* ================= GAME LOOP ================= */
+  useEffect(() => {
+    if (!started || gameOver) return;
+
+    const loop = setInterval(() => {
+      gameTime.current += 1;
+
+      // ================= LÓGICA DO TIMER =================
+      const elapsedSeconds = Math.floor((gameTime.current * 16) / 1000);
+      const currentSecs = raceTimeRef.current - elapsedSeconds;
+
+      if (currentSecs !== timeRemainingRef.current) {
+        timeRemainingRef.current = currentSecs;
+        setTimeRemaining(currentSecs);
+      }
+
+      // Fim de jogo pelo tempo esgotado
+      if (currentSecs <= 0 && !gameOver) {
+        setGameOver(true);
+      }
+
+      // 1 e 2: Lógica Nitro / Velocidade mantidas iguais
+      if (isNitroActive.current) {
+        playerSpeed.current = NITRO_SPEED;
+        nitroTimer.current -= 1;
+        if (nitroTimer.current <= 0) {
+          isNitroActive.current = false;
+          nitroCharge.current = 0;
+          setIsNitroReady(false);
+          setNitroPercent(0);
+        }
+      } else {
+        playerSpeed.current = Math.max(playerSpeed.current - FRICTION, MIN_SPEED);
+      }
+
+      const dynamicSpeed = playerSpeed.current;
+      let isDrafting = false;
+      botsRef.current.forEach(bot => {
+        const distanceToBot = bot.x - playerXRef.current;
+        if (distanceToBot > 10 && distanceToBot < 120 && Math.abs(bot.y - y.current) < 30) isDrafting = true;
+      });
+
+      if (isDrafting && !isNitroActive.current && nitroCharge.current < 100) {
+        nitroCharge.current += 0.8;
+        if (nitroCharge.current >= 100) { nitroCharge.current = 100; if (!isNitroReady) setIsNitroReady(true); }
+        if (gameTime.current % 5 === 0) setNitroPercent(nitroCharge.current);
+      } else if (!isDrafting && !isNitroActive.current && nitroCharge.current > 0) {
+        nitroCharge.current = Math.max(nitroCharge.current - 0.2, 0);
+        if (nitroCharge.current < 100 && isNitroReady) setIsNitroReady(false);
+        if (gameTime.current % 5 === 0) setNitroPercent(nitroCharge.current);
+      }
+
+      // Placar e Efeitos (Mantidos Iguais)
+      if (gameTime.current % 10 === 0) {
+        const allRacers = [{ id: 'player', name: 'Você (P1)', x: playerXRef.current }, ...botsRef.current.map(b => ({ id: b.id, name: b.name, x: b.x }))].sort((a, b) => b.x - a.x);
+        const currentOrder = allRacers.map(r => r.id).join(',');
+        if (currentOrder !== lastOrderRef.current) {
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          setLeaderboard(allRacers.map(r => ({ id: r.id, name: r.name })));
+          lastOrderRef.current = currentOrder;
+        }
+      }
+
+      for (const [effect, timeLeft] of Object.entries(activeEffectsTimers.current)) {
+        if (timeLeft && timeLeft > 0) {
+          activeEffectsTimers.current[effect as CardEffect] = timeLeft - 1;
+          if (timeLeft - 1 === 0) {
+            switch (effect) {
+              case 'heavy_gravity': playerStatus.current.gravityMultiplier = 1; break;
+              case 'invert_controls': playerStatus.current.controlsInverted = false; break;
+              case 'blind': playerStatus.current.isBlind = false; setIsBlindActive(false); break;
+              case 'panic': playerStatus.current.isPanicking = false; break;
+              case 'ghost': playerStatus.current.isGhost = false; setIsGhostActive(false); break;
+              case 'score_boost': playerStatus.current.scoreMultiplier = 1; break;
+            }
+          }
+        }
+      }
+
+      if (playerStatus.current.isPanicking && isGrounded.current && gameTime.current % 30 === 0) {
+        velocity.current = JUMP_FORCE;
+        isGrounded.current = false;
+      }
+
+      const currentGravity = GRAVITY * playerStatus.current.gravityMultiplier;
+      velocity.current += currentGravity;
+      y.current += velocity.current;
+
+      // --- 4. GERAÇÃO E MOVIMENTO DOS BLOCOS (AGORA COM BURACOS INTELIGENTES) ---
+      let updatedBlocks = blocksRef.current.map(block => ({ ...block, x: block.x - dynamicSpeed }));
+      const lastBlock = updatedBlocks[updatedBlocks.length - 1];
+
+      if (lastBlock && lastBlock.x + lastBlock.width < SCREEN_WIDTH + 1500) {
+        const minWidth = 150;
+        const maxWidth = 350;
+        const newWidth = Math.random() * (maxWidth - minWidth) + minWidth;
+
+        let direction = Math.floor(Math.random() * 3) - 1;
+        const currentY = lastBlock.type === 'ramp' ? lastBlock.endY! : lastBlock.y!;
+        let nextY = currentY + (direction * 80);
+
+        if (nextY < 150) nextY = 150;
+        if (nextY > SCREEN_HEIGHT - 100) nextY = SCREEN_HEIGHT - 100;
+
+        const heightDiff = nextY - currentY;
+        const newId = Math.random().toString(36).substr(2, 9);
+
+        if (Math.abs(heightDiff) > 20) {
+          // No RN, Y maior significa mais para baixo na tela.
+          // Só geramos buraco se a próxima plataforma for mais BAIXA (heightDiff > 0)
+          if (heightDiff > 0 && Math.random() > 0.4) {
+            // Gera um buraco de 160px adicionando espaço VAZIO ao 'x' do próximo bloco
+            updatedBlocks.push({
+              id: newId,
+              type: 'flat',
+              x: lastBlock.x + lastBlock.width + 160,
+              y: nextY,
+              width: newWidth,
+            });
+          } else {
+            // Se for subida (heightDiff < 0) ou se a chance de buraco falhou, gera uma rampa
+            updatedBlocks.push({
+              id: newId,
+              type: 'ramp',
+              x: lastBlock.x + lastBlock.width,
+              startY: currentY,
+              endY: nextY,
+              width: 250,
+            });
+          }
+        } else {
+          updatedBlocks.push({
+            id: newId,
+            type: 'flat',
+            x: lastBlock.x + lastBlock.width,
+            y: currentY,
+            width: newWidth,
+          });
+        }
+      }
+
+      blocksRef.current = updatedBlocks.filter(block => block.x + block.width > -200);
+
+      // --- 5. INTELIGÊNCIA DE CORRIDA DOS BOTS (FÍSICA CORRIGIDA) ---
+      botsRef.current.forEach(bot => {
+        let targetSpeed = MAX_SPEED * (0.8 + Math.random() * 0.2);
+        if (bot.x < playerXRef.current - 150) targetSpeed = MAX_SPEED * 1.1;
+
+        if (bot.speed < targetSpeed) bot.speed += ACCELERATION * 0.8;
+        if (bot.speed > targetSpeed) bot.speed -= FRICTION;
+
+        bot.x += (bot.speed - dynamicSpeed);
+        if (bot.x > SCREEN_WIDTH - 50) bot.x = SCREEN_WIDTH - 50;
+        if (bot.x < -100) bot.x = -100;
+
+        bot.deck.forEach(card => { if (card.currentCooldown > 0) card.currentCooldown -= 1; });
+
+        for (const [effect, timeLeft] of Object.entries(bot.activeEffectsTimers)) {
+          if (timeLeft && (timeLeft as number) > 0) {
+            bot.activeEffectsTimers[effect as CardEffect] = (timeLeft as number) - 1;
+            if ((timeLeft as number) - 1 === 0) {
+              if (effect === 'heavy_gravity') bot.status.gravityMultiplier = 1;
+              if (effect === 'panic') bot.status.isPanicking = false;
+            }
+          }
+        }
+
+        if (bot.status.isPanicking && bot.velocity === 0 && gameTime.current % 30 === 0) bot.velocity = JUMP_FORCE;
+
+        const currentBotGravity = GRAVITY * bot.status.gravityMultiplier;
+        bot.velocity += currentBotGravity;
+        bot.y += bot.velocity;
+
+        const botFootY = bot.y + PLAYER_SIZE;
+        const botCenterX = bot.x + (PLAYER_SIZE / 2);
+
+        let targetBotAngle = 0;
+
+        // Novo cálculo de colisão do Bot baseado no "find" em vez de um for loop falho
+        const currentBotBlock = blocksRef.current.find(
+          block => botCenterX >= block.x && botCenterX <= block.x + block.width
+        );
+
+        if (currentBotBlock) {
+          let groundYAtX = currentBotBlock.y || 0;
+
+          if (currentBotBlock.type === 'flat') {
+            groundYAtX = currentBotBlock.y!;
+            targetBotAngle = 0;
+          } else if (currentBotBlock.type === 'ramp') {
+            const progress = (botCenterX - currentBotBlock.x) / currentBotBlock.width;
+            groundYAtX = currentBotBlock.startY! + ((currentBotBlock.endY! - currentBotBlock.startY!) * progress);
+            const dy = currentBotBlock.endY! - currentBotBlock.startY!;
+            targetBotAngle = Math.atan2(dy, currentBotBlock.width) * (180 / Math.PI);
+          }
+
+          // Verificação sólida cravando no chão (ignora saltos de frames)
+          if (bot.velocity >= 0 && botFootY >= groundYAtX - 25) {
+            bot.y = groundYAtX - PLAYER_SIZE;
+            bot.velocity = 0;
+
+            // IA para Pular de plataforma se estiver acabando
+            if (currentBotBlock.type === 'flat') {
+              const distanceToEnd = (currentBotBlock.x + currentBotBlock.width) - bot.x;
+              let reactionDistance = 80 + (Math.random() * 40);
+              if (!bot.status.isBlind && distanceToEnd < reactionDistance) {
+                bot.velocity = JUMP_FORCE;
+              }
+            }
+          }
+        }
+        bot.angle = targetBotAngle;
+      });
+
+      botsRef.current = botsRef.current.filter(bot => bot.y <= SCREEN_HEIGHT + 100);
+
+      if (gameTime.current % 30 === 0) processBotsAI();
+
+      // --- 6. COLISÕES DO PLAYER (FÍSICA CORRIGIDA) ---
+      let landedOnBlock = false;
+      const playerFootY = y.current + PLAYER_SIZE;
+      const playerCenterX = playerXRef.current + (PLAYER_SIZE / 2);
+      let targetAngle = 0;
+
+      // Encontra exatamente qual bloco está debaixo do centro do jogador
+      const currentBlock = blocksRef.current.find(
+        block => playerCenterX >= block.x && playerCenterX <= block.x + block.width
+      );
+
+      if (currentBlock) {
+        let groundYAtX = currentBlock.y || 0;
+
+        if (currentBlock.type === 'flat') {
+          groundYAtX = currentBlock.y!;
+          targetAngle = 0;
+        } else if (currentBlock.type === 'ramp') {
+          const progress = (playerCenterX - currentBlock.x) / currentBlock.width;
+          groundYAtX = currentBlock.startY! + ((currentBlock.endY! - currentBlock.startY!) * progress);
+          const dy = currentBlock.endY! - currentBlock.startY!;
+          targetAngle = Math.atan2(dy, currentBlock.width) * (180 / Math.PI);
+        }
+
+        // CRAVA NO CHÃO se estiver caindo e passou/chegou da linha do chão (+ margem de tolerância)
+        if (velocity.current >= 0 && playerFootY >= groundYAtX - 25) {
+          y.current = groundYAtX - PLAYER_SIZE;
+          velocity.current = 0;
+          landedOnBlock = true;
+        }
+      }
+
+      setAngle(targetAngle);
+      isGrounded.current = landedOnBlock;
+
+      if (y.current > SCREEN_HEIGHT + 100) setGameOver(true);
+
+      if (gameTime.current % 10 === 0) setScore(s => s + Math.floor(playerSpeed.current / 3));
+
+      setPlayerY(y.current);
+      setPlayerX(playerXRef.current);
+      setBlocks(blocksRef.current);
+      setBots([...botsRef.current])
+    }, 16);
+
+    return () => clearInterval(loop);
+  }, [started, gameOver, SCREEN_WIDTH, SCREEN_HEIGHT]);
+
+  /* ================= RESTANTE DO CÓDIGO (Funções auxiliares e Render) ================= */
+  function getRandomName() { return BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)]; }
+
+  function generateRandomDeck() {
+    const allEffects: CardEffect[] = ['swap', 'heavy_gravity', 'invert_controls', 'blind', 'panic', 'ghost', 'score_boost'];
+    const shuffled = allEffects.sort(() => 0.5 - Math.random());
+    return [
+      { effect: shuffled[0], currentCooldown: 60 * 3 + Math.floor(Math.random() * 120), baseCooldown: COOLDOWNS.HEAVY },
+      { effect: shuffled[1], currentCooldown: 60 * 3 + Math.floor(Math.random() * 120), baseCooldown: COOLDOWNS.LIGHT }
+    ];
+  }
+
+  function handleAddImpulse() {
+    if (gameOver || isNitroActive.current) return;
+    playerSpeed.current = Math.min(playerSpeed.current + IMPULSE_FORCE, MAX_SPEED);
+  }
+
+  function processBotsAI() {
+    const allRacers = [{ id: 'player', x: playerXRef.current, isPlayer: true }, ...botsRef.current.map(b => ({ id: b.id, x: b.x, isPlayer: false }))].sort((a, b) => b.x - a.x);
+    botsRef.current.forEach(bot => {
+      if (bot.thinkTimer > 0) { bot.thinkTimer--; return; }
+      const availableCards = bot.deck.filter(card => card.currentCooldown <= 0);
+      if (availableCards.length === 0) return;
+      const myRank = allRacers.findIndex(r => r.id === bot.id);
+      const chosenCard = availableCards[Math.floor(Math.random() * availableCards.length)];
+      let target = bot.id;
+
+      if (!CARD_CATEGORIES.DEFENSE_BUFF.includes(chosenCard.effect as any)) {
+        const opponentsAhead = allRacers.slice(0, myRank);
+        if (opponentsAhead.length > 0) {
+          if (chosenCard.effect === 'swap') {
+            target = Math.random() > 0.4 ? opponentsAhead[0].id : opponentsAhead[Math.floor(Math.random() * opponentsAhead.length)].id;
+          } else {
+            target = Math.random() > 0.3 ? opponentsAhead[opponentsAhead.length - 1].id : opponentsAhead[Math.floor(Math.random() * opponentsAhead.length)].id;
+          }
+        } else {
+          const opponentsBehind = allRacers.slice(myRank + 1);
+          if (opponentsBehind.length > 0) target = opponentsBehind[0].id;
+          else return;
+        }
+      }
+
+      if (chosenCard.effect === 'swap') {
+        const targetRacer = allRacers.find(r => r.id === target);
+        if (targetRacer && targetRacer.x <= bot.x) { bot.thinkTimer = 30; return; }
+      }
+      applyCardEffect(chosenCard.effect as CardEffect, target, bot.id);
+      chosenCard.currentCooldown = chosenCard.baseCooldown;
+      bot.thinkTimer = 60 + Math.floor(Math.random() * 120);
+    });
+  }
+
+  function applyCardEffect(effect: CardEffect, targetId: string, sourceId: string) {
+    const DURATION = 60 * 4;
+    if (effect === 'swap') {
+      const sourceBot = botsRef.current.find(b => b.id === sourceId);
+      if (sourceId === 'player') {
+        const targetBot = botsRef.current.find(b => b.id === targetId);
+        if (targetBot) {
+          const tempY = y.current; const tempX = playerXRef.current;
+          y.current = targetBot.y; playerXRef.current = targetBot.x;
+          targetBot.y = tempY; targetBot.x = tempX;
+        }
+      } else if (sourceBot) {
+        if (targetId === 'player') {
+          const tempY = y.current; const tempX = playerXRef.current;
+          y.current = sourceBot.y; playerXRef.current = sourceBot.x;
+          sourceBot.y = tempY; sourceBot.x = tempX;
+        } else {
+          const targetBot = botsRef.current.find(b => b.id === targetId);
+          if (targetBot) {
+            const tempY = targetBot.y; const tempX = targetBot.x;
+            targetBot.y = sourceBot.y; sourceBot.y = tempY;
+            targetBot.x = sourceBot.x; sourceBot.x = tempX;
+          }
+        }
+      }
+      return;
+    }
+
+    if (targetId === 'player') {
+      activeEffectsTimers.current[effect] = DURATION;
+      switch (effect) {
+        case 'heavy_gravity': playerStatus.current.gravityMultiplier = 2; break;
+        case 'invert_controls': playerStatus.current.controlsInverted = true; break;
+        case 'blind': playerStatus.current.isBlind = true; setIsBlindActive(true); break;
+        case 'panic': playerStatus.current.isPanicking = true; break;
+        case 'ghost': playerStatus.current.isGhost = true; setIsGhostActive(true); break;
+        case 'score_boost': playerStatus.current.scoreMultiplier = 2; break;
+      }
+    } else {
+      const targetBot = botsRef.current.find(b => b.id === targetId);
+      if (targetBot) {
+        targetBot.activeEffectsTimers[effect] = DURATION;
+        if (effect === 'heavy_gravity') targetBot.status.gravityMultiplier = 2;
+        if (effect === 'panic') targetBot.status.isPanicking = true;
+        if (effect === 'blind') { targetBot.status.isBlind = true; targetBot.activeEffectsTimers.blind = DURATION; }
+      }
+    }
+  }
+
+  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+  const focusOn = (targetX: number, zoom: boolean = true) => {
+    const toScale = zoom ? 2 : 1;
+
+    const targetCenter = targetX + (PLAYER_SIZE / 2);
+
+    const offset = zoom
+      ? (SCREEN_WIDTH / 2 - targetCenter) * toScale
+      : 0;
+
+    setCameraTransform({ x: offset, scale: toScale });
+  };
+
+  const startRaceSequence = async () => {
+    if (isCountingRef.current) return;
+    isCountingRef.current = true;
+
+    setCountdownStep('PREPARANDO');
+    await sleep(1500);
+
+    if (botsRef.current[0]) {
+      setCountdownStep(3);
+      setFocusedDriver(null);
+      setFocusedDriver(0);
+      focusOn(botsRef.current[0].x);
+    }
+    await sleep(1000);
+
+    if (botsRef.current[1]) {
+      setCountdownStep(2);
+      setFocusedDriver(null);
+      setFocusedDriver(1);
+      focusOn(botsRef.current[1].x);
+    }
+    await sleep(1000);
+
+    if (botsRef.current[2]) {
+      setCountdownStep(1);
+      setFocusedDriver(null);
+      setFocusedDriver(2);
+      focusOn(botsRef.current[2].x);
+    }
+    await sleep(1000);
+
+    setFocusedDriver(null);
+    setCountdownStep('JÁ!');
+    focusOn(0, false);
+    setStarted(true);
+
+    isCountingRef.current = false;
+    await sleep(800);
+    setCountdownStep(null);
+  };
+
+  function handleJump() {
+    if (gameOver) {
+
+      const groundY = SCREEN_HEIGHT - 100;
+      const startY = groundY - PLAYER_SIZE;
+
+      setGameOver(false);
+      cameraOffset.setValue(0);
+      setCountdownStep(null);
+      setStarted(false);
+      setScore(0);
+      gameTime.current = 0;
+      nitroCharge.current = 0;
+      setNitroPercent(0);
+      setIsNitroReady(false);
+      isNitroActive.current = false;
+      y.current = startY;
+      velocity.current = 0;
+      blocksRef.current = [{ id: Date.now(), type: 'flat', x: 0, y: groundY, width: SCREEN_WIDTH * 1.5 }];
+      setBlocks(blocksRef.current); setupPositions();
+      return;
+    }
+
+    if (playerStatus.current.controlsInverted) {
+      isCrouchingRef.current = true; setIsCrouching(true);
+      setTimeout(() => { isCrouchingRef.current = false; setIsCrouching(false); }, 500);
+      return;
+    }
+
+    if (isGrounded.current) { velocity.current = JUMP_FORCE; isGrounded.current = false; }
+  }
+
+  function handleActivateNitro() {
+    if (isNitroReady && !isNitroActive.current) { isNitroActive.current = true; nitroTimer.current = NITRO_DURATION; setIsNitroReady(false); }
+  }
+
+  // Preparação do Mini-mapa
+  const allRacersPositions = [
+    { id: 'player', x: playerX, color: selectedColor || '#00D084', isPlayer: true },
+    ...bots.map(b => ({ id: b.id, x: b.x, color: b.carColor, isPlayer: false }))
+  ];
+
+  const minMapX = Math.min(...allRacersPositions.map(r => r.x));
+  const maxMapX = Math.max(...allRacersPositions.map(r => r.x));
+  const mapSpan = Math.max(2000, maxMapX - minMapX);
+
+  return (
+    <View style={styles.container}>
+      <View style={StyleSheet.absoluteFillObject} />
+
+      <View style={styles.leaderboardContainer} pointerEvents="none">
+        <Text style={styles.leaderboardTitle}>RANKING</Text>
+        {leaderboard.map((racer, index) => (
+          <View key={racer.id} style={[styles.leaderboardItem, racer.id === 'player' && styles.leaderboardItemPlayer]}>
+            <Text style={styles.leaderboardRank}>{index + 1}º</Text>
+            <Text style={styles.leaderboardName} numberOfLines={1}>{racer.name}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* ================= MINI-MAPA ================= */}
+      <View style={styles.miniMapContainer}>
+        <View style={styles.miniMapLine} />
+        {allRacersPositions.map(racer => {
+          const progress = (racer.x - minMapX) / mapSpan;
+          return (
+            <View
+              key={racer.id}
+              style={[
+                styles.miniMapDot,
+                {
+                  backgroundColor: racer.color,
+                  left: `${progress * 100}%`,
+                  zIndex: racer.isPlayer ? 10 : 1,
+                  width: racer.isPlayer ? 14 : 10,
+                  height: racer.isPlayer ? 14 : 10,
+                  borderRadius: racer.isPlayer ? 7 : 5,
+                  borderWidth: racer.isPlayer ? 2 : 0,
+                  borderColor: '#FFF',
+                  transform: [{ translateX: racer.isPlayer ? -7 : -5 }]
+                }
+              ]}
+            />
+          );
+        })}
+      </View>
+
+      <View style={styles.hud}>
+        <Text style={styles.scoreText}>⏱️ {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}</Text>
+        <View style={styles.nitroBarContainer}>
+          <View style={[styles.nitroBarFill, { width: `${nitroPercent}%`, backgroundColor: isNitroReady ? '#00FFFF' : '#FFD700' }]} />
+          <Text style={styles.nitroBarText}>VÁCUO</Text>
+        </View>
+      </View>
+
+      <View
+        style={[
+          StyleSheet.absoluteFillObject,
+          {
+            transform: [
+              { translateX: cameraTransform.x },
+              { scale: cameraTransform.scale }
+            ]
+          }
+        ]}
+      >
+        {blocks.map((b) => {
+          if (b.type === 'flat') {
+            return <View key={`flat-${b.id}`} style={[styles.block, { left: b.x, top: b.y, width: b.width }]} />;
+          } else if (b.type === 'ramp') {
+            const dy = b.endY! - b.startY!;
+            const dx = b.width;
+            const length = Math.sqrt(dx * dx + dy * dy);
+            const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+            const midX = b.x + dx / 2;
+            const midY = (b.startY! + b.endY!) / 2;
+
+            return (
+              <View
+                key={`ramp-${b.id}`}
+                style={[
+                  styles.block,
+                  {
+                    left: midX - length / 2,
+                    top: midY - 1000,
+                    width: length,
+                    height: 2000,
+                    transform: [{ rotate: `${angle}deg` }, { translateY: 1000 }]
+                  }
+                ]}
+              />
+            );
+          }
+        })}
+
+        {bots.map((bot, index) => (
+          <View
+            key={bot.id}
+            style={{
+              position: 'absolute',
+              top: bot.y,
+              left: bot.x,
+              zIndex: 4,
+              transform: [{ rotate: `${bot.angle || 0}deg` }],
+              width: PLAYER_SIZE,
+              height: PLAYER_SIZE,
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+            }}
+          >
+            {focusedDriver === index && (
+              <View style={styles.nameTag}>
+                <Text style={styles.nameTagText}>{bot.name || `BOT_${index + 1}`}</Text>
+                <View style={styles.nameTagArrow} />
+              </View>
+            )}
+            <View style={{ width: '200%', alignItems: 'center' }}>
+
+              <Carro
+                carType={bot.carType}
+                carColor={bot.carColor}
+                speed={bot.speed}
+                skin={bot.skin} />
+            </View>
+          </View>
+        ))}
+
+        <View
+          style={{
+            position: 'absolute',
+            zIndex: 5,
+            opacity: isGhostActive ? 0.4 : 1,
+            left: playerX,
+            top: playerY,
+            transform: [{ rotate: `${angle}deg` }],
+            width: PLAYER_SIZE,
+            height: PLAYER_SIZE,
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+          }}
+        >
+          {focusedDriver === 'player' && (
+            <View style={styles.nameTag}>
+              <Text style={styles.nameTagText}>VOCÊ</Text>
+              <View style={styles.nameTagArrow} />
+            </View>
+          )}
+          <View style={{ width: '200%', alignItems: 'center' }}>
+            <Carro
+              carType={selectedCar}
+              carColor={selectedColor}
+              speed={playerSpeed.current}
+              skin="default" />
+          </View>
+        </View>
+
+      </View>
+
+      {isBlindActive && <View style={styles.blindEffect} pointerEvents="none" />}
+
+      <View style={styles.jumpArea} onStartShouldSetResponder={() => true} onResponderGrant={handleJump}>
+        <Text style={styles.throttleBtnText}>Pular</Text>
+      </View>
+
+      {started && !gameOver && (
+        <View style={styles.drivingControls}>
+          {isNitroReady && (
+            <View style={styles.nitroBtn} onTouchStart={handleActivateNitro}><Text style={styles.nitroBtnText}>NITRO</Text></View>
+          )}
+          <View style={styles.throttleBtn} onTouchStart={handleAddImpulse}>
+            <Text style={styles.throttleBtnText}>Acelerar</Text>
+          </View>
+        </View>
+      )}
+
+      {countdownStep && (
+        <View style={styles.overlay} pointerEvents="none">
+          {countdownStep === 'PREPARANDO' && <Text style={styles.titleText}>PREPARANDO...</Text>}
+          {countdownStep === 'GO' && <Text style={[styles.titleText, { color: '#00D084' }]}>JÁ!</Text>}
+
+          {typeof countdownStep === 'number' && (
+            <View style={styles.trafficLightContainer}>
+              <View style={[styles.light, { backgroundColor: countdownStep <= 3 ? '#00D084' : '#FF3B30' }]} />
+              <View style={[styles.light, { backgroundColor: countdownStep <= 2 ? '#00D084' : '#FF3B30' }]} />
+              <View style={[styles.light, { backgroundColor: countdownStep <= 1 ? '#00D084' : '#FF3B30' }]} />
+            </View>
+          )}
+        </View>
+      )}
+
+      {gameOver && (
+        <View style={styles.overlay} pointerEvents="none">
+          <Text style={styles.titleText}>CAIU!</Text>
+          <Text style={{ color: '#fff', fontSize: 20 }}>Você correu {score}m</Text>
+          <Text style={{ color: '#aaa', marginTop: 20 }}>Toque para tentar de novo</Text>
+        </View>
+      )}
+    </View >
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#1E1E2E', overflow: 'hidden' },
+  miniMapContainer: { position: 'absolute', top: 20, alignSelf: 'center', width: '60%', height: 20, justifyContent: 'center', zIndex: 10 },
+  miniMapLine: { position: 'absolute', left: 0, right: 0, height: 4, backgroundColor: 'rgba(255, 255, 255, 0.4)', borderRadius: 2 },
+  miniMapDot: { position: 'absolute', top: '50%', marginTop: -5 },
+  hud: { position: 'absolute', top: 60, right: 50, zIndex: 10 },
+  scoreText: { fontSize: 32, fontWeight: '900', color: '#FFF' },
+  leaderboardContainer: { position: 'absolute', top: 60, left: 20, backgroundColor: 'rgba(0, 0, 0, 0.5)', padding: 10, borderRadius: 10, zIndex: 10, width: 150 },
+  leaderboardTitle: { color: '#FFD700', fontWeight: '900', fontStyle: 'italic', marginBottom: 5, textAlign: 'center', fontSize: 12 },
+  leaderboardItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 255, 255, 0.1)', marginBottom: 4, paddingVertical: 4, paddingHorizontal: 8, borderRadius: 5 },
+  leaderboardItemPlayer: { backgroundColor: 'rgba(0, 208, 132, 0.4)', borderWidth: 1, borderColor: '#00D084' },
+  leaderboardRank: { color: '#FFF', fontWeight: 'bold', width: 25, fontSize: 12 },
+  leaderboardName: { color: '#FFF', fontSize: 12, flex: 1 },
+  nitroBarContainer: { marginTop: '3%', alignSelf: 'center', width: '100%', height: 20, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 10, borderWidth: 2, borderColor: '#FFF', overflow: 'hidden', zIndex: 10, justifyContent: 'center', alignItems: 'center' },
+  nitroBarFill: { position: 'absolute', left: 0, top: 0, bottom: 0 },
+  nitroBarText: { color: '#FFF', fontWeight: 'bold', fontSize: 10, fontStyle: 'italic', zIndex: 2 },
+  jumpArea: { position: 'absolute', backgroundColor: '#fff', left: 40, bottom: 30, height: 90, width: 90, borderRadius: 45, zIndex: 30, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 5 },
+  drivingControls: { position: 'absolute', bottom: 30, right: 40, flexDirection: 'row', alignItems: 'center', gap: 20, zIndex: 30 },
+  throttleBtn: { width: 90, height: 90, borderRadius: 45, backgroundColor: 'rgba(0, 208, 132, 0.8)', borderWidth: 4, borderColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 5 },
+  throttleBtnText: { color: '#FFF', fontWeight: '900', fontSize: 14, fontStyle: 'italic' },
+  nitroBtn: { width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(0, 255, 255, 0.9)', borderWidth: 3, borderColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 5 },
+  nitroBtnText: { color: '#000', fontWeight: '900', fontSize: 14, fontStyle: 'italic' },
+  block: { position: 'absolute', height: 2000, backgroundColor: '#00D084', borderTopWidth: 5, borderColor: '#FFF', zIndex: 3 },
+  overlay: { 
+    ...StyleSheet.absoluteFillObject, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    zIndex: 20 
+  },
+  titleText: { 
+    fontSize: 48, 
+    fontWeight: '900', 
+    color: '#FFD700', 
+    textShadowColor: '#FF4500', 
+    textShadowOffset: { width: 3, height: 3 }, 
+    textShadowRadius: 5, 
+  },
+  nameTag: {
+    position: 'absolute',
+    top: -65,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingHorizontal: 5,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 80,
+  },
+  nameTagText: {
+    color: '#000',
+    fontWeight: '900',
+    fontSize: 9,
+    textTransform: 'uppercase',
+    textAlign: 'center',
+  },
+  nameTagArrow: {
+    position: 'absolute',
+    bottom: -8,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 8,
+    borderLeftColor: 'transparent',
+    borderRightWidth: 8,
+    borderRightColor: 'transparent',
+    borderTopWidth: 8,
+    borderTopColor: '#00D084',
+  },
+  trafficLightContainer: {
+    flexDirection: 'row',
+    position: 'absolute',
+    top: 60,
+    gap: 20,
+    backgroundColor: '#1C1C1E',
+    padding: 20,
+    borderRadius: 40,
+    borderWidth: 4,
+    borderColor: '#333',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+  },
+  light: {
+    width: 40,
+    height: 40,
+    borderRadius: 30,
+    borderWidth: 3,
+    borderColor: 'rgba(0,0,0,0.4)',
+  }, blindEffect: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0, 0, 0, 0.85)', zIndex: 15 },
+});

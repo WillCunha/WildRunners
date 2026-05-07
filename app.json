@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "RunnerGame",
-    "slug": "RunnerGame",
+    "name": "Wild Runners",
+    "slug": "Wild Runners",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "landscape",
     "icon": "./assets/images/icon.png",
     "scheme": "runnergame",
     "userInterfaceStyle": "automatic",
