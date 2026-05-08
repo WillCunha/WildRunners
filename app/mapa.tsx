@@ -1,8 +1,9 @@
 import Carro from '@/components/Carro';
+import SwapEffect from '@/components/Decks/SwapEffect';
 import { useCarSelection } from '@/context/CarContext';
 import { carMaps } from '@/src/utils/carMaps';
 import React, { useEffect, useRef, useState } from 'react';
-import { LayoutAnimation, Platform, StyleSheet, Text, UIManager, View, useWindowDimensions } from 'react-native';
+import { LayoutAnimation, Platform, StyleSheet, Text, TouchableOpacity, UIManager, View, useWindowDimensions } from 'react-native';
 
 type CarKey = keyof typeof carMaps;
 
@@ -133,6 +134,12 @@ export default function Mapa() {
   const [blocks, setBlocks] = useState(blocksRef.current);
   const [isBlindActive, setIsBlindActive] = useState(false);
   const [isGhostActive, setIsGhostActive] = useState(false);
+
+  // ---- DECKS ---- //
+  const SWAP_COOLDOWN = 8000;
+  const [activeSwap, setActiveSwap] = useState<{ callerId: string; targetId?: string; } | null>(null);
+  const [currentSwapTarget, setCurrentSwapTarget] = useState<string | null>(null);
+  const [swapCooldown, setSwapCooldown] = useState(0);
 
   const setupPositions = () => {
     const positions = Array.from({ length: TOTAL_RACERS }, (_, i) => BASE_PLAYER_X - (i * GAP_BETWEEN_RACERS));
@@ -455,9 +462,30 @@ export default function Mapa() {
     return () => clearInterval(loop);
   }, [started, gameOver, SCREEN_WIDTH, SCREEN_HEIGHT]);
 
-  /* ================= RESTANTE DO CÓDIGO (Funções auxiliares e Render) ================= */
-  function getRandomName() { return BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)]; }
+  /* ================= USE EFFECT DE COOLDOWN ================= */
+  useEffect(() => {
+    if (swapCooldown <= 0) return;
 
+    const interval = setInterval(() => {
+      setSwapCooldown(prev => {
+        if (prev <= 100) {
+          clearInterval(interval);
+          return 0;
+        }
+
+        return prev - 100;
+      });
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [swapCooldown]);
+
+  /* ================= GERA NOME ALEATORIO DOS BOTS ================= */
+  function getRandomName() {
+    return BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)];
+  }
+
+  /* ================= GERA CARTA ALEATORIA QUE OS BOTS VÃO ATACAR ================= */
   function generateRandomDeck() {
     const allEffects: CardEffect[] = ['swap', 'heavy_gravity', 'invert_controls', 'blind', 'panic', 'ghost', 'score_boost'];
     const shuffled = allEffects.sort(() => 0.5 - Math.random());
@@ -467,11 +495,23 @@ export default function Mapa() {
     ];
   }
 
+  /* ================= DA O IMPULSO ================= */
   function handleAddImpulse() {
     if (gameOver || isNitroActive.current) return;
     playerSpeed.current = Math.min(playerSpeed.current + IMPULSE_FORCE, MAX_SPEED);
   }
 
+
+  /* ================= HABILITA O SWAP ================= */
+  function triggerSwap(callerId: string) {
+    if (activeSwap) return;
+
+    setActiveSwap({
+      callerId,
+    });
+  }
+
+  /* ================= IA DOS BOTS ================= */
   function processBotsAI() {
     const allRacers = [{ id: 'player', x: playerXRef.current, isPlayer: true }, ...botsRef.current.map(b => ({ id: b.id, x: b.x, isPlayer: false }))].sort((a, b) => b.x - a.x);
     botsRef.current.forEach(bot => {
@@ -501,12 +541,18 @@ export default function Mapa() {
         const targetRacer = allRacers.find(r => r.id === target);
         if (targetRacer && targetRacer.x <= bot.x) { bot.thinkTimer = 30; return; }
       }
-      applyCardEffect(chosenCard.effect as CardEffect, target, bot.id);
+
+      if (chosenCard.effect === 'swap') {
+        triggerSwap(bot.id);
+      } else {
+        applyCardEffect(chosenCard.effect as CardEffect, target, bot.id);
+      }
       chosenCard.currentCooldown = chosenCard.baseCooldown;
       bot.thinkTimer = 60 + Math.floor(Math.random() * 120);
     });
   }
 
+  /* ================= APLICA EFEITO DAS CARTAS (VAI SER REMOVIDO) ================= */
   function applyCardEffect(effect: CardEffect, targetId: string, sourceId: string) {
     const DURATION = 60 * 4;
     if (effect === 'swap') {
@@ -554,6 +600,15 @@ export default function Mapa() {
         if (effect === 'blind') { targetBot.status.isBlind = true; targetBot.activeEffectsTimers.blind = DURATION; }
       }
     }
+  }
+
+  /* ================= APLICA EFEITO DO SWAP (VAI SER REMOVIDO) ================= */
+  function handleSwapPress() {
+    if (swapCooldown > 0) return;
+
+    triggerSwap('player');
+
+    setSwapCooldown(SWAP_COOLDOWN);
   }
 
   const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -676,6 +731,7 @@ export default function Mapa() {
         <View style={styles.miniMapLine} />
         {allRacersPositions.map(racer => {
           const progress = (racer.x - minMapX) / mapSpan;
+          const isSwapTarget = racer.id === currentSwapTarget;
           return (
             <View
               key={racer.id}
@@ -688,14 +744,48 @@ export default function Mapa() {
                   width: racer.isPlayer ? 14 : 10,
                   height: racer.isPlayer ? 14 : 10,
                   borderRadius: racer.isPlayer ? 7 : 5,
-                  borderWidth: racer.isPlayer ? 2 : 0,
-                  borderColor: '#FFF',
-                  transform: [{ translateX: racer.isPlayer ? -7 : -5 }]
+                  shadowColor: '#FF004D',
+                  shadowOpacity: isSwapTarget ? 1 : 0,
+                  shadowRadius: isSwapTarget ? 10 : 0,
+                  elevation: isSwapTarget ? 12 : 0,
+                  transform: [
+                    {
+                      translateX: racer.isPlayer ? -7 : -5
+                    },
+                    {
+                      scale: isSwapTarget ? 1.8 : 1
+                    }
+                  ],
+                  borderWidth:
+                    isSwapTarget
+                      ? 3
+                      : racer.isPlayer
+                        ? 1
+                        : 0,
+
+                  borderColor:
+                    isSwapTarget
+                      ? '#FF004D'
+                      : '#FFF',
                 }
               ]}
             />
           );
         })}
+        {activeSwap && (
+          <SwapEffect
+            callerId={activeSwap.callerId}
+            allRacers={allRacersPositions}
+            onTargetChange={(targetId) => {
+              setCurrentSwapTarget(targetId);
+            }}
+            onSwapExecute={(targetId) => {
+              applyCardEffect('swap', targetId, activeSwap.callerId);
+              setCurrentSwapTarget(null);
+              setActiveSwap(null);
+            }}
+          />
+        )}
       </View>
 
       <View style={styles.hud}>
@@ -811,9 +901,50 @@ export default function Mapa() {
 
       {isBlindActive && <View style={styles.blindEffect} pointerEvents="none" />}
 
-      <View style={styles.jumpArea} onStartShouldSetResponder={() => true} onResponderGrant={handleJump}>
-        <Text style={styles.throttleBtnText}>Pular</Text>
-      </View>
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={handleSwapPress}
+        style={{
+          width: 82,
+          height: 82,
+          borderRadius: 41,
+          overflow: 'hidden',
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: '#1B1B1B',
+          borderWidth: 3,
+          borderColor: '#FF004D',
+          position: 'absolute',
+          bottom: 2,
+          left: 5
+        }}
+      >
+        {/* PROGRESSO DO COOLDOWN */}
+        {swapCooldown > 0 && (
+          <View
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: `${(swapCooldown / SWAP_COOLDOWN) * 100}%`,
+              backgroundColor: 'rgba(255,0,77,0.45)',
+            }}
+          />
+        )}
+
+        {/* TEXTO */}
+        <Text
+          style={{
+            color: 'white',
+            fontWeight: '900',
+            fontSize: 18,
+            letterSpacing: 1,
+          }}
+        >
+          SWAP
+        </Text>
+      </TouchableOpacity>
 
       {started && !gameOver && (
         <View style={styles.drivingControls}>
@@ -875,19 +1006,19 @@ const styles = StyleSheet.create({
   nitroBtn: { width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(0, 255, 255, 0.9)', borderWidth: 3, borderColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 5 },
   nitroBtnText: { color: '#000', fontWeight: '900', fontSize: 14, fontStyle: 'italic' },
   block: { position: 'absolute', height: 2000, backgroundColor: '#00D084', borderTopWidth: 5, borderColor: '#FFF', zIndex: 3 },
-  overlay: { 
-    ...StyleSheet.absoluteFillObject, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    zIndex: 20 
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 20
   },
-  titleText: { 
-    fontSize: 48, 
-    fontWeight: '900', 
-    color: '#FFD700', 
-    textShadowColor: '#FF4500', 
-    textShadowOffset: { width: 3, height: 3 }, 
-    textShadowRadius: 5, 
+  titleText: {
+    fontSize: 48,
+    fontWeight: '900',
+    color: '#FFD700',
+    textShadowColor: '#FF4500',
+    textShadowOffset: { width: 3, height: 3 },
+    textShadowRadius: 5,
   },
   nameTag: {
     position: 'absolute',
@@ -941,5 +1072,5 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     borderWidth: 3,
     borderColor: 'rgba(0,0,0,0.4)',
-  }, blindEffect: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0, 0, 0, 0.85)', zIndex: 15 },
+  }, blindEffect: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgb(255, 255, 255)', zIndex: 15 },
 });
