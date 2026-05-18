@@ -1,9 +1,15 @@
 import Carro from '@/components/Carro';
+import ChainsEffect from '@/components/Decks/ChainsEffect';
+import GuidedBulletEffect from '@/components/Decks/GuidedBulletEffect';
 import SwapEffect from '@/components/Decks/SwapEffect';
+import TornadoEffect from '@/components/Decks/TornadoEffect';
+import CorrenteVisual from '@/components/ui/CorrenteVisual';
+import GuidedBulletVisual from '@/components/ui/GuidedBulletVisual';
+import TornadoVisual from '@/components/ui/TornadoVisual';
 import { useCarSelection } from '@/context/CarContext';
 import { carMaps } from '@/src/utils/carMaps';
 import React, { useEffect, useRef, useState } from 'react';
-import { LayoutAnimation, Platform, StyleSheet, Text, TouchableOpacity, UIManager, View, useWindowDimensions } from 'react-native';
+import { Animated, LayoutAnimation, Platform, StyleSheet, Text, TouchableOpacity, UIManager, View, useWindowDimensions } from 'react-native';
 
 type CarKey = keyof typeof carMaps;
 
@@ -40,7 +46,19 @@ export default function Mapa() {
   const GAP_BETWEEN_RACERS = 130;
   const TOTAL_RACERS = 6;
 
-  type CardEffect = 'swap' | 'heavy_gravity' | 'invert_controls' | 'blind' | 'panic' | 'ghost' | 'score_boost';
+  type CardEffect = 'swap' | 'chains' | 'heavy_gravity' | 'invert_controls' |
+    'blind' | 'panic' | 'ghost' | 'score_boost' | 'tnt' |
+    'bullet' | 'tornado';
+
+  type TNTBox = {
+    id: string;
+    callerId: string;
+    x: number;
+    y: number;
+    timer: number;
+    state: 'counting' | 'exploding';
+  };
+
 
   type Block = {
     id: any;
@@ -58,14 +76,14 @@ export default function Mapa() {
   ];
 
   const CARD_CATEGORIES = {
-    HEAVY_ATTACK: ['swap', 'heavy_gravity', 'blind'],
+    HEAVY_ATTACK: ['swap', 'bullet', 'chains', 'tnt', 'tornado'],
     LIGHT_ATTACK: ['invert_controls', 'panic'],
     DEFENSE_BUFF: ['ghost', 'score_boost']
   };
 
   const COOLDOWNS = { HEAVY: 60 * 15, LIGHT: 60 * 8, DEFENSE: 60 * 12 };
 
-  const defaultStatus = { gravityMultiplier: 1, controlsInverted: false, isBlind: false, isPanicking: false, isGhost: false, scoreMultiplier: 1 };
+  const defaultStatus = { gravityMultiplier: 1, controlsInverted: false, isBlind: false, isPanicking: false, isGhost: false, scoreMultiplier: 1, isStunned: false };
 
   const playerStatus = useRef({ ...defaultStatus });
   const activeEffectsTimers = useRef<Partial<Record<CardEffect, number>>>({});
@@ -135,12 +153,43 @@ export default function Mapa() {
   const [isBlindActive, setIsBlindActive] = useState(false);
   const [isGhostActive, setIsGhostActive] = useState(false);
 
+  const [isCameraLocked, setIsCameraLocked] = useState(false);
+
   // ---- DECKS ---- //
+  // SWAP
   const SWAP_COOLDOWN = 8000;
   const [activeSwap, setActiveSwap] = useState<{ callerId: string; targetId?: string; } | null>(null);
   const [currentSwapTarget, setCurrentSwapTarget] = useState<string | null>(null);
   const [swapCooldown, setSwapCooldown] = useState(0);
+  const swapScaleAnim = useRef(new Animated.Value(1)).current;
 
+  // CHAINS
+  const CHAINS_COOLDOWN = 8000;
+  const [activeChains, setActiveChains] = useState<{ callerId: string } | null>(null);
+  const [activeChainsState, setActiveChainsState] = useState<{ callerId: string; targetId: string; duration: number; } | null>(null);
+  const activeChainsStateRef = useRef<{ callerId: string; targetId: string; duration: number; } | null>(null);
+  const [chainsCooldown, setChainsCooldown] = useState(0);
+
+  // GUIDED BULLET
+  const BULLET_COOLDOWN = 8000;
+  const activeBulletsRef = useRef<{ id: string; callerId: string; targetId: string; x: number; y: number; angle: number }[]>([]);
+  const [activeBulletEffect, setActiveBulletEffect] = useState<{ callerId: string } | null>(null);
+  const [bulletCooldown, setBulletCooldown] = useState(0);
+  const [bulletsToRender, setBulletsToRender] = useState(activeBulletsRef.current);
+
+  // TNT BOX
+  const TNT_COOLDOWN = 10000;
+  const activeTNTRef = useRef<TNTBox[]>([]);
+  const [tntCooldown, setTntCooldown] = useState(0);
+  const [tntsToRender, setTntsToRender] = useState<TNTBox[]>([]);
+
+  // TORNADO
+  const TORNADO_COOLDOWN = 12000;
+  const [tornadoCooldown, setTornadoCooldown] = useState(0);
+  const [activeTornado, setActiveTornado] = useState<{ callerId: string } | null>(null);
+  const [tornadosToRendar, setTornadosToRender] = useState<{ id: string; callerX: number; victims: any[] }[]>([]);
+
+  /* ================= SETA AS POSIÇÕES DE MODO ALEATORIO ================= */
   const setupPositions = () => {
     const positions = Array.from({ length: TOTAL_RACERS }, (_, i) => BASE_PLAYER_X - (i * GAP_BETWEEN_RACERS));
     for (let i = positions.length - 1; i > 0; i--) {
@@ -206,6 +255,8 @@ export default function Mapa() {
       // ================= LÓGICA DO TIMER =================
       const elapsedSeconds = Math.floor((gameTime.current * 16) / 1000);
       const currentSecs = raceTimeRef.current - elapsedSeconds;
+      const CAMERA_OFFSET_X = SCREEN_WIDTH * 0.35;
+
 
       if (currentSecs !== timeRemainingRef.current) {
         timeRemainingRef.current = currentSecs;
@@ -217,8 +268,19 @@ export default function Mapa() {
         setGameOver(true);
       }
 
+      if (!isCameraLocked) {
+        const CAMERA_OFFSET_X = SCREEN_WIDTH * 0.35;
+
+        setCameraTransform({
+          x: -playerXRef.current + CAMERA_OFFSET_X,
+          scale: 1,
+        });
+      }
+
       // 1 e 2: Lógica Nitro / Velocidade mantidas iguais
-      if (isNitroActive.current) {
+      if (playerStatus.current.isStunned) {
+        playerSpeed.current = 0; // Fica totalmente parado
+      } else if (isNitroActive.current) {
         playerSpeed.current = NITRO_SPEED;
         nitroTimer.current -= 1;
         if (nitroTimer.current <= 0) {
@@ -339,7 +401,7 @@ export default function Mapa() {
 
       blocksRef.current = updatedBlocks.filter(block => block.x + block.width > -200);
 
-      // --- 5. INTELIGÊNCIA DE CORRIDA DOS BOTS (FÍSICA CORRIGIDA) ---
+      // --- 5. INTELIGÊNCIA DE CORRIDA DOS BOTS  ---
       botsRef.current.forEach(bot => {
         let targetSpeed = MAX_SPEED * (0.8 + Math.random() * 0.2);
         if (bot.x < playerXRef.current - 150) targetSpeed = MAX_SPEED * 1.1;
@@ -348,8 +410,7 @@ export default function Mapa() {
         if (bot.speed > targetSpeed) bot.speed -= FRICTION;
 
         bot.x += (bot.speed - dynamicSpeed);
-        if (bot.x > SCREEN_WIDTH - 50) bot.x = SCREEN_WIDTH - 50;
-        if (bot.x < -100) bot.x = -100;
+
 
         bot.deck.forEach(card => { if (card.currentCooldown > 0) card.currentCooldown -= 1; });
 
@@ -392,10 +453,15 @@ export default function Mapa() {
             targetBotAngle = Math.atan2(dy, currentBotBlock.width) * (180 / Math.PI);
           }
 
-          // Verificação sólida cravando no chão (ignora saltos de frames)
+          if (bot.status.isStunned) {
+            targetBotAngle = (gameTime.current * 35) % 360; // Ajuste o 35 para girar mais rápido/devagar
+          }
+
+          // Verificação sólida cravando no chão
           if (bot.velocity >= 0 && botFootY >= groundYAtX - 25) {
             bot.y = groundYAtX - PLAYER_SIZE;
             bot.velocity = 0;
+            bot.status.isStunned = false;
 
             // IA para Pular de plataforma se estiver acabando
             if (currentBotBlock.type === 'flat') {
@@ -414,7 +480,176 @@ export default function Mapa() {
 
       if (gameTime.current % 30 === 0) processBotsAI();
 
-      // --- 6. COLISÕES DO PLAYER (FÍSICA CORRIGIDA) ---
+      // --- 6. EFEITO DA CORRENTE (CHAINS) ---
+      if (activeChainsStateRef.current && activeChainsStateRef.current.duration > 0) {
+        const { callerId, targetId } = activeChainsStateRef.current;
+
+        const callerX = callerId === 'player' ? playerXRef.current : botsRef.current.find(b => b.id === callerId)?.x || -1000;
+        const targetX = targetId === 'player' ? playerXRef.current : botsRef.current.find(b => b.id === targetId)?.x || -1000;
+
+        // Math.abs garante que a distância seja positiva, mesmo se o caller passar o target
+        const distanceBetween = Math.abs(targetX - callerX);
+
+        if (distanceBetween <= 20) {
+          // Os carros colidiram/se passaram. Limpamos o estado!
+          activeChainsStateRef.current = null;
+          setActiveChainsState(null);
+          setActiveChains(null);
+
+          // REMOVIDO: O "return;" perigoso que travava o jogo sumiu daqui.
+        } else {
+          const PULL_FORCE = 0.11;
+          const POSITION_PULL = 0.4;
+
+          if (callerId === 'player') {
+            playerSpeed.current += PULL_FORCE;
+            playerXRef.current += POSITION_PULL;
+          } else {
+            const callerBot = botsRef.current.find(b => b.id === callerId);
+            if (callerBot) {
+              callerBot.speed += PULL_FORCE;
+              callerBot.x += POSITION_PULL;
+            }
+          }
+
+          if (targetId === 'player') {
+            playerSpeed.current -= PULL_FORCE;
+            if (playerSpeed.current < 1) {
+              playerSpeed.current = 1;
+            }
+            playerXRef.current -= POSITION_PULL;
+          } else {
+            const targetBot = botsRef.current.find(b => b.id === targetId);
+            if (targetBot) {
+              targetBot.speed -= PULL_FORCE;
+              if (targetBot.speed < 1) {
+                targetBot.speed = 1;
+              }
+              targetBot.x -= POSITION_PULL;
+            }
+          }
+
+          // Diminui o tempo diretamente na referência (muito mais performático do que um setState a cada frame)
+          activeChainsStateRef.current.duration -= 1;
+        }
+      } else if (activeChainsStateRef.current && activeChainsStateRef.current.duration <= 0) {
+        activeChainsStateRef.current = null;
+        setActiveChainsState(null);
+        setActiveChains(null);
+      }
+
+      // --- 6.1. FÍSICA DO MÍSSIL GUIADO ---
+      let remainingBullets: typeof activeBulletsRef.current = [];
+      activeBulletsRef.current.forEach(bullet => {
+        const getCoords = (id: string) => {
+          if (id === 'player') return { x: playerXRef.current + PLAYER_SIZE / 2, y: y.current + PLAYER_SIZE / 2 };
+          const bot = botsRef.current.find(b => b.id === id);
+          return bot ? { x: bot.x + PLAYER_SIZE / 2, y: bot.y + PLAYER_SIZE / 2 } : null;
+        };
+
+        const targetCoords = getCoords(bullet.targetId);
+
+        if (!targetCoords) return;
+
+        const dx = targetCoords.x - bullet.x;
+        const dy = targetCoords.y - bullet.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance < 25) {
+          const JUMP_PENALTY = JUMP_FORCE * 1.2;
+          const SPEED_PENALTY = 0;
+
+          if (bullet.targetId === 'player') {
+            playerSpeed.current = SPEED_PENALTY;
+            velocity.current = JUMP_PENALTY;
+            isGrounded.current = false;
+            playerStatus.current.isStunned = true;
+          } else {
+            const targetBot = botsRef.current.find(b => b.id === bullet.targetId);
+            if (targetBot) {
+              targetBot.speed = SPEED_PENALTY;
+              targetBot.velocity = JUMP_PENALTY;
+              targetBot.status.isStunned = true;
+            }
+          }
+        } else {
+          const BULLET_SPEED = 25;
+          bullet.angle = Math.atan2(dy, dx) * (180 / Math.PI);
+          bullet.x += (dx / distance) * BULLET_SPEED;
+          bullet.y += (dy / distance) * BULLET_SPEED;
+          remainingBullets.push(bullet);
+        }
+      });
+      activeBulletsRef.current = remainingBullets;
+
+      // --- 6.2. FÍSICA DO TNT (CRASH BANDICOOT BOX) ---
+      let remainingTNT: TNTBox[] = [];
+      activeTNTRef.current.forEach(tnt => {
+        // Move a caixa junto com o cenário para trás
+        tnt.x -= dynamicSpeed;
+
+        if (tnt.state === 'exploding') {
+          // Mantém a explosão na tela por alguns frames para o visual
+          tnt.timer -= 1;
+          if (tnt.timer > 0) remainingTNT.push(tnt);
+        } else {
+          tnt.timer -= 1;
+
+          // Encontra o chão debaixo da caixa para ela cair e fixar
+          const currentTntBlock = blocksRef.current.find(b => tnt.x + (PLAYER_SIZE / 2) >= b.x && tnt.x + (PLAYER_SIZE / 2) <= b.x + b.width);
+          if (currentTntBlock) {
+            let groundY = currentTntBlock.y || 0;
+            if (currentTntBlock.type === 'ramp') {
+              const progress = (tnt.x + (PLAYER_SIZE / 2) - currentTntBlock.x) / currentTntBlock.width;
+              groundY = currentTntBlock.startY! + ((currentTntBlock.endY! - currentTntBlock.startY!) * progress);
+            }
+            // Crava no chão ou cai
+            if (tnt.y + PLAYER_SIZE < groundY - 5) {
+              tnt.y += GRAVITY * 6; // Cai rápido
+            } else {
+              tnt.y = groundY - PLAYER_SIZE;
+            }
+          }
+
+          // EXPLOSÃO!
+          if (tnt.timer <= 0) {
+            tnt.state = 'exploding';
+            tnt.timer = 15;
+
+            const EXPLOSION_RADIUS = 160;
+            const JUMP_PENALTY = JUMP_FORCE * 1.6;
+
+            const applyBlast = (racerId: string, rx: number, ry: number) => {
+              const dx = rx - tnt.x;
+              const dy = ry - tnt.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+
+              if (dist < EXPLOSION_RADIUS) {
+                if (racerId === 'player') {
+                  playerSpeed.current = 0;
+                  velocity.current = JUMP_PENALTY;
+                  isGrounded.current = false;
+                  playerStatus.current.isStunned = true;
+                } else {
+                  const bot = botsRef.current.find(b => b.id === racerId);
+                  if (bot) {
+                    bot.speed = 0;
+                    bot.velocity = JUMP_PENALTY;
+                    bot.status.isStunned = true;
+                  }
+                }
+              }
+            };
+
+            applyBlast('player', playerXRef.current, y.current);
+            botsRef.current.forEach(b => applyBlast(b.id, b.x, b.y));
+          }
+          remainingTNT.push(tnt);
+        }
+      });
+      activeTNTRef.current = remainingTNT;
+
+      // --- 7. COLISÕES DO PLAYER
       let landedOnBlock = false;
       const playerFootY = y.current + PLAYER_SIZE;
       const playerCenterX = playerXRef.current + (PLAYER_SIZE / 2);
@@ -438,11 +673,16 @@ export default function Mapa() {
           targetAngle = Math.atan2(dy, currentBlock.width) * (180 / Math.PI);
         }
 
-        // CRAVA NO CHÃO se estiver caindo e passou/chegou da linha do chão (+ margem de tolerância)
+        if (playerStatus.current.isStunned) {
+          targetAngle = (gameTime.current * 35) % 360;
+        }
+
+        // CRAVA NO CHÃO se estiver caindo e passou/chegou da linha do chão 
         if (velocity.current >= 0 && playerFootY >= groundYAtX - 25) {
           y.current = groundYAtX - PLAYER_SIZE;
           velocity.current = 0;
           landedOnBlock = true;
+          playerStatus.current.isStunned = false;
         }
       }
 
@@ -457,28 +697,45 @@ export default function Mapa() {
       setPlayerX(playerXRef.current);
       setBlocks(blocksRef.current);
       setBots([...botsRef.current])
+
+      setBulletsToRender([...activeBulletsRef.current]);
+      setTntsToRender([...activeTNTRef.current]);
     }, 16);
 
     return () => clearInterval(loop);
   }, [started, gameOver, SCREEN_WIDTH, SCREEN_HEIGHT]);
 
-  /* ================= USE EFFECT DE COOLDOWN ================= */
+  /* ================= GERENCIADOR ÚNICO DE COOLDOWNS (UI) ================= */
   useEffect(() => {
-    if (swapCooldown <= 0) return;
+    // Criamos um intervalo que roda apenas se houver algum cooldown ativo
+    const hasActiveCooldown = swapCooldown > 0 || chainsCooldown > 0 || bulletCooldown > 0;
 
-    const interval = setInterval(() => {
-      setSwapCooldown(prev => {
-        if (prev <= 100) {
-          clearInterval(interval);
-          return 0;
-        }
+    if (!hasActiveCooldown) return;
 
-        return prev - 100;
-      });
+    const globalInterval = setInterval(() => {
+      // Reduz o Swap
+      if (swapCooldown > 0) {
+        setSwapCooldown(prev => Math.max(0, prev - 100));
+      }
+      // Reduz a Corrente (Chains)
+      if (chainsCooldown > 0) {
+        setChainsCooldown(prev => Math.max(0, prev - 100));
+      }
+      // Reduz o Míssil (Bullet)
+      if (bulletCooldown > 0) {
+        setBulletCooldown(prev => Math.max(0, prev - 100));
+      }
+      // Reduz a TNT
+      if (tntCooldown > 0) {
+        setTntCooldown(prev => Math.max(0, prev - 100));
+      }
+      if (tornadoCooldown > 0) {
+        setTornadoCooldown(prev => Math.max(0, prev - 100));
+      }
     }, 100);
 
-    return () => clearInterval(interval);
-  }, [swapCooldown]);
+    return () => clearInterval(globalInterval);
+  }, [swapCooldown, chainsCooldown, bulletCooldown, tntCooldown, tornadoCooldown]);
 
   /* ================= GERA NOME ALEATORIO DOS BOTS ================= */
   function getRandomName() {
@@ -487,7 +744,7 @@ export default function Mapa() {
 
   /* ================= GERA CARTA ALEATORIA QUE OS BOTS VÃO ATACAR ================= */
   function generateRandomDeck() {
-    const allEffects: CardEffect[] = ['swap', 'heavy_gravity', 'invert_controls', 'blind', 'panic', 'ghost', 'score_boost'];
+    const allEffects: CardEffect[] = ['swap', 'blind', 'score_boost', 'bullet', 'chains', 'tnt', 'tornado'];
     const shuffled = allEffects.sort(() => 0.5 - Math.random());
     return [
       { effect: shuffled[0], currentCooldown: 60 * 3 + Math.floor(Math.random() * 120), baseCooldown: COOLDOWNS.HEAVY },
@@ -511,19 +768,50 @@ export default function Mapa() {
     });
   }
 
+  /* ================= HABILITA A CHAINS ================= */
+  function triggerChains(callerId: string) {
+    if (activeChains) return;
+    setActiveChains({ callerId });
+  }
+
+  /* ================= HABILITA O MISSIL GUIADO ================= */
+  function triggerBullet(callerId: string) {
+    if (activeBulletEffect) return;
+    setActiveBulletEffect({ callerId });
+  }
+
+  /* ================= HABILITA A CAIXA 'TNT' ================= */
+  function handleTNTPress() {
+    if (tntCooldown > 0) return;
+    triggerTNT('player');
+    setTntCooldown(TNT_COOLDOWN);
+  }
+
+  /* ================= HABILITA O TORNADO ================= */
+  function triggerTornado(callerId: string) {
+    if (activeTornado) return;
+    setActiveTornado({ callerId });
+  }
+
+
   /* ================= IA DOS BOTS ================= */
   function processBotsAI() {
     const allRacers = [{ id: 'player', x: playerXRef.current, isPlayer: true }, ...botsRef.current.map(b => ({ id: b.id, x: b.x, isPlayer: false }))].sort((a, b) => b.x - a.x);
+
     botsRef.current.forEach(bot => {
       if (bot.thinkTimer > 0) { bot.thinkTimer--; return; }
+
       const availableCards = bot.deck.filter(card => card.currentCooldown <= 0);
+
       if (availableCards.length === 0) return;
+
       const myRank = allRacers.findIndex(r => r.id === bot.id);
       const chosenCard = availableCards[Math.floor(Math.random() * availableCards.length)];
       let target = bot.id;
 
       if (!CARD_CATEGORIES.DEFENSE_BUFF.includes(chosenCard.effect as any)) {
         const opponentsAhead = allRacers.slice(0, myRank);
+
         if (opponentsAhead.length > 0) {
           if (chosenCard.effect === 'swap') {
             target = Math.random() > 0.4 ? opponentsAhead[0].id : opponentsAhead[Math.floor(Math.random() * opponentsAhead.length)].id;
@@ -544,9 +832,16 @@ export default function Mapa() {
 
       if (chosenCard.effect === 'swap') {
         triggerSwap(bot.id);
+      } else if (chosenCard.effect === 'tnt') {
+        triggerTNT(bot.id);
+      } else if (chosenCard.effect === 'bullet') {
+        triggerBullet(bot.id);
+      } else if (chosenCard.effect === 'tornado') {
+        triggerTornado(bot.id);
       } else {
         applyCardEffect(chosenCard.effect as CardEffect, target, bot.id);
       }
+
       chosenCard.currentCooldown = chosenCard.baseCooldown;
       bot.thinkTimer = 60 + Math.floor(Math.random() * 120);
     });
@@ -555,14 +850,21 @@ export default function Mapa() {
   /* ================= APLICA EFEITO DAS CARTAS (VAI SER REMOVIDO) ================= */
   function applyCardEffect(effect: CardEffect, targetId: string, sourceId: string) {
     const DURATION = 60 * 4;
+    const CHAINS_DURATION = 60 * 5;
+
     if (effect === 'swap') {
       const sourceBot = botsRef.current.find(b => b.id === sourceId);
       if (sourceId === 'player') {
         const targetBot = botsRef.current.find(b => b.id === targetId);
         if (targetBot) {
-          const tempY = y.current; const tempX = playerXRef.current;
-          y.current = targetBot.y; playerXRef.current = targetBot.x;
-          targetBot.y = tempY; targetBot.x = tempX;
+          const tempY = y.current;
+          const tempX = playerXRef.current;
+
+          y.current = targetBot.y;
+          playerXRef.current = targetBot.x;
+
+          targetBot.y = tempY;
+          targetBot.x = tempX;
         }
       } else if (sourceBot) {
         if (targetId === 'player') {
@@ -581,21 +883,28 @@ export default function Mapa() {
       return;
     }
 
+    if (effect === 'chains') {
+      const newState = {
+        callerId: sourceId,
+        targetId: targetId,
+        duration: CHAINS_DURATION
+      };
+
+      setActiveChainsState(newState); // Atualiza a tela
+      activeChainsStateRef.current = newState; // Atualiza a física do loop
+      return;
+    }
+
     if (targetId === 'player') {
       activeEffectsTimers.current[effect] = DURATION;
       switch (effect) {
-        case 'heavy_gravity': playerStatus.current.gravityMultiplier = 2; break;
-        case 'invert_controls': playerStatus.current.controlsInverted = true; break;
         case 'blind': playerStatus.current.isBlind = true; setIsBlindActive(true); break;
-        case 'panic': playerStatus.current.isPanicking = true; break;
-        case 'ghost': playerStatus.current.isGhost = true; setIsGhostActive(true); break;
         case 'score_boost': playerStatus.current.scoreMultiplier = 2; break;
       }
     } else {
       const targetBot = botsRef.current.find(b => b.id === targetId);
       if (targetBot) {
         targetBot.activeEffectsTimers[effect] = DURATION;
-        if (effect === 'heavy_gravity') targetBot.status.gravityMultiplier = 2;
         if (effect === 'panic') targetBot.status.isPanicking = true;
         if (effect === 'blind') { targetBot.status.isBlind = true; targetBot.activeEffectsTimers.blind = DURATION; }
       }
@@ -605,23 +914,75 @@ export default function Mapa() {
   /* ================= APLICA EFEITO DO SWAP (VAI SER REMOVIDO) ================= */
   function handleSwapPress() {
     if (swapCooldown > 0) return;
-
     triggerSwap('player');
-
     setSwapCooldown(SWAP_COOLDOWN);
+  }
+
+  /* ================= APLICA EFEITO DO CHAINS (VAI SER REMOVIDO) ================= */
+  function handleChainsPress() {
+    if (chainsCooldown > 0) return;
+    triggerChains('player');
+    setChainsCooldown(CHAINS_COOLDOWN);
+  }
+
+  /* ================= APLICA EFEITO DO MISSIL GUIADO (VAI SER REMOVIDO) ================= */
+  function handleBulletPress() {
+    if (bulletCooldown > 0) return;
+    triggerBullet('player');
+    setBulletCooldown(BULLET_COOLDOWN);
+  }
+
+  /* ================= APLICA EFEITO DO TORNADO (VAI SER REMOVIDO) ================= */
+  function handleTornadoPress() {
+    if (tornadoCooldown > 0) return;
+    triggerTornado('player');
+    setTornadoCooldown(TORNADO_COOLDOWN);
+  }
+
+  /* ================= APLICA O EFEITO DA CAIXA 'TNT' (VAI SER REMOVIDO) ================= */
+  function triggerTNT(callerId: string) {
+    const callerX = callerId === 'player' ? playerXRef.current : botsRef.current.find(b => b.id === callerId)?.x || 0;
+    const callerY = callerId === 'player' ? y.current : botsRef.current.find(b => b.id === callerId)?.y || 0;
+
+    activeTNTRef.current.push({
+      id: Math.random().toString(),
+      callerId,
+      x: callerX - 60,
+      y: callerY,
+      timer: 180,
+      state: 'counting'
+    });
+  }
+
+  /* ================= RECEBE O IMPACTO DO TORNADO ================= */
+  function handleTornadoHit(victimId: string) {
+    const JUMP_PENALTY = JUMP_FORCE * 1.5;
+
+    if (victimId === 'player') {
+      playerSpeed.current = 0;
+      velocity.current = JUMP_PENALTY;
+      isGrounded.current = false;
+      playerStatus.current.isStunned = true;
+    } else {
+      const targetBot = botsRef.current.find(b => b.id === victimId);
+      if (targetBot) {
+        targetBot.speed = 0;
+        targetBot.velocity = JUMP_PENALTY;
+        targetBot.status.isStunned = true;
+
+      }
+    }
   }
 
   const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   const focusOn = (targetX: number, zoom: boolean = true) => {
     const toScale = zoom ? 2 : 1;
-
     const targetCenter = targetX + (PLAYER_SIZE / 2);
 
     const offset = zoom
       ? (SCREEN_WIDTH / 2 - targetCenter) * toScale
       : 0;
-
     setCameraTransform({ x: offset, scale: toScale });
   };
 
@@ -633,6 +994,7 @@ export default function Mapa() {
     await sleep(1500);
 
     if (botsRef.current[0]) {
+      setIsCameraLocked(true);
       setCountdownStep(3);
       setFocusedDriver(null);
       setFocusedDriver(0);
@@ -641,6 +1003,7 @@ export default function Mapa() {
     await sleep(1000);
 
     if (botsRef.current[1]) {
+      setIsCameraLocked(true);
       setCountdownStep(2);
       setFocusedDriver(null);
       setFocusedDriver(1);
@@ -649,6 +1012,7 @@ export default function Mapa() {
     await sleep(1000);
 
     if (botsRef.current[2]) {
+      setIsCameraLocked(true);
       setCountdownStep(1);
       setFocusedDriver(null);
       setFocusedDriver(2);
@@ -658,7 +1022,7 @@ export default function Mapa() {
 
     setFocusedDriver(null);
     setCountdownStep('JÁ!');
-    focusOn(0, false);
+    setIsCameraLocked(false);
     setStarted(true);
 
     isCountingRef.current = false;
@@ -729,6 +1093,19 @@ export default function Mapa() {
       {/* ================= MINI-MAPA ================= */}
       <View style={styles.miniMapContainer}>
         <View style={styles.miniMapLine} />
+        {activeTornado && (
+          <TornadoEffect
+            callerId={activeTornado.callerId}
+            allRacers={allRacersPositions}
+            onTornadoAnnounced={(victims, callerX) => {
+              setTornadosToRender(prev => [
+                ...prev,
+                { id: Math.random().toString(), callerX, victims }
+              ]);
+              setActiveTornado(null);
+            }}
+          />
+        )}
         {allRacersPositions.map(racer => {
           const progress = (racer.x - minMapX) / mapSpan;
           const isSwapTarget = racer.id === currentSwapTarget;
@@ -758,7 +1135,7 @@ export default function Mapa() {
                   ],
                   borderWidth:
                     isSwapTarget
-                      ? 3
+                      ? 2
                       : racer.isPlayer
                         ? 1
                         : 0,
@@ -776,6 +1153,7 @@ export default function Mapa() {
           <SwapEffect
             callerId={activeSwap.callerId}
             allRacers={allRacersPositions}
+            scaleAnim={swapScaleAnim}
             onTargetChange={(targetId) => {
               setCurrentSwapTarget(targetId);
             }}
@@ -783,6 +1161,16 @@ export default function Mapa() {
               applyCardEffect('swap', targetId, activeSwap.callerId);
               setCurrentSwapTarget(null);
               setActiveSwap(null);
+            }}
+          />
+        )}
+        {activeChains && (
+          <ChainsEffect
+            callerId={activeChains.callerId}
+            allRacers={allRacersPositions}
+            onChainsExecute={(targetId) => {
+              applyCardEffect('chains', targetId, activeChains.callerId);
+              setActiveChains(null);
             }}
           />
         )}
@@ -897,6 +1285,113 @@ export default function Mapa() {
           </View>
         </View>
 
+        {activeChainsState && activeChainsState.duration > 0 && (() => {
+          // Precisamos achar as coordenadas X e Y do Caller e do Target
+          const getCoords = (id: string) => {
+            if (id === 'player') return { x: playerX, y: playerY };
+            const bot = bots.find(b => b.id === id);
+            if (bot) return { x: bot.x, y: bot.y };
+            return null;
+          };
+
+          const callerCoords = getCoords(activeChainsState.callerId);
+          const targetCoords = getCoords(activeChainsState.targetId);
+
+          if (!callerCoords || !targetCoords) return null;
+
+          return (
+            <CorrenteVisual
+              callerX={callerCoords.x}
+              callerY={callerCoords.y}
+              targetX={targetCoords.x}
+              targetY={targetCoords.y}
+            />
+          );
+        })()}
+
+        {activeBulletEffect && (
+          <GuidedBulletEffect
+            callerId={activeBulletEffect.callerId}
+            allRacers={allRacersPositions}
+            onBulletExecute={(targetId) => {
+              const callerX = activeBulletEffect.callerId === 'player' ? playerX : bots.find(b => b.id === activeBulletEffect.callerId)?.x || 0;
+              const callerY = activeBulletEffect.callerId === 'player' ? playerY : bots.find(b => b.id === activeBulletEffect.callerId)?.y || 0;
+
+              activeBulletsRef.current.push({
+                id: Math.random().toString(),
+                callerId: activeBulletEffect.callerId,
+                targetId: targetId,
+                x: callerX + PLAYER_SIZE / 2,
+                y: callerY + PLAYER_SIZE / 2,
+                angle: 0
+              });
+              setActiveBulletEffect(null);
+            }}
+          />
+        )}
+
+        {/* ================= RENDER DO MISSIL GUIADO ================= */}
+        {bulletsToRender.map((bullet) => (
+          <GuidedBulletVisual
+            key={bullet.id}
+            x={bullet.x}
+            y={bullet.y}
+            angle={bullet.angle}
+          />
+        ))}
+
+        {/* ================= RENDER DAS CAIXAS DE TNT ================= */}
+        {tntsToRender.map((tnt) => {
+          const numberToShow = Math.ceil(tnt.timer / 60);
+
+          if (tnt.state === 'exploding') {
+            return (
+              <View key={tnt.id} style={{
+                position: 'absolute', left: tnt.x - 50, top: tnt.y - 50,
+                width: PLAYER_SIZE + 100, height: PLAYER_SIZE + 100,
+                backgroundColor: 'rgba(255, 69, 0, 0.8)',
+                borderRadius: 100,
+                justifyContent: 'center', alignItems: 'center',
+                zIndex: 6,
+                borderWidth: 4, borderColor: '#FFFF00'
+              }}>
+                <Text style={{ fontSize: 32, fontWeight: '900', color: '#FFF' }}>BOOM!</Text>
+              </View>
+            );
+          }
+
+          return (
+            <View key={tnt.id} style={{
+              position: 'absolute', left: tnt.x, top: tnt.y,
+              width: PLAYER_SIZE, height: PLAYER_SIZE,
+              backgroundColor: '#B22222',
+              borderWidth: 3, borderColor: '#8B0000',
+              justifyContent: 'center', alignItems: 'center',
+              zIndex: 3,
+            }}>
+              <View style={{ position: 'absolute', width: '100%', height: 4, backgroundColor: '#8B0000', top: 10 }} />
+              <View style={{ position: 'absolute', width: '100%', height: 4, backgroundColor: '#8B0000', bottom: 10 }} />
+              <Text style={{
+                color: '#FFF', fontSize: 24, fontWeight: '900', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2
+              }}>
+                {numberToShow > 0 ? numberToShow : 0}
+              </Text>
+            </View>
+          );
+        })}
+
+        {/* ================= RENDER DOS TORNADOS ================= */}
+        {tornadosToRendar.map((tornado) => (
+          <TornadoVisual
+          key={tornado.id}
+          callerX={tornado.callerX}
+          victims={tornado.victims}
+          onHitVictim={handleTornadoHit}
+          onComplete={() => {
+            setTornadosToRender(prev => prev.filter(t => t.id !== tornado.id))
+          }}
+          />
+        ))}
       </View>
 
       {isBlindActive && <View style={styles.blindEffect} pointerEvents="none" />}
@@ -946,6 +1441,120 @@ export default function Mapa() {
         </Text>
       </TouchableOpacity>
 
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={handleBulletPress}
+        style={{
+          width: 82,
+          height: 82,
+          borderRadius: 41,
+          overflow: 'hidden',
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: '#1B1B1B',
+          borderWidth: 3,
+          borderColor: '#FF004D',
+          position: 'absolute',
+          bottom: 2,
+          left: 30 + 82
+        }}
+      >
+        {/* PROGRESSO DO COOLDOWN */}
+        {bulletCooldown > 0 && (
+          <View
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: `${(bulletCooldown / BULLET_COOLDOWN) * 100}%`,
+              backgroundColor: 'rgba(255,0,77,0.45)',
+            }}
+          />
+        )}
+
+        {/* TEXTO */}
+        <Text
+          style={{
+            color: 'white',
+            fontWeight: '900',
+            fontSize: 18,
+            letterSpacing: 1,
+          }}
+        >
+          MÍSSIL
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={handleChainsPress}
+        style={{
+          width: 82,
+          height: 82,
+          borderRadius: 41,
+          overflow: 'hidden',
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: '#1B1B1B',
+          borderWidth: 3,
+          borderColor: '#FF004D',
+          position: 'absolute',
+          bottom: 2,
+          left: 30 + 82 * 2
+        }}
+      >
+        {/* PROGRESSO DO COOLDOWN */}
+        {chainsCooldown > 0 && (
+          <View
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: `${(chainsCooldown / CHAINS_COOLDOWN) * 100}%`,
+              backgroundColor: 'rgba(255,0,77,0.45)',
+            }}
+          />
+        )}
+
+        {/* TEXTO */}
+        <Text
+          style={{
+            color: 'white',
+            fontWeight: '900',
+            fontSize: 18,
+            letterSpacing: 1,
+          }}
+        >
+          CHAINS
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={handleTNTPress}
+        style={{
+          width: 82, height: 82, borderRadius: 41, overflow: 'hidden',
+          justifyContent: 'center', alignItems: 'center',
+          backgroundColor: '#1B1B1B', borderWidth: 3, borderColor: '#FF4500',
+          position: 'absolute', bottom: 2,
+          left: 30 + 82 * 3 // Posicionado como o 4º botão
+        }}
+      >
+        {tntCooldown > 0 && (
+          <View style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0,
+            height: `${(tntCooldown / TNT_COOLDOWN) * 100}%`,
+            backgroundColor: 'rgba(255,69,0,0.45)',
+          }}
+          />
+        )}
+        <Text style={{ color: 'white', fontWeight: '900', fontSize: 18, letterSpacing: 1 }}>
+          TNT
+        </Text>
+      </TouchableOpacity>
+
       {started && !gameOver && (
         <View style={styles.drivingControls}>
           {isNitroReady && (
@@ -984,7 +1593,7 @@ export default function Mapa() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1E1E2E', overflow: 'hidden' },
+  container: { flex: 1, backgroundColor: '#05ebfc', overflow: 'hidden' },
   miniMapContainer: { position: 'absolute', top: 20, alignSelf: 'center', width: '60%', height: 20, justifyContent: 'center', zIndex: 10 },
   miniMapLine: { position: 'absolute', left: 0, right: 0, height: 4, backgroundColor: 'rgba(255, 255, 255, 0.4)', borderRadius: 2 },
   miniMapDot: { position: 'absolute', top: '50%', marginTop: -5 },

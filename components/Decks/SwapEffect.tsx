@@ -51,7 +51,7 @@ export default function SwapEffect({ allRacers, callerId, onTargetChange, onSwap
                 onTargetChange?.(randomTarget.id);
 
 
-            }, 800);
+            }, 500);
 
             // TEMPO DE SELEÇÃO
             finishTimer = setTimeout(() => {
@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
         ...StyleSheet.absoluteFillObject,
         justifyContent: 'center',
         alignItems: 'center',
-        zIndex: 100,
+        zIndex: 999,
     },
     swapText: {
         fontSize: 64,
