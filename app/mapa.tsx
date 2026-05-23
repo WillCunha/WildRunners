@@ -48,7 +48,7 @@ export default function Mapa() {
 
   type CardEffect = 'swap' | 'chains' | 'heavy_gravity' | 'invert_controls' |
     'blind' | 'panic' | 'ghost' | 'score_boost' | 'tnt' |
-    'bullet' | 'tornado';
+    'bullet' | 'tornado' | 'slow_slow';
 
   type TNTBox = {
     id: string;
@@ -77,13 +77,18 @@ export default function Mapa() {
 
   const CARD_CATEGORIES = {
     HEAVY_ATTACK: ['swap', 'bullet', 'chains', 'tnt', 'tornado'],
+    TIME_ATTACK: ['slow_slow'],
     LIGHT_ATTACK: ['invert_controls', 'panic'],
     DEFENSE_BUFF: ['ghost', 'score_boost']
   };
 
   const COOLDOWNS = { HEAVY: 60 * 15, LIGHT: 60 * 8, DEFENSE: 60 * 12 };
 
-  const defaultStatus = { gravityMultiplier: 1, controlsInverted: false, isBlind: false, isPanicking: false, isGhost: false, scoreMultiplier: 1, isStunned: false };
+  const defaultStatus = {
+    gravityMultiplier: 1, controlsInverted: false, isBlind: false, isPanicking: false,
+    isGhost: false, scoreMultiplier: 1, isStunned: false,
+    isSlowed: false, invincibleTimer: 0
+  };
 
   const playerStatus = useRef({ ...defaultStatus });
   const activeEffectsTimers = useRef<Partial<Record<CardEffect, number>>>({});
@@ -119,22 +124,28 @@ export default function Mapa() {
   };
 
   const botsRef = useRef([
-    { id: 'bot1', name: getRandomName(), deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'default', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
-    { id: 'bot2', name: getRandomName(), deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'gangster', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
-    { id: 'bot3', name: getRandomName(), deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'ninja', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
-    { id: 'bot4', name: getRandomName(), deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'pirate', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
-    { id: 'bot5', name: getRandomName(), deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'surfer', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
+    { id: 'bot1', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'default', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
+    { id: 'bot2', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'gangster', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
+    { id: 'bot3', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'ninja', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
+    { id: 'bot4', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'pirate', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
+    { id: 'bot5', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'surfer', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
   ]);
 
 
+  // ---- CRONOMETRO DA PARTIDA ---- //
   const [timeRemaining, setTimeRemaining] = useState(0);
 
+  // ---- NITRO ---- //
   const [nitroPercent, setNitroPercent] = useState(0);
   const [isNitroReady, setIsNitroReady] = useState(false);
   const [angle, setAngle] = useState(0);
 
+  // ---- DADOS DO PLAYER  ---- //
   const [playerY, setPlayerY] = useState(y.current);
   const [playerX, setPlayerX] = useState(playerXRef.current);
+  const playerLivesRef = useRef(5);
+  const [playerLives, setPlayerLives] = useState(5);
+  const playerIsDead = useRef(false);
 
   const [bots, setBots] = useState(botsRef.current);
   const [started, setStarted] = useState(false);
@@ -188,6 +199,11 @@ export default function Mapa() {
   const [tornadoCooldown, setTornadoCooldown] = useState(0);
   const [activeTornado, setActiveTornado] = useState<{ callerId: string } | null>(null);
   const [tornadosToRendar, setTornadosToRender] = useState<{ id: string; callerX: number; victims: any[] }[]>([]);
+
+  // SLOW SLOW
+  const SLOW_COOLDOWN = 10000;
+  const [slowCooldown, setSlowCooldown] = useState(0);
+  const [isSlowActive, setIsSlowActive] = useState(false);
 
   /* ================= SETA AS POSIÇÕES DE MODO ALEATORIO ================= */
   const setupPositions = () => {
@@ -252,6 +268,10 @@ export default function Mapa() {
     const loop = setInterval(() => {
       gameTime.current += 1;
 
+      if(playerStatus.current.invincibleTimer > 0){
+        playerStatus.current.invincibleTimer -= 1;
+      }
+
       // ================= LÓGICA DO TIMER =================
       const elapsedSeconds = Math.floor((gameTime.current * 16) / 1000);
       const currentSecs = raceTimeRef.current - elapsedSeconds;
@@ -277,7 +297,7 @@ export default function Mapa() {
         });
       }
 
-      // 1 e 2: Lógica Nitro / Velocidade mantidas iguais
+      // 1, 2 & 3: Lógica Nitro / Velocidade mantidas iguais / Slow Slow
       if (playerStatus.current.isStunned) {
         playerSpeed.current = 0; // Fica totalmente parado
       } else if (isNitroActive.current) {
@@ -291,6 +311,10 @@ export default function Mapa() {
         }
       } else {
         playerSpeed.current = Math.max(playerSpeed.current - FRICTION, MIN_SPEED);
+      }
+
+      if (playerStatus.current.isSlowed) {
+        playerSpeed.current = Math.min(playerSpeed.current, MAX_SPEED * 0.4);
       }
 
       const dynamicSpeed = playerSpeed.current;
@@ -332,6 +356,7 @@ export default function Mapa() {
               case 'panic': playerStatus.current.isPanicking = false; break;
               case 'ghost': playerStatus.current.isGhost = false; setIsGhostActive(false); break;
               case 'score_boost': playerStatus.current.scoreMultiplier = 1; break;
+              case 'slow_slow': playerStatus.current.isSlowed = false; setIsSlowActive(false); break;
             }
           }
         }
@@ -403,11 +428,26 @@ export default function Mapa() {
 
       // --- 5. INTELIGÊNCIA DE CORRIDA DOS BOTS  ---
       botsRef.current.forEach(bot => {
+
+        if(bot.status.invincibleTimer > 0) bot.status.invincibleTimer -= 1;
+
+        if(bot.isDead) {
+          bot.speed = Math.max(bot.speed - FRICTION, 0);
+          bot.x += (bot.speed - dynamicSpeed);
+          bot.velocity = GRAVITY;
+          bot.y += bot.velocity;
+          return; // ESSE RETURN IMPEDE A IA DO BOT DO LOOP SER EXECUTADA
+        }
+
         let targetSpeed = MAX_SPEED * (0.8 + Math.random() * 0.2);
         if (bot.x < playerXRef.current - 150) targetSpeed = MAX_SPEED * 1.1;
 
         if (bot.speed < targetSpeed) bot.speed += ACCELERATION * 0.8;
         if (bot.speed > targetSpeed) bot.speed -= FRICTION;
+
+        if (bot.status.isSlowed) {
+          targetSpeed = MAX_SPEED * 0.3;
+        }
 
         bot.x += (bot.speed - dynamicSpeed);
 
@@ -420,6 +460,7 @@ export default function Mapa() {
             if ((timeLeft as number) - 1 === 0) {
               if (effect === 'heavy_gravity') bot.status.gravityMultiplier = 1;
               if (effect === 'panic') bot.status.isPanicking = false;
+              if (effect === 'slow_slow') bot.status.isSlowed = false;
             }
           }
         }
@@ -559,6 +600,9 @@ export default function Mapa() {
           const JUMP_PENALTY = JUMP_FORCE * 1.2;
           const SPEED_PENALTY = 0;
 
+          const hit = applyDamage(bullet.targetId)
+          if (!hit) return;
+
           if (bullet.targetId === 'player') {
             playerSpeed.current = SPEED_PENALTY;
             velocity.current = JUMP_PENALTY;
@@ -625,6 +669,11 @@ export default function Mapa() {
               const dist = Math.sqrt(dx * dx + dy * dy);
 
               if (dist < EXPLOSION_RADIUS) {
+
+                const hit = applyDamage(racerId)
+                if (!hit) return;
+
+
                 if (racerId === 'player') {
                   playerSpeed.current = 0;
                   velocity.current = JUMP_PENALTY;
@@ -729,13 +778,18 @@ export default function Mapa() {
       if (tntCooldown > 0) {
         setTntCooldown(prev => Math.max(0, prev - 100));
       }
+      // Reduz o Tornado
       if (tornadoCooldown > 0) {
         setTornadoCooldown(prev => Math.max(0, prev - 100));
+      }
+      // Reduz o Slow
+      if (slowCooldown > 0) {
+        setSlowCooldown(prev => Math.max(0, prev - 100));
       }
     }, 100);
 
     return () => clearInterval(globalInterval);
-  }, [swapCooldown, chainsCooldown, bulletCooldown, tntCooldown, tornadoCooldown]);
+  }, [swapCooldown, chainsCooldown, bulletCooldown, tntCooldown, tornadoCooldown, slowCooldown]);
 
   /* ================= GERA NOME ALEATORIO DOS BOTS ================= */
   function getRandomName() {
@@ -792,6 +846,10 @@ export default function Mapa() {
     if (activeTornado) return;
     setActiveTornado({ callerId });
   }
+
+  /* ================= HABILITA O SLOW SLOW ================= */
+  function
+
 
 
   /* ================= IA DOS BOTS ================= */
@@ -900,6 +958,7 @@ export default function Mapa() {
       switch (effect) {
         case 'blind': playerStatus.current.isBlind = true; setIsBlindActive(true); break;
         case 'score_boost': playerStatus.current.scoreMultiplier = 2; break;
+        case 'slow_slow': playerStatus.current.isSlowed = true; setIsSlowActive(true); break;
       }
     } else {
       const targetBot = botsRef.current.find(b => b.id === targetId);
@@ -907,8 +966,43 @@ export default function Mapa() {
         targetBot.activeEffectsTimers[effect] = DURATION;
         if (effect === 'panic') targetBot.status.isPanicking = true;
         if (effect === 'blind') { targetBot.status.isBlind = true; targetBot.activeEffectsTimers.blind = DURATION; }
+        if (effect === 'slow_slow') { targetBot.status.isSlowed = true; targetBot.activeEffectsTimers.slow_slow = DURATION; }
       }
     }
+  }
+
+  /* ================= APLICA DANDO E INVENCIBILIDADE ================= */
+  function applyDamage(racerId: string) {
+    if (racerId === 'player') {
+      if (playerStatus.current.invincibleTimer > 0 || playerIsDead.current) return false;
+
+      playerLivesRef.current -= 1;
+      setPlayerLives(playerLivesRef.current);
+      playerStatus.current.invincibleTimer = 90 // 1.5 segundos a 60 FPS piscando
+
+      if (playerLives.current <= 0) {
+        playerIsDead.current = true;
+        playerSpeed.current = 0; // PARA O CARRO
+        setTimeout(() => setGameOver(true), 1000);
+      }
+      return true;
+    } else {
+      const bot = botsRef.current.find(b => b.id === racerId);
+      if (bot) {
+        if (bot.status.invincibleTimer > 0 || bot.isDead) return false;
+
+        bot.lives -= 1;
+        bot.status.invincibleTimer = 90;
+
+        if (bot.lives <= 0) {
+          bot.isDead = true;
+          bot.speed = 0;
+        }
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /* ================= APLICA EFEITO DO SWAP (VAI SER REMOVIDO) ================= */
@@ -937,6 +1031,16 @@ export default function Mapa() {
     if (tornadoCooldown > 0) return;
     triggerTornado('player');
     setTornadoCooldown(TORNADO_COOLDOWN);
+  }
+
+  /* ================= APLICA EFEITO DO SLOW SLOW (VAI SER REMOVIDO) ================= */
+  function handleSlowPress() {
+    if (slowCooldown > 0) return;
+    botsRef.current.forEach(bot => {
+      applyCardEffect('slow_slow', bot.id, 'player');
+    });
+
+    setSlowCooldown(SLOW_COOLDOWN);
   }
 
   /* ================= APLICA O EFEITO DA CAIXA 'TNT' (VAI SER REMOVIDO) ================= */
@@ -973,6 +1077,9 @@ export default function Mapa() {
       }
     }
   }
+
+  /* ================= HABILITA O TORNADO ================= */
+
 
   const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -1178,6 +1285,22 @@ export default function Mapa() {
 
       <View style={styles.hud}>
         <Text style={styles.scoreText}>⏱️ {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}</Text>
+        <View 
+          style={{flexDirection: 'row', marginTop: 10, alignSelf: 'flex-end', gap: 2}}
+        >
+          {[1, 2, 3, 4, 5].map((life) => (
+            <Text key={life} 
+            style={{
+              fontSize: 20,
+              opacity: life <= playerLives ? 1 : 0.3,
+              textShadowColor: '#000',
+              textShadowOffset: {width: 1, height: 1},
+              textShadowRadius: 2
+            }} >
+              ❤️
+              </Text>
+          ))}
+           </View>
         <View style={styles.nitroBarContainer}>
           <View style={[styles.nitroBarFill, { width: `${nitroPercent}%`, backgroundColor: isNitroReady ? '#00FFFF' : '#FFD700' }]} />
           <Text style={styles.nitroBarText}>VÁCUO</Text>
@@ -1383,13 +1506,13 @@ export default function Mapa() {
         {/* ================= RENDER DOS TORNADOS ================= */}
         {tornadosToRendar.map((tornado) => (
           <TornadoVisual
-          key={tornado.id}
-          callerX={tornado.callerX}
-          victims={tornado.victims}
-          onHitVictim={handleTornadoHit}
-          onComplete={() => {
-            setTornadosToRender(prev => prev.filter(t => t.id !== tornado.id))
-          }}
+            key={tornado.id}
+            callerX={tornado.callerX}
+            victims={tornado.victims}
+            onHitVictim={handleTornadoHit}
+            onComplete={() => {
+              setTornadosToRender(prev => prev.filter(t => t.id !== tornado.id));
+            }}
           />
         ))}
       </View>
@@ -1552,6 +1675,54 @@ export default function Mapa() {
         )}
         <Text style={{ color: 'white', fontWeight: '900', fontSize: 18, letterSpacing: 1 }}>
           TNT
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={handleTornadoPress}
+        style={{
+          width: 82, height: 82, borderRadius: 41, overflow: 'hidden',
+          justifyContent: 'center', alignItems: 'center',
+          backgroundColor: '#1B1B1B', borderWidth: 3, borderColor: '#FF4500',
+          position: 'absolute', bottom: 2,
+          left: 30 + 82 * 3 // Posicionado como o 4º botão
+        }}
+      >
+        {tntCooldown > 0 && (
+          <View style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0,
+            height: `${(tntCooldown / TNT_COOLDOWN) * 100}%`,
+            backgroundColor: 'rgba(255,69,0,0.45)',
+          }}
+          />
+        )}
+        <Text style={{ color: 'white', fontWeight: '900', fontSize: 18, letterSpacing: 1 }}>
+          TORNADO
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={handleSlowPress}
+        style={{
+          width: 82, height: 82, borderRadius: 41, overflow: 'hidden',
+          justifyContent: 'center', alignItems: 'center',
+          backgroundColor: '#1B1B1B', borderWidth: 3, borderColor: '#FF4500',
+          position: 'absolute', bottom: 2,
+          left: 30 + 82 * 3 // Posicionado como o 4º botão
+        }}
+      >
+        {tntCooldown > 0 && (
+          <View style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0,
+            height: `${(tntCooldown / TNT_COOLDOWN) * 100}%`,
+            backgroundColor: 'rgba(255,69,0,0.45)',
+          }}
+          />
+        )}
+        <Text style={{ color: 'white', fontWeight: '900', fontSize: 18, letterSpacing: 1 }}>
+          SLOW
         </Text>
       </TouchableOpacity>
 
