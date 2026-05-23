@@ -143,9 +143,10 @@ export default function Mapa() {
   // ---- DADOS DO PLAYER  ---- //
   const [playerY, setPlayerY] = useState(y.current);
   const [playerX, setPlayerX] = useState(playerXRef.current);
-  const playerLivesRef = useRef(5);
   const [playerLives, setPlayerLives] = useState(5);
+  const playerLivesRef = useRef(5);
   const playerIsDead = useRef(false);
+
 
   const [bots, setBots] = useState(botsRef.current);
   const [started, setStarted] = useState(false);
@@ -204,6 +205,15 @@ export default function Mapa() {
   const SLOW_COOLDOWN = 10000;
   const [slowCooldown, setSlowCooldown] = useState(0);
   const [isSlowActive, setIsSlowActive] = useState(false);
+
+  /* ================= CORES DE VIDAS QUE IRÃO PARA O PLACAR DE POSIÇÕES ================= */
+  const getLifeColor = (lives: number) => {
+    if (lives >= 4) return '#00D084'; // Verde (Saudável)
+    if (lives === 3) return '#FFD700'; // Amarelo (Atenção)
+    if (lives === 2) return '#FF8C00'; // Laranja (Perigo)
+    if (lives === 1) return '#FF4500'; // Vermelho (Por um fio)
+    return '#888888';                  // Cinza (Eliminado)
+  };
 
   /* ================= SETA AS POSIÇÕES DE MODO ALEATORIO ================= */
   const setupPositions = () => {
@@ -268,7 +278,7 @@ export default function Mapa() {
     const loop = setInterval(() => {
       gameTime.current += 1;
 
-      if(playerStatus.current.invincibleTimer > 0){
+      if (playerStatus.current.invincibleTimer > 0) {
         playerStatus.current.invincibleTimer -= 1;
       }
 
@@ -429,9 +439,9 @@ export default function Mapa() {
       // --- 5. INTELIGÊNCIA DE CORRIDA DOS BOTS  ---
       botsRef.current.forEach(bot => {
 
-        if(bot.status.invincibleTimer > 0) bot.status.invincibleTimer -= 1;
+        if (bot.status.invincibleTimer > 0) bot.status.invincibleTimer -= 1;
 
-        if(bot.isDead) {
+        if (bot.isDead) {
           bot.speed = Math.max(bot.speed - FRICTION, 0);
           bot.x += (bot.speed - dynamicSpeed);
           bot.velocity = GRAVITY;
@@ -847,8 +857,6 @@ export default function Mapa() {
     setActiveTornado({ callerId });
   }
 
-  /* ================= HABILITA O SLOW SLOW ================= */
-  function
 
 
 
@@ -1078,8 +1086,6 @@ export default function Mapa() {
     }
   }
 
-  /* ================= HABILITA O TORNADO ================= */
-
 
   const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -1189,12 +1195,43 @@ export default function Mapa() {
 
       <View style={styles.leaderboardContainer} pointerEvents="none">
         <Text style={styles.leaderboardTitle}>RANKING</Text>
-        {leaderboard.map((racer, index) => (
-          <View key={racer.id} style={[styles.leaderboardItem, racer.id === 'player' && styles.leaderboardItemPlayer]}>
-            <Text style={styles.leaderboardRank}>{index + 1}º</Text>
-            <Text style={styles.leaderboardName} numberOfLines={1}>{racer.name}</Text>
-          </View>
-        ))}
+        {leaderboard.map((racer, index) => {
+          // Resgata a quantidade de vidas de acordo com o ID
+          const currentLives = racer.id === 'player'
+            ? playerLives
+            : bots.find(b => b.id === racer.id)?.lives || 0;
+
+          return (
+            <View
+              key={racer.id}
+              style={[
+                styles.leaderboardItem,
+                racer.id === 'player' && styles.leaderboardItemPlayer,
+                currentLives <= 0 && { opacity: 0.5 } // Deixa o corredor apagadinho se for eliminado
+              ]}
+            >
+              <Text style={styles.leaderboardRank}>{index + 1}º</Text>
+              <Text style={styles.leaderboardName} numberOfLines={1}>{racer.name}</Text>
+
+              {/* Ícone e número de vidas com cor dinâmica */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 4 }}>
+                <Text style={{ fontSize: 10, marginRight: 2 }}>❤️</Text>
+                <Text
+                  style={{
+                    color: getLifeColor(currentLives), // <--- A mágica acontece aqui
+                    fontSize: 12,
+                    fontWeight: '900',
+                    textShadowColor: 'rgba(0,0,0,0.5)', // Um sombreado leve ajuda a leitura da cor
+                    textShadowOffset: { width: 1, height: 1 },
+                    textShadowRadius: 1
+                  }}
+                >
+                  {currentLives}
+                </Text>
+              </View>
+            </View>
+          );
+        })}
       </View>
 
       {/* ================= MINI-MAPA ================= */}
@@ -1285,22 +1322,22 @@ export default function Mapa() {
 
       <View style={styles.hud}>
         <Text style={styles.scoreText}>⏱️ {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}</Text>
-        <View 
-          style={{flexDirection: 'row', marginTop: 10, alignSelf: 'flex-end', gap: 2}}
+        <View
+          style={{ flexDirection: 'row', marginTop: 10, alignSelf: 'flex-end', gap: 2 }}
         >
           {[1, 2, 3, 4, 5].map((life) => (
-            <Text key={life} 
-            style={{
-              fontSize: 20,
-              opacity: life <= playerLives ? 1 : 0.3,
-              textShadowColor: '#000',
-              textShadowOffset: {width: 1, height: 1},
-              textShadowRadius: 2
-            }} >
+            <Text key={life}
+              style={{
+                fontSize: 20,
+                opacity: life <= playerLives ? 1 : 0.3,
+                textShadowColor: '#000',
+                textShadowOffset: { width: 1, height: 1 },
+                textShadowRadius: 2
+              }} >
               ❤️
-              </Text>
+            </Text>
           ))}
-           </View>
+        </View>
         <View style={styles.nitroBarContainer}>
           <View style={[styles.nitroBarFill, { width: `${nitroPercent}%`, backgroundColor: isNitroReady ? '#00FFFF' : '#FFD700' }]} />
           <Text style={styles.nitroBarText}>VÁCUO</Text>
@@ -1686,7 +1723,7 @@ export default function Mapa() {
           justifyContent: 'center', alignItems: 'center',
           backgroundColor: '#1B1B1B', borderWidth: 3, borderColor: '#FF4500',
           position: 'absolute', bottom: 2,
-          left: 30 + 82 * 3 // Posicionado como o 4º botão
+          left: 30 + 82 * 4 // Posicionado como o 4º botão
         }}
       >
         {tntCooldown > 0 && (
@@ -1710,7 +1747,7 @@ export default function Mapa() {
           justifyContent: 'center', alignItems: 'center',
           backgroundColor: '#1B1B1B', borderWidth: 3, borderColor: '#FF4500',
           position: 'absolute', bottom: 2,
-          left: 30 + 82 * 3 // Posicionado como o 4º botão
+          left: 30 + 82 * 5 // Posicionado como o 4º botão
         }}
       >
         {tntCooldown > 0 && (
