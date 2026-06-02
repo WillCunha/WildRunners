@@ -51,21 +51,22 @@ export default function Carro({
   // === ESCALA ===
   const BASE_WIDTH = car.baseSize.width;
   const BASE_HEIGHT = car.baseSize.height;
+  const WHEEL_DIAMETER = 70;
 
-  const RENDER_WIDTH = 300;
-  const RENDER_HEIGHT = 250;
+  const RENDER_WIDTH = 150;
+  const RENDER_HEIGHT = RENDER_WIDTH * (BASE_HEIGHT / BASE_WIDTH);
 
   const scaleX = RENDER_WIDTH / BASE_WIDTH;
   const scaleY = RENDER_HEIGHT / BASE_HEIGHT;
 
-  const frontOffsetX = car.offset?.frente?.x || 0;
-  const frontOffsetY = car.offset?.frente?.y || 0;
+  const frontOffsetX = (car.offset?.frente?.x || 0) * scaleX;
+  const frontOffsetY = (car.offset?.frente?.y || 0) * scaleX;
 
-  const rearOffsetX = car.offset?.tras?.x || 0;
-  const rearOffsetY = car.offset?.tras?.y || 0; 
+  const rearOffsetX = (car.offset?.tras?.x || 0) * scaleX;
+  const rearOffsetY = (car.offset?.tras?.y || 0) * scaleX;
 
   return (
-    <View style={styles.carWrapper}>
+    <View style={[styles.carWrapper, { width: RENDER_WIDTH, height: RENDER_HEIGHT }]}>
 
       {/* Corpo */}
       <Image
@@ -87,14 +88,14 @@ export default function Carro({
         style={[
           styles.wheel,
           {
-            width: car.size.width * scaleX,
-            height: car.size.height * scaleY,
-            left: (car.rodaTras.x * scaleX) + rearOffsetX,
-            bottom: (car.rodaTras.y * scaleY) + rearOffsetY,
+            width: WHEEL_DIAMETER * scaleX,
+            height: WHEEL_DIAMETER * scaleY,
+            left: (car.rodaTras.x * scaleX) + rearOffsetX - ((WHEEL_DIAMETER * scaleX) / 2),
+            bottom: (car.rodaTras.y * scaleY) + rearOffsetY - ((WHEEL_DIAMETER * scaleY) / 2),
             transform: [{ rotate: spin }]
           }
         ]}
-        resizeMode="center"
+        resizeMode="contain" // "contain" agora funciona perfeitamente pois o container tem o tamanho exato da roda
       />
 
       {/* Roda Dianteira */}
@@ -103,14 +104,14 @@ export default function Carro({
         style={[
           styles.wheel,
           {
-            width: car.size.width * scaleX,
-            height: car.size.height * scaleY,
-            left: (car.rodaFrente.x * scaleX) + frontOffsetX,
-            bottom: (car.rodaFrente.y * scaleY) + frontOffsetY,
+            width: WHEEL_DIAMETER * scaleX,
+            height: WHEEL_DIAMETER * scaleY,
+            left: (car.rodaFrente.x * scaleX) + frontOffsetX - ((WHEEL_DIAMETER * scaleX) / 2),
+            bottom: (car.rodaFrente.y * scaleY) + frontOffsetY - ((WHEEL_DIAMETER * scaleY) / 2),
             transform: [{ rotate: spin }]
           }
         ]}
-        resizeMode="center"
+        resizeMode="contain"
       />
 
     </View>
@@ -118,25 +119,27 @@ export default function Carro({
 }
 
 const styles = StyleSheet.create({
-  carWrapper: {
-    width: 150,
-    height: 100,
-    position: 'relative', // ESSENCIAL
-    justifyContent: 'center',
+carWrapper: {
+    position: 'relative',
+    justifyContent: 'flex-end',
     alignItems: 'center',
   },
   carBase: {
     width: '100%',
     height: '100%',
+    bottom: 0,
+    position: 'absolute'
   },
   carOverlay: {
     width: '100%',
     height: '100%',
     position: 'absolute',
-    top: 0,
+    bottom: 0,
     left: 0,
   },
   wheel: {
+    width: 55,
+    height: 55,
     position: 'absolute',
     zIndex: 10,
   },

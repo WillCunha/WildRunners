@@ -1,3 +1,5 @@
+// PARA TESTES REMOVA SEMPRE O "USE EFFECT DE PREPARAÇÃO DO INICIO"
+
 import Carro from '@/components/Carro';
 import ChainsEffect from '@/components/Decks/ChainsEffect';
 import GuidedBulletEffect from '@/components/Decks/GuidedBulletEffect';
@@ -48,7 +50,7 @@ export default function Mapa() {
 
   type CardEffect = 'swap' | 'chains' | 'heavy_gravity' | 'invert_controls' |
     'blind' | 'panic' | 'ghost' | 'score_boost' | 'tnt' |
-    'bullet' | 'tornado' | 'slow_slow';
+    'bullet' | 'tornado' | 'slow_slow' | 'nitro_power';
 
   type TNTBox = {
     id: string;
@@ -79,7 +81,7 @@ export default function Mapa() {
     HEAVY_ATTACK: ['swap', 'bullet', 'chains', 'tnt', 'tornado'],
     TIME_ATTACK: ['slow_slow'],
     LIGHT_ATTACK: ['invert_controls', 'panic'],
-    DEFENSE_BUFF: ['ghost', 'score_boost']
+    DEFENSE_BUFF: ['ghost', 'score_boost', 'nitro_power']
   };
 
   const COOLDOWNS = { HEAVY: 60 * 15, LIGHT: 60 * 8, DEFENSE: 60 * 12 };
@@ -206,6 +208,11 @@ export default function Mapa() {
   const [slowCooldown, setSlowCooldown] = useState(0);
   const [isSlowActive, setIsSlowActive] = useState(false);
 
+  // NITRO POWER
+  const NITRO_COOLDOWN = 4000;
+  const [nitroCooldown, setNitroCooldown] = useState(0);
+  const [isNitroPowerActive, setIsNitroPowerActive] = useState(false);
+
   /* ================= CORES DE VIDAS QUE IRÃO PARA O PLACAR DE POSIÇÕES ================= */
   const getLifeColor = (lives: number) => {
     if (lives >= 4) return '#00D084'; // Verde (Saudável)
@@ -307,9 +314,10 @@ export default function Mapa() {
         });
       }
 
-      // 1, 2 & 3: Lógica Nitro / Velocidade mantidas iguais / Slow Slow
       if (playerStatus.current.isStunned) {
-        playerSpeed.current = 0; // Fica totalmente parado
+        playerSpeed.current = 0;
+      } else if (activeEffectsTimers.current['nitro_power'] && activeEffectsTimers.current['nitro_power'] > 0) {
+          playerSpeed.current = NITRO_SPEED * 1.3;
       } else if (isNitroActive.current) {
         playerSpeed.current = NITRO_SPEED;
         nitroTimer.current -= 1;
@@ -457,6 +465,9 @@ export default function Mapa() {
 
         if (bot.status.isSlowed) {
           targetSpeed = MAX_SPEED * 0.3;
+        } else if (bot.activeEffectsTimers['nitro_power'] && bot.activeEffectsTimers['nitro_power'] > 0) {
+          targetSpeed = NITRO_SPEED * 1.3;
+          bot.speed = targetSpeed;
         }
 
         bot.x += (bot.speed - dynamicSpeed);
@@ -510,7 +521,7 @@ export default function Mapa() {
 
           // Verificação sólida cravando no chão
           if (bot.velocity >= 0 && botFootY >= groundYAtX - 25) {
-            bot.y = groundYAtX - PLAYER_SIZE;
+            bot.y = groundYAtX - PLAYER_SIZE + 6;
             bot.velocity = 0;
             bot.status.isStunned = false;
 
@@ -738,7 +749,7 @@ export default function Mapa() {
 
         // CRAVA NO CHÃO se estiver caindo e passou/chegou da linha do chão 
         if (velocity.current >= 0 && playerFootY >= groundYAtX - 25) {
-          y.current = groundYAtX - PLAYER_SIZE;
+          y.current = groundYAtX - PLAYER_SIZE + 6;
           velocity.current = 0;
           landedOnBlock = true;
           playerStatus.current.isStunned = false;
@@ -766,9 +777,8 @@ export default function Mapa() {
 
   /* ================= GERENCIADOR ÚNICO DE COOLDOWNS (UI) ================= */
   useEffect(() => {
-    // Criamos um intervalo que roda apenas se houver algum cooldown ativo
-    const hasActiveCooldown = swapCooldown > 0 || chainsCooldown > 0 || bulletCooldown > 0;
-
+    const hasActiveCooldown = swapCooldown > 0 || chainsCooldown > 0 || bulletCooldown > 0 || tntCooldown > 0 || tornadoCooldown > 0 || slowCooldown > 0 || nitroPowerCooldown > 0;
+    
     if (!hasActiveCooldown) return;
 
     const globalInterval = setInterval(() => {
@@ -796,10 +806,15 @@ export default function Mapa() {
       if (slowCooldown > 0) {
         setSlowCooldown(prev => Math.max(0, prev - 100));
       }
+
+      // Reduz o Nitro Power
+      if (nitroCooldown > 0) {
+        setNitroCooldown(prev => Math.max(0, prev - 100));
+      }
     }, 100);
 
     return () => clearInterval(globalInterval);
-  }, [swapCooldown, chainsCooldown, bulletCooldown, tntCooldown, tornadoCooldown, slowCooldown]);
+  }, [swapCooldown, chainsCooldown, bulletCooldown, tntCooldown, tornadoCooldown, slowCooldown, nitroCooldown]);
 
   /* ================= GERA NOME ALEATORIO DOS BOTS ================= */
   function getRandomName() {
@@ -808,7 +823,7 @@ export default function Mapa() {
 
   /* ================= GERA CARTA ALEATORIA QUE OS BOTS VÃO ATACAR ================= */
   function generateRandomDeck() {
-    const allEffects: CardEffect[] = ['swap', 'blind', 'score_boost', 'bullet', 'chains', 'tnt', 'tornado'];
+    const allEffects: CardEffect[] = ['swap', 'blind', 'score_boost', 'bullet', 'chains', 'tnt', 'tornado', 'nitro_power'];
     const shuffled = allEffects.sort(() => 0.5 - Math.random());
     return [
       { effect: shuffled[0], currentCooldown: 60 * 3 + Math.floor(Math.random() * 120), baseCooldown: COOLDOWNS.HEAVY },
@@ -855,6 +870,11 @@ export default function Mapa() {
   function triggerTornado(callerId: string) {
     if (activeTornado) return;
     setActiveTornado({ callerId });
+  }
+
+  function triggerNitroPower(callerId: string) {
+    applyCardEffect('nitro_power', 'player', 'player')
+    setIsNitroPowerActive(true);
   }
 
 
@@ -1039,6 +1059,13 @@ export default function Mapa() {
     if (tornadoCooldown > 0) return;
     triggerTornado('player');
     setTornadoCooldown(TORNADO_COOLDOWN);
+  }
+
+  /* ================= APLICA EFEITO DO NITRO (VAI SER REMOVIDO) ================= */
+  function handleNitroPowerPress() {
+    if (nitroCooldown > 0) return;
+    triggerNitroPower('player');
+    setNitroCooldown(NITRO_COOLDOWN);
   }
 
   /* ================= APLICA EFEITO DO SLOW SLOW (VAI SER REMOVIDO) ================= */
@@ -1408,7 +1435,7 @@ export default function Mapa() {
             <View style={{ width: '200%', alignItems: 'center' }}>
 
               <Carro
-                carType={bot.carType}
+                carType={"fusca"}
                 carColor={bot.carColor}
                 speed={bot.speed}
                 skin={bot.skin} />
@@ -1762,6 +1789,30 @@ export default function Mapa() {
           SLOW
         </Text>
       </TouchableOpacity>
+    
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={handleNitroPowerPress}
+        style={{
+          width: 82, height: 82, borderRadius: 41, overflow: 'hidden',
+          justifyContent: 'center', alignItems: 'center',
+          backgroundColor: '#1B1B1B', borderWidth: 3, borderColor: '#FF4500',
+          position: 'absolute', bottom: 2,
+          left: 30 + 82 * 6
+        }}
+      >
+        {nitroCooldown > 0 && (
+          <View style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0,
+            height: `${(nitroCooldown / NITRO_COOLDOWN) * 100}%`,
+            backgroundColor: 'rgba(255,69,0,0.45)',
+          }}
+          />
+        )}
+        <Text style={{ color: 'white', fontWeight: '900', fontSize: 18, letterSpacing: 1 }}>
+          NTITRO POWER
+        </Text>
+      </TouchableOpacity>
 
       {started && !gameOver && (
         <View style={styles.drivingControls}>
@@ -1822,7 +1873,7 @@ const styles = StyleSheet.create({
   throttleBtnText: { color: '#FFF', fontWeight: '900', fontSize: 14, fontStyle: 'italic' },
   nitroBtn: { width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(0, 255, 255, 0.9)', borderWidth: 3, borderColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 5 },
   nitroBtnText: { color: '#000', fontWeight: '900', fontSize: 14, fontStyle: 'italic' },
-  block: { position: 'absolute', height: 2000, backgroundColor: '#00D084', borderTopWidth: 5, borderColor: '#FFF', zIndex: 3 },
+  block: { position: 'absolute', height: 2000, borderTopWidth: 5, borderColor: '#FFF', zIndex: 3 },
   overlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',

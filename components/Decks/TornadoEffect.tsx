@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text, Vibration, View } from 'react-native';
+import { Animated, StyleSheet, Vibration, View } from 'react-native';
 
 interface Racer {
     id: string;
@@ -61,7 +61,6 @@ export default function TornadoEffect({ allRacers, callerId, onTornadoAnnounced 
     return (
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
             <Animated.View style={[styles.textContainer, { opacity: textOpacity, transform: [{ scale: scaleAnim }] }]}>
-                <Text style={styles.tornadoText}>🌪️ TORNADO! 🌪️</Text>
             </Animated.View>
         </View>
     );

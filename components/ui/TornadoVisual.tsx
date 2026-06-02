@@ -94,7 +94,7 @@ export default function TornadoVisual({ callerX, victims, onHitVictim, onComplet
 const styles = StyleSheet.create({
     tornadoContainer: {
         position: 'absolute',
-        bottom: 55, // Alinhamento vertical com a linha de base da pista
+        bottom: 100, // Alinhamento vertical com a linha de base da pista
         zIndex: 45,
     },
     designContainer: {

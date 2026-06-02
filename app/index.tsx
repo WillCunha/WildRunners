@@ -37,9 +37,9 @@ export default function CarSelectionScreen() {
         setSelectedCar(previewCar);
         setSelectedColor(previewColor);
 
-        // Navega para a tela do jogo
+        // Navega para a tela do jogo 
         // Ajuste o nome da rota conforme sua navegação
-        router.navigate('/mapa' as any);
+        router.navigate('/testes' as any);
     };
 
     return (
@@ -171,8 +171,8 @@ const styles = StyleSheet.create({
 
     },
     carWrapper: {
-        width: '60%',
-        height: 150,
+        width: '25%',
+        height: 100,
         justifyContent: 'center',
         alignItems: 'center',
     },

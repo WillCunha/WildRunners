@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text, Vibration, View } from 'react-native';
+import { Animated, StyleSheet, Vibration, View } from 'react-native';
 
 interface SwapEffectProps {
     allRacers: {
@@ -117,7 +117,6 @@ export default function SwapEffect({ allRacers, callerId, onTargetChange, onSwap
                 <View/>
             )}
             <Animated.View style={[styles.textContainer, { opacity: textOpacity }]}>
-                <Text style={styles.swapText}>SWAP</Text>
             </Animated.View>
         </View>
     );

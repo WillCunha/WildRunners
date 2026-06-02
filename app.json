@@ -4,7 +4,7 @@
     "slug": "Wild Runners",
     "version": "1.0.0",
     "orientation": "landscape",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/logo1024v1.png",
     "scheme": "runnergame",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,

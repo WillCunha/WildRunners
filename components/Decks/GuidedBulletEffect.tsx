@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text, Vibration, View } from 'react-native';
+import { Animated, StyleSheet, Vibration, View } from 'react-native';
 
 interface GuidedBulletEffectProps {
     allRacers: { id: string; x: number; }[];
@@ -52,7 +52,6 @@ export default function GuidedBulletEffect({ allRacers, callerId, onBulletExecut
     return (
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
             <Animated.View style={[styles.textContainer, { opacity: textOpacity, transform: [{ scale: scaleAnim }] }]}>
-                <Text style={styles.bulletText}>MÍSSIL GUIADO!</Text>
             </Animated.View>
         </View>
     );
