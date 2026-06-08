@@ -4,39 +4,38 @@ export const carMaps = {
         corpoTransparente: require('@/assets/images/cars/carroceria/buggy/transparent.png'),
         baseSize: { width: 350, height: 120 },
         wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
-        rodaFrente: { x: 283, y: 27 },
-        rodaTras: { x: 173, y: 27 },
-        size: { width: 50, height: 50 },
+        rodaFrente: { x: 168.5, y: 0 },
+        rodaTras: { x: 49, y: 0 },
+        size: { width: 40, height: 40 },
         offset: {
-            frente: { x: -155, y: -70 },
-            tras: { x: -130, y: -70 }
+            frente: { x: 90, y: 13 },
+            tras: { x: 43, y: 13 }
         }
     },
-    //PRECISA DE AJUSTES NA IMAGEM
-    // caravana: {
-    //     corpoBranco: require('@/assets/images/cars/carroceria/caravana/branco.png'),
-    //     corpoTransparente: require('@/assets/images/cars/carroceria/caravana/transparent.png'),
-    //     baseSize: { width: 350, height: 120 },
-    //     wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
-    //     rodaFrente: { x: 306, y: 25 },
-    //     rodaTras: { x: 177, y: 25 },
-    //     size: { width: 40, height: 40 },
-    //     offset: {
-    //         frente: { x: -159, y: 10 },    
-    //         tras: { x: -131, y: 10 } 
-    //     }
-    // },
+    caravana: {
+        corpoBranco: require('@/assets/images/cars/carroceria/caravana/branco.png'),
+        corpoTransparente: require('@/assets/images/cars/carroceria/caravana/transparent.png'),
+        baseSize: { width: 350, height: 120 },
+        wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
+        rodaFrente: { x: 185, y: 1 },
+        rodaTras: { x: 60, y: 1 },
+        size: { width: 35, height: 35 },
+        offset: {
+            frente: { x: 120, y: 12 },    
+            tras: { x: 131, y: 12 }  
+        }
+    },
     ferrari: {
         corpoBranco: require('@/assets/images/cars/carroceria/ferrari/branco.png'),
         corpoTransparente: require('@/assets/images/cars/carroceria/ferrari/transparent.png'),
         baseSize: { width: 350, height: 120 },
         wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
-        rodaFrente: { x: 142, y: 9 },
-        rodaTras: { x: 16, y: 9 },
-        size: { width: 42, height: 42 },
+        rodaFrente: { x: 171, y: 0 },
+        rodaTras: { x: 19, y: 0 },
+        size: { width: 50, height: 50 },
         offset: {
-            frente: { x: 128, y: 19 },     
-            tras: { x: 46, y: 19 } 
+            frente: { x: 98, y: 25 },     
+            tras: { x: 42, y: 25 } 
         }
     },
     fusca: {
@@ -44,12 +43,12 @@ export const carMaps = {
         corpoTransparente: require('@/assets/images/cars/carroceria/fusca/transparent.png'),
         baseSize: { width: 350, height: 120 },
         wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
-        rodaFrente: { x: 151, y: 1 },
-        rodaTras: { x: 27, y: -1 },
+        rodaFrente: { x: 186, y: -3.5 },
+        rodaTras: { x: 37.5, y: -3.5 },
         size: { width: 42, height: 42 },
         offset: {
-            frente: { x: 135, y: 10 },     
-            tras: { x: 54, y: 11 } 
+            frente: { x: 96, y: 12 },     
+            tras: { x: 43, y: 12 } 
         }
     },
     kombi: {
@@ -57,12 +56,12 @@ export const carMaps = {
         corpoTransparente: require('@/assets/images/cars/carroceria/kombi/transparent.png'),
         baseSize: { width: 350, height: 120 },
         wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
-        rodaFrente: { x: 127, y: 8 },
-        rodaTras: { x: 50, y: 8 },
-        size: { width: 30, height: 30 },
+        rodaFrente: { x: 169, y: -11 },
+        rodaTras: { x: 43, y: -11 },
+        size: { width: 40, height: 40 },
         offset: {
-            frente: { x: -156, y: -50 },
-            tras: { x: -131, y: -50 }
+            frente: { x: 90, y: 12 },
+            tras: { x: 45, y: 12 }
         }
     },
     lamborghini: {
@@ -83,12 +82,12 @@ export const carMaps = {
         corpoTransparente: require('@/assets/images/cars/carroceria/uno/transparent.png'),
         baseSize: { width: 350, height: 120 },
         wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
-        rodaFrente: { x: 295, y: 29 },
-        rodaTras: { x: 178, y: 29 },
+        rodaFrente: { x: 171, y: 1 },
+        rodaTras: { x: 45, y: 1 },
         size: { width: 40, height: 40 },
         offset: {
-            frente: { x: -157, y: -69 },
-            tras: { x: -131, y: -69 }
+            frente: { x: 91, y: 12 },
+            tras: { x: 45, y: 12 }
         }
     },
 };

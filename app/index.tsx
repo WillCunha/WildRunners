@@ -39,7 +39,7 @@ export default function CarSelectionScreen() {
 
         // Navega para a tela do jogo 
         // Ajuste o nome da rota conforme sua navegação
-        router.navigate('/testes' as any);
+        router.navigate('/mapa' as any);
     };
 
     return (
@@ -171,14 +171,17 @@ const styles = StyleSheet.create({
 
     },
     carWrapper: {
-        width: '25%',
+        width: '30%',
         height: 100,
         justifyContent: 'center',
         alignItems: 'center',
+        zIndex: 999,
+
     },
     carBase: {
         width: '100%',
         height: '100%',
+        zIndex: 999,
     },
     carOverlay: {
         width: '100%',
@@ -186,12 +189,12 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 0,
         left: 0,
+        zIndex: 999,
     },
     wheel: {
         width: 55,
         height: 55,
         position: 'absolute',
-        zIndex: 10,
     },
     controlsContainer: {
         marginBottom: 20,

@@ -53,7 +53,7 @@ export default function Carro({
   const BASE_HEIGHT = car.baseSize.height;
   const WHEEL_DIAMETER = 70;
 
-  const RENDER_WIDTH = 150;
+  const RENDER_WIDTH = 180;
   const RENDER_HEIGHT = RENDER_WIDTH * (BASE_HEIGHT / BASE_WIDTH);
 
   const scaleX = RENDER_WIDTH / BASE_WIDTH;
@@ -119,16 +119,18 @@ export default function Carro({
 }
 
 const styles = StyleSheet.create({
-carWrapper: {
+  carWrapper: {
     position: 'relative',
     justifyContent: 'flex-end',
     alignItems: 'center',
+    zIndex: 10,
   },
   carBase: {
     width: '100%',
     height: '100%',
     bottom: 0,
-    position: 'absolute'
+    position: 'absolute',
+    zIndex: 10,
   },
   carOverlay: {
     width: '100%',
@@ -136,11 +138,11 @@ carWrapper: {
     position: 'absolute',
     bottom: 0,
     left: 0,
+    zIndex: 10,
   },
   wheel: {
     width: 55,
     height: 55,
     position: 'absolute',
-    zIndex: 10,
   },
 });

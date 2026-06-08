@@ -317,7 +317,7 @@ export default function Mapa() {
       if (playerStatus.current.isStunned) {
         playerSpeed.current = 0;
       } else if (activeEffectsTimers.current['nitro_power'] && activeEffectsTimers.current['nitro_power'] > 0) {
-          playerSpeed.current = NITRO_SPEED * 1.3;
+        playerSpeed.current = NITRO_SPEED * 0.7;
       } else if (isNitroActive.current) {
         playerSpeed.current = NITRO_SPEED;
         nitroTimer.current -= 1;
@@ -464,7 +464,7 @@ export default function Mapa() {
         if (bot.speed > targetSpeed) bot.speed -= FRICTION;
 
         if (bot.status.isSlowed) {
-          targetSpeed = MAX_SPEED * 0.3;
+          targetSpeed = MAX_SPEED * -0.3;
         } else if (bot.activeEffectsTimers['nitro_power'] && bot.activeEffectsTimers['nitro_power'] > 0) {
           targetSpeed = NITRO_SPEED * 1.3;
           bot.speed = targetSpeed;
@@ -647,14 +647,12 @@ export default function Mapa() {
       });
       activeBulletsRef.current = remainingBullets;
 
-      // --- 6.2. FÍSICA DO TNT (CRASH BANDICOOT BOX) ---
+      // --- 6.2. FÍSICA DO TNT  ---
       let remainingTNT: TNTBox[] = [];
       activeTNTRef.current.forEach(tnt => {
-        // Move a caixa junto com o cenário para trás
         tnt.x -= dynamicSpeed;
 
         if (tnt.state === 'exploding') {
-          // Mantém a explosão na tela por alguns frames para o visual
           tnt.timer -= 1;
           if (tnt.timer > 0) remainingTNT.push(tnt);
         } else {
@@ -777,8 +775,8 @@ export default function Mapa() {
 
   /* ================= GERENCIADOR ÚNICO DE COOLDOWNS (UI) ================= */
   useEffect(() => {
-    const hasActiveCooldown = swapCooldown > 0 || chainsCooldown > 0 || bulletCooldown > 0 || tntCooldown > 0 || tornadoCooldown > 0 || slowCooldown > 0 || nitroPowerCooldown > 0;
-    
+    const hasActiveCooldown = swapCooldown > 0 || chainsCooldown > 0 || bulletCooldown > 0 || tntCooldown > 0 || tornadoCooldown > 0 || slowCooldown > 0 || nitroCooldown > 0;
+
     if (!hasActiveCooldown) return;
 
     const globalInterval = setInterval(() => {
@@ -954,15 +952,21 @@ export default function Mapa() {
         }
       } else if (sourceBot) {
         if (targetId === 'player') {
-          const tempY = y.current; const tempX = playerXRef.current;
-          y.current = sourceBot.y; playerXRef.current = sourceBot.x;
-          sourceBot.y = tempY; sourceBot.x = tempX;
+          const tempY = y.current; 
+          const tempX = playerXRef.current;
+          y.current = sourceBot.y; 
+          playerXRef.current = sourceBot.x;
+          sourceBot.y = tempY; 
+          sourceBot.x = tempX;
         } else {
           const targetBot = botsRef.current.find(b => b.id === targetId);
           if (targetBot) {
-            const tempY = targetBot.y; const tempX = targetBot.x;
-            targetBot.y = sourceBot.y; sourceBot.y = tempY;
-            targetBot.x = sourceBot.x; sourceBot.x = tempX;
+            const tempY = targetBot.y; 
+            const tempX = targetBot.x;
+            targetBot.y = sourceBot.y; 
+            sourceBot.y = tempY;
+            targetBot.x = sourceBot.x; 
+            sourceBot.x = tempX;
           }
         }
       }
@@ -984,17 +988,31 @@ export default function Mapa() {
     if (targetId === 'player') {
       activeEffectsTimers.current[effect] = DURATION;
       switch (effect) {
-        case 'blind': playerStatus.current.isBlind = true; setIsBlindActive(true); break;
-        case 'score_boost': playerStatus.current.scoreMultiplier = 2; break;
-        case 'slow_slow': playerStatus.current.isSlowed = true; setIsSlowActive(true); break;
+        case 'blind':
+          playerStatus.current.isBlind = true;
+          setIsBlindActive(true);
+          break;
+        case 'score_boost':
+          playerStatus.current.scoreMultiplier = 2;
+          break;
+        case 'slow_slow':
+          playerStatus.current.isSlowed = true;
+          setIsSlowActive(true);
+          break;
       }
     } else {
       const targetBot = botsRef.current.find(b => b.id === targetId);
       if (targetBot) {
         targetBot.activeEffectsTimers[effect] = DURATION;
         if (effect === 'panic') targetBot.status.isPanicking = true;
-        if (effect === 'blind') { targetBot.status.isBlind = true; targetBot.activeEffectsTimers.blind = DURATION; }
-        if (effect === 'slow_slow') { targetBot.status.isSlowed = true; targetBot.activeEffectsTimers.slow_slow = DURATION; }
+        if (effect === 'blind') {
+          targetBot.status.isBlind = true;
+          targetBot.activeEffectsTimers.blind = DURATION;
+        }
+        if (effect === 'slow_slow') {
+          targetBot.status.isSlowed = true;
+          targetBot.activeEffectsTimers.slow_slow = DURATION;
+        }
       }
     }
   }
@@ -1088,8 +1106,8 @@ export default function Mapa() {
       callerId,
       x: callerX - 60,
       y: callerY,
-      timer: 180,
-      state: 'counting'
+      timer: 1,
+      state: 'exploding'
     });
   }
 
@@ -1529,8 +1547,6 @@ export default function Mapa() {
 
         {/* ================= RENDER DAS CAIXAS DE TNT ================= */}
         {tntsToRender.map((tnt) => {
-          const numberToShow = Math.ceil(tnt.timer / 60);
-
           if (tnt.state === 'exploding') {
             return (
               <View key={tnt.id} style={{
@@ -1561,7 +1577,7 @@ export default function Mapa() {
               <Text style={{
                 color: '#FFF', fontSize: 24, fontWeight: '900', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2
               }}>
-                {numberToShow > 0 ? numberToShow : 0}
+                TNT
               </Text>
             </View>
           );
@@ -1789,7 +1805,7 @@ export default function Mapa() {
           SLOW
         </Text>
       </TouchableOpacity>
-    
+
       <TouchableOpacity
         activeOpacity={0.9}
         onPress={handleNitroPowerPress}
