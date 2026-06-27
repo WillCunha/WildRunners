@@ -1,23 +1,26 @@
-import React, { createContext, useState, useContext } from 'react';
 import { carMaps } from '@/src/utils/carMaps';
+import React, { createContext, useContext, useState } from 'react';
 
 type CarKey = keyof typeof carMaps;
 
 interface CarContextType {
   selectedCar: CarKey;
-  selectedColor: string;
+  selectedColorFront: string;
+  selectedColorBack: string;
   setSelectedCar: (car: CarKey) => void;
-  setSelectedColor: (color: string) => void;
+  setSelectedColorFront: (color: string) => void;
+  setSelectedColoBack: (color: string) => void;
 }
 
 const CarContext = createContext<CarContextType | undefined>(undefined);
 
 export const CarProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [selectedCar, setSelectedCar] = useState<CarKey>('fusca');
-  const [selectedColor, setSelectedColor] = useState<string>('#FF3B30');
+  const [selectedColorFront, setSelectedColorFront] = useState<string>('#FF3B30');
+  const [selectedColorBack, setSelectedColoBack] = useState<string>('#FF3B30');
 
   return (
-    <CarContext.Provider value={{ selectedCar, selectedColor, setSelectedCar, setSelectedColor }}>
+    <CarContext.Provider value={{ selectedCar, selectedColorFront, selectedColorBack, setSelectedCar, setSelectedColorFront, setSelectedColoBack }}>
       {children}
     </CarContext.Provider>
   );

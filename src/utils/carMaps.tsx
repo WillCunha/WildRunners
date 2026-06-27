@@ -1,19 +1,34 @@
 export const carMaps = {
-    buggy: {
-        corpoBranco: require('@/assets/images/cars/carroceria/buggy/branco.png'),
-        corpoTransparente: require('@/assets/images/cars/carroceria/buggy/transparent.png'),
+    // buggy: {
+    //     corpoBrancoFrente: require('@/assets/images/cars/carroceria/buggy/brancoFrente.png'),
+    //     corpoTransparente: require('@/assets/images/cars/carroceria/buggy/transparent.png'),
+    //     baseSize: { width: 350, height: 120 },
+    //     wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
+    //     rodaFrente: { x: 168.5, y: 0 },
+    //     rodaTras: { x: 49, y: 0 },
+    //     size: { width: 40, height: 40 },
+    //     offset: {
+    //         frente: { x: 90, y: 13 },
+    //         tras: { x: 43, y: 13 }
+    //     }
+    // },
+    astor: {
+        corpoBrancoFrente: require('@/assets/images/cars/carroceria/astor/brancoFrente.png'),
+        corpoBrancoTras: require('@/assets/images/cars/carroceria/astor/brancoTras.png'),
+        corpoTransparente: require('@/assets/images/cars/carroceria/astor/transparent.png'),
         baseSize: { width: 350, height: 120 },
         wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
-        rodaFrente: { x: 168.5, y: 0 },
-        rodaTras: { x: 49, y: 0 },
-        size: { width: 40, height: 40 },
+        rodaFrente: { x: 185, y: 1 },
+        rodaTras: { x: 60, y: 1 },
+        size: { width: 35, height: 35 },
         offset: {
-            frente: { x: 90, y: 13 },
-            tras: { x: 43, y: 13 }
+            frente: { x: 120, y: 12 },    
+            tras: { x: 131, y: 12 }  
         }
     },
     caravana: {
-        corpoBranco: require('@/assets/images/cars/carroceria/caravana/branco.png'),
+        corpoBrancoFrente: require('@/assets/images/cars/carroceria/caravana/brancoFrente.png'),
+        corpoBrancoTras: require('@/assets/images/cars/carroceria/caravana/brancoTras.png'),
         corpoTransparente: require('@/assets/images/cars/carroceria/caravana/transparent.png'),
         baseSize: { width: 350, height: 120 },
         wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
@@ -26,7 +41,8 @@ export const carMaps = {
         }
     },
     ferrari: {
-        corpoBranco: require('@/assets/images/cars/carroceria/ferrari/branco.png'),
+        corpoBrancoFrente: require('@/assets/images/cars/carroceria/ferrari/brancoFrente.png'),
+        corpoBrancoTras: require('@/assets/images/cars/carroceria/ferrari/brancoTras.png'),
         corpoTransparente: require('@/assets/images/cars/carroceria/ferrari/transparent.png'),
         baseSize: { width: 350, height: 120 },
         wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
@@ -39,7 +55,8 @@ export const carMaps = {
         }
     },
     fusca: {
-        corpoBranco: require('@/assets/images/cars/carroceria/fusca/branco.png'),
+        corpoBrancoFrente: require('@/assets/images/cars/carroceria/fusca/brancoFrente.png'),
+        corpoBrancoTras: require('@/assets/images/cars/carroceria/fusca/brancoTras.png'),
         corpoTransparente: require('@/assets/images/cars/carroceria/fusca/transparent.png'),
         baseSize: { width: 350, height: 120 },
         wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
@@ -52,7 +69,8 @@ export const carMaps = {
         }
     },
     kombi: {
-        corpoBranco: require('@/assets/images/cars/carroceria/kombi/branco.png'),
+        corpoBrancoFrente: require('@/assets/images/cars/carroceria/kombi/brancoCima.png'),
+        corpoBrancoTras: require('@/assets/images/cars/carroceria/kombi/brancoBaixo.png'),
         corpoTransparente: require('@/assets/images/cars/carroceria/kombi/transparent.png'),
         baseSize: { width: 350, height: 120 },
         wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
@@ -64,9 +82,10 @@ export const carMaps = {
             tras: { x: 45, y: 12 }
         }
     },
-    lamborghini: {
-        corpoBranco: require('@/assets/images/cars/carroceria/lamborghini/branco.png'),
-        corpoTransparente: require('@/assets/images/cars/carroceria/lamborghini/transparent.png'),
+    monster: {
+        corpoBrancoFrente: require('@/assets/images/cars/carroceria/monster/brancoFrente.png'),
+        corpoBrancoTras: require('@/assets/images/cars/carroceria/monster/brancoTras.png'),
+        corpoTransparente: require('@/assets/images/cars/carroceria/monster/transparent.png'),
         baseSize: { width: 350, height: 120 },
         wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
         rodaFrente: { x: 293, y: 41 },
@@ -78,7 +97,8 @@ export const carMaps = {
         }
     },
     uno: {
-        corpoBranco: require('@/assets/images/cars/carroceria/uno/branco.png'),
+        corpoBrancoFrente: require('@/assets/images/cars/carroceria/uno/brancoFrente.png'),
+        corpoBrancoTras: require('@/assets/images/cars/carroceria/uno/brancoTras.png'),
         corpoTransparente: require('@/assets/images/cars/carroceria/uno/transparent.png'),
         baseSize: { width: 350, height: 120 },
         wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),

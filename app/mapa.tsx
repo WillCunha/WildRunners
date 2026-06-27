@@ -1,6 +1,8 @@
 // PARA TESTES REMOVA SEMPRE O "USE EFFECT DE PREPARAÇÃO DO INICIO"
 
+import { useLocalSearchParams } from '@/.expo/types/router';
 import Carro from '@/components/Carro';
+import CenarioBackground from '@/components/Cenarios/CenarioBackground';
 import ChainsEffect from '@/components/Decks/ChainsEffect';
 import GuidedBulletEffect from '@/components/Decks/GuidedBulletEffect';
 import SwapEffect from '@/components/Decks/SwapEffect';
@@ -14,6 +16,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, LayoutAnimation, Platform, StyleSheet, Text, TouchableOpacity, UIManager, View, useWindowDimensions } from 'react-native';
 
 type CarKey = keyof typeof carMaps;
+
+interface MapaProps {
+  initialDeck?: string[];
+};
 
 /* ================= CONFIGURAÇÕES DA FÍSICA E VELOCIDADE ================= */
 const GRAVITY = 0.8;
@@ -34,7 +40,7 @@ const AVAILABLE_BOT_COLORS = [
   '#FF3B30', '#34C759', '#007AFF', '#FFCC00', '#FF9500', '#AF52DE', '#1C1C1E', '#F2F2F7',
 ];
 
-export default function Mapa() {
+export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: MapaProps) {
 
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
 
@@ -42,14 +48,17 @@ export default function Mapa() {
     UIManager.setLayoutAnimationEnabledExperimental(true);
   }
 
-  const { selectedCar, selectedColor } = useCarSelection();
+  const params = useLocalSearchParams<{ deck?: string }>();
+  const { selectedCar, selectedColorFront, selectedColorBack } = useCarSelection();
+  const fallbackDeck = ['swap', 'bullet', 'chains', 'tnt'];
+  const finalDeck = params.deck ? JSON.parse(params.deck) : fallbackDeck;
 
   const BASE_PLAYER_X = SCREEN_WIDTH * 0.4;
   const GAP_BETWEEN_RACERS = 130;
   const TOTAL_RACERS = 6;
 
-  type CardEffect = 'swap' | 'chains' | 'heavy_gravity' | 'invert_controls' |
-    'blind' | 'panic' | 'ghost' | 'score_boost' | 'tnt' |
+
+  type CardEffect = 'swap' | 'chains' | 'blind' | 'score_boost' | 'tnt' |
     'bullet' | 'tornado' | 'slow_slow' | 'nitro_power';
 
   type TNTBox = {
@@ -77,13 +86,13 @@ export default function Mapa() {
     'Ventania', 'Cometa', 'Nitro', 'Sombra', 'Turbina', 'Rex'
   ];
 
+
   const CARD_CATEGORIES = {
     HEAVY_ATTACK: ['swap', 'bullet', 'chains', 'tnt', 'tornado'],
     TIME_ATTACK: ['slow_slow'],
-    LIGHT_ATTACK: ['invert_controls', 'panic'],
-    DEFENSE_BUFF: ['ghost', 'score_boost', 'nitro_power']
+    LIGHT_ATTACK: ['blind'],
+    DEFENSE_BUFF: ['nitro_power']
   };
-
   const COOLDOWNS = { HEAVY: 60 * 15, LIGHT: 60 * 8, DEFENSE: 60 * 12 };
 
   const defaultStatus = {
@@ -126,11 +135,11 @@ export default function Mapa() {
   };
 
   const botsRef = useRef([
-    { id: 'bot1', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'default', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
-    { id: 'bot2', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'gangster', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
-    { id: 'bot3', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'ninja', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
-    { id: 'bot4', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'pirate', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
-    { id: 'bot5', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'surfer', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
+    { id: 'bot1', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'default', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColorFront: getRandomColor(), carColorBack: getRandomColor() },
+    { id: 'bot2', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'gangster', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColorFront: getRandomColor(), carColorBack: getRandomColor() },
+    { id: 'bot3', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'ninja', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColorFront: getRandomColor(), carColorBack: getRandomColor() },
+    { id: 'bot4', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'pirate', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColorFront: getRandomColor(), carColorBack: getRandomColor() },
+    { id: 'bot5', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'surfer', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColorFront: getRandomColor(), carColorBack: getRandomColor() },
   ]);
 
 
@@ -149,6 +158,14 @@ export default function Mapa() {
   const playerLivesRef = useRef(5);
   const playerIsDead = useRef(false);
 
+  // ---- DECK ---- //
+  const CARD_COSTS: Record<string, number> = {
+    chains: 3, tnt: 4, swap: 4, slow_slow: 5, blind: 5,
+    bullet: 3, tornado: 4, nitro: 2
+  }
+  const [boost, setBoost] = useState<number>(5);
+  const MAX_BOOST = 10;
+  const [playerDeck, setPlayerDeck] = useState<string[]>(finalDeck);
 
   const [bots, setBots] = useState(botsRef.current);
   const [started, setStarted] = useState(false);
@@ -246,7 +263,8 @@ export default function Mapa() {
       newBots[i].activeEffectsTimers = {};
       newBots[i].deck = generateRandomDeck();
       newBots[i].carType = getRandomCarType();
-      newBots[i].carColor = getRandomColor();
+      newBots[i].carColorFront = getRandomColor();
+      newBots[i].carColorBack = getRandomColor();
       newBots[i].angle = 0;
     }
     botsRef.current = newBots;
@@ -284,6 +302,10 @@ export default function Mapa() {
 
     const loop = setInterval(() => {
       gameTime.current += 1;
+
+      if (gameTime.current % 60 === 0) {
+        setBoost(prev => Math.min(prev + 1, MAX_BOOST));
+      }
 
       if (playerStatus.current.invincibleTimer > 0) {
         playerStatus.current.invincibleTimer -= 1;
@@ -380,57 +402,43 @@ export default function Mapa() {
         }
       }
 
-      if (playerStatus.current.isPanicking && isGrounded.current && gameTime.current % 30 === 0) {
-        velocity.current = JUMP_FORCE;
-        isGrounded.current = false;
-      }
-
       const currentGravity = GRAVITY * playerStatus.current.gravityMultiplier;
       velocity.current += currentGravity;
       y.current += velocity.current;
 
-      // --- 4. GERAÇÃO E MOVIMENTO DOS BLOCOS (AGORA COM BURACOS INTELIGENTES) ---
+      // --- 4. GERAÇÃO E MOVIMENTO DOS BLOCOS (AGORA COM LIMITES DINÂMICOS) ---
       let updatedBlocks = blocksRef.current.map(block => ({ ...block, x: block.x - dynamicSpeed }));
       const lastBlock = updatedBlocks[updatedBlocks.length - 1];
 
-      if (lastBlock && lastBlock.x + lastBlock.width < SCREEN_WIDTH + 1500) {
-        const minWidth = 150;
-        const maxWidth = 350;
-        const newWidth = Math.random() * (maxWidth - minWidth) + minWidth;
+      const maxRacerX = Math.max(playerXRef.current, ...botsRef.current.map(b => b.x));
+      const minRacerX = Math.min(playerXRef.current, ...botsRef.current.map(b => b.x));
 
+      if (lastBlock && lastBlock.x + lastBlock.width < maxRacerX + SCREEN_WIDTH + 1500) {
+        const minWidth = 200;
+        const maxWidth = 400;
+        const newWidth = Math.random() * (maxWidth - minWidth) + minWidth;
         let direction = Math.floor(Math.random() * 3) - 1;
         const currentY = lastBlock.type === 'ramp' ? lastBlock.endY! : lastBlock.y!;
-        let nextY = currentY + (direction * 80);
 
-        if (nextY < 150) nextY = 150;
-        if (nextY > SCREEN_HEIGHT - 100) nextY = SCREEN_HEIGHT - 100;
+        // Aumentamos a variação de altura para descidas e subidas mais radicais
+        let nextY = currentY + (direction * (100 + Math.random() * 80));
+
+        if (nextY < 180) nextY = 180;
+        if (nextY > SCREEN_HEIGHT - 120) nextY = SCREEN_HEIGHT - 120;
 
         const heightDiff = nextY - currentY;
         const newId = Math.random().toString(36).substr(2, 9);
 
         if (Math.abs(heightDiff) > 20) {
-          // No RN, Y maior significa mais para baixo na tela.
-          // Só geramos buraco se a próxima plataforma for mais BAIXA (heightDiff > 0)
-          if (heightDiff > 0 && Math.random() > 0.4) {
-            // Gera um buraco de 160px adicionando espaço VAZIO ao 'x' do próximo bloco
-            updatedBlocks.push({
-              id: newId,
-              type: 'flat',
-              x: lastBlock.x + lastBlock.width + 160,
-              y: nextY,
-              width: newWidth,
-            });
-          } else {
-            // Se for subida (heightDiff < 0) ou se a chance de buraco falhou, gera uma rampa
-            updatedBlocks.push({
-              id: newId,
-              type: 'ramp',
-              x: lastBlock.x + lastBlock.width,
-              startY: currentY,
-              endY: nextY,
-              width: 250,
-            });
-          }
+          // Rampas/Curvas um pouco mais largas (ex: 320px) para suavizar a descida em alta velocidade
+          updatedBlocks.push({
+            id: newId,
+            type: 'ramp',
+            x: lastBlock.x + lastBlock.width,
+            startY: currentY,
+            endY: nextY,
+            width: 320,
+          });
         } else {
           updatedBlocks.push({
             id: newId,
@@ -442,7 +450,7 @@ export default function Mapa() {
         }
       }
 
-      blocksRef.current = updatedBlocks.filter(block => block.x + block.width > -200);
+      blocksRef.current = updatedBlocks.filter(block => block.x + block.width > minRacerX - 500);
 
       // --- 5. INTELIGÊNCIA DE CORRIDA DOS BOTS  ---
       botsRef.current.forEach(bot => {
@@ -458,13 +466,15 @@ export default function Mapa() {
         }
 
         let targetSpeed = MAX_SPEED * (0.8 + Math.random() * 0.2);
-        if (bot.x < playerXRef.current - 150) targetSpeed = MAX_SPEED * 1.1;
+        if (bot.x < playerXRef.current - 100) {
+          targetSpeed = MAX_SPEED * 1.35;
+        }
 
         if (bot.speed < targetSpeed) bot.speed += ACCELERATION * 0.8;
         if (bot.speed > targetSpeed) bot.speed -= FRICTION;
 
         if (bot.status.isSlowed) {
-          targetSpeed = MAX_SPEED * -0.3;
+          targetSpeed = MAX_SPEED * -1.5;
         } else if (bot.activeEffectsTimers['nitro_power'] && bot.activeEffectsTimers['nitro_power'] > 0) {
           targetSpeed = NITRO_SPEED * 1.3;
           bot.speed = targetSpeed;
@@ -486,7 +496,6 @@ export default function Mapa() {
           }
         }
 
-        if (bot.status.isPanicking && bot.velocity === 0 && gameTime.current % 30 === 0) bot.velocity = JUMP_FORCE;
 
         const currentBotGravity = GRAVITY * bot.status.gravityMultiplier;
         bot.velocity += currentBotGravity;
@@ -499,7 +508,7 @@ export default function Mapa() {
 
         // Novo cálculo de colisão do Bot baseado no "find" em vez de um for loop falho
         const currentBotBlock = blocksRef.current.find(
-          block => botCenterX >= block.x && botCenterX <= block.x + block.width
+          block => botCenterX >= block.x && block.x + block.width >= botCenterX
         );
 
         if (currentBotBlock) {
@@ -509,14 +518,17 @@ export default function Mapa() {
             groundYAtX = currentBotBlock.y!;
             targetBotAngle = 0;
           } else if (currentBotBlock.type === 'ramp') {
-            const progress = (botCenterX - currentBotBlock.x) / currentBotBlock.width;
-            groundYAtX = currentBotBlock.startY! + ((currentBotBlock.endY! - currentBotBlock.startY!) * progress);
-            const dy = currentBotBlock.endY! - currentBotBlock.startY!;
-            targetBotAngle = Math.atan2(dy, currentBotBlock.width) * (180 / Math.PI);
+            const progress = Math.max(0, Math.min(1, (botCenterX - currentBotBlock.x) / currentBotBlock.width));
+
+            const smoothProgress = (1 - Math.cos(progress * Math.PI)) / 2;
+            groundYAtX = currentBotBlock.startY! + ((currentBotBlock.endY! - currentBotBlock.startY!) * smoothProgress);
+
+            const slope = ((currentBotBlock.endY! - currentBotBlock.startY!) * Math.sin(progress * Math.PI) * Math.PI) / (2 * currentBotBlock.width);
+            targetBotAngle = Math.atan2(slope, 1) * (180 / Math.PI);
           }
 
           if (bot.status.isStunned) {
-            targetBotAngle = (gameTime.current * 35) % 360; // Ajuste o 35 para girar mais rápido/devagar
+            targetBotAngle = (gameTime.current * 35) % 360;
           }
 
           // Verificação sólida cravando no chão
@@ -540,7 +552,8 @@ export default function Mapa() {
 
       botsRef.current = botsRef.current.filter(bot => bot.y <= SCREEN_HEIGHT + 100);
 
-      if (gameTime.current % 30 === 0) processBotsAI();
+      // Agora eles avaliam o campo a cada 15 frames (~0.25s) em vez de 30 frames
+      if (gameTime.current % 15 === 0) processBotsAI();
 
       // --- 6. EFEITO DA CORRENTE (CHAINS) ---
       if (activeChainsStateRef.current && activeChainsStateRef.current.duration > 0) {
@@ -549,16 +562,13 @@ export default function Mapa() {
         const callerX = callerId === 'player' ? playerXRef.current : botsRef.current.find(b => b.id === callerId)?.x || -1000;
         const targetX = targetId === 'player' ? playerXRef.current : botsRef.current.find(b => b.id === targetId)?.x || -1000;
 
-        // Math.abs garante que a distância seja positiva, mesmo se o caller passar o target
         const distanceBetween = Math.abs(targetX - callerX);
 
         if (distanceBetween <= 20) {
-          // Os carros colidiram/se passaram. Limpamos o estado!
           activeChainsStateRef.current = null;
           setActiveChainsState(null);
           setActiveChains(null);
 
-          // REMOVIDO: O "return;" perigoso que travava o jogo sumiu daqui.
         } else {
           const PULL_FORCE = 0.11;
           const POSITION_PULL = 0.4;
@@ -674,8 +684,27 @@ export default function Mapa() {
             }
           }
 
-          // EXPLOSÃO!
-          if (tnt.timer <= 0) {
+          // --- DETECÇÃO DE COLISÃO POR PROXIMIDADE ---
+          let hitRacer = false;
+          // Pequena janela de 15 frames (~0.2s) de imunidade para evitar que quem soltou exploda instantaneamente
+          const safetyWindow = tnt.timer < (60 * 10) - 15;
+
+          if (safetyWindow) {
+            // Verifica colisão com o Player
+            const distPlayer = Math.sqrt(Math.pow(playerXRef.current - tnt.x, 2) + Math.pow(y.current - tnt.y, 2));
+            if (distPlayer < 40) hitRacer = true;
+
+            // Verifica colisão com os Bots ativos
+            botsRef.current.forEach(bot => {
+              if (!bot.isDead) {
+                const distBot = Math.sqrt(Math.pow(bot.x - tnt.x, 2) + Math.pow(bot.y - tnt.y, 2));
+                if (distBot < 40) hitRacer = true;
+              }
+            });
+          }
+
+          // EXPLOSÃO! (Ativa por tempo limite OU se algum corredor encostar)
+          if (tnt.timer <= 0 || hitRacer) {
             tnt.state = 'exploding';
             tnt.timer = 15;
 
@@ -688,10 +717,8 @@ export default function Mapa() {
               const dist = Math.sqrt(dx * dx + dy * dy);
 
               if (dist < EXPLOSION_RADIUS) {
-
-                const hit = applyDamage(racerId)
+                const hit = applyDamage(racerId);
                 if (!hit) return;
-
 
                 if (racerId === 'player') {
                   playerSpeed.current = 0;
@@ -735,17 +762,23 @@ export default function Mapa() {
           groundYAtX = currentBlock.y!;
           targetAngle = 0;
         } else if (currentBlock.type === 'ramp') {
-          const progress = (playerCenterX - currentBlock.x) / currentBlock.width;
-          groundYAtX = currentBlock.startY! + ((currentBlock.endY! - currentBlock.startY!) * progress);
-          const dy = currentBlock.endY! - currentBlock.startY!;
-          targetAngle = Math.atan2(dy, currentBlock.width) * (180 / Math.PI);
+          // Garante que o progresso fique estrito entre 0 e 1
+          const progress = Math.max(0, Math.min(1, (playerCenterX - currentBlock.x) / currentBlock.width));
+
+          // Mágica do Cosseno: Suaviza o topo e a base da curva
+          const smoothProgress = (1 - Math.cos(progress * Math.PI)) / 2;
+          groundYAtX = currentBlock.startY! + ((currentBlock.endY! - currentBlock.startY!) * smoothProgress);
+
+          // Derivada da função para obter a inclinação exata da curva neste ponto
+          const slope = ((currentBlock.endY! - currentBlock.startY!) * Math.sin(progress * Math.PI) * Math.PI) / (2 * currentBlock.width);
+          targetAngle = Math.atan2(slope, 1) * (180 / Math.PI);
         }
 
         if (playerStatus.current.isStunned) {
           targetAngle = (gameTime.current * 35) % 360;
         }
 
-        // CRAVA NO CHÃO se estiver caindo e passou/chegou da linha do chão 
+        // CRAVA NO CHÃO se estiver caindo
         if (velocity.current >= 0 && playerFootY >= groundYAtX - 25) {
           y.current = groundYAtX - PLAYER_SIZE + 6;
           velocity.current = 0;
@@ -821,13 +854,42 @@ export default function Mapa() {
 
   /* ================= GERA CARTA ALEATORIA QUE OS BOTS VÃO ATACAR ================= */
   function generateRandomDeck() {
-    const allEffects: CardEffect[] = ['swap', 'blind', 'score_boost', 'bullet', 'chains', 'tnt', 'tornado', 'nitro_power'];
+    const allEffects: CardEffect[] = ['swap', 'bullet', 'chains', 'tnt', 'tornado', 'slow_slow', 'nitro_power', 'blind'];
     const shuffled = allEffects.sort(() => 0.5 - Math.random());
     return [
       { effect: shuffled[0], currentCooldown: 60 * 3 + Math.floor(Math.random() * 120), baseCooldown: COOLDOWNS.HEAVY },
       { effect: shuffled[1], currentCooldown: 60 * 3 + Math.floor(Math.random() * 120), baseCooldown: COOLDOWNS.LIGHT }
     ];
   }
+
+  /* ================= GERENCIADOR DO USO DE CARTAS COM BOOST ================= */
+  function handleUseCard(effect: string) {
+    const cost = CARD_COSTS[effect] || 0;
+
+    if (boost < cost) return;
+    if (effect === 'swap' && swapCooldown > 0) return;
+    if (effect === 'chains' && chainsCooldown > 0) return;
+    if (effect === 'bullet' && bulletCooldown > 0) return;
+    if (effect === 'tnt' && tntCooldown > 0) return;
+    if (effect === 'tornado' && tornadoCooldown > 0) return;
+    if (effect === 'slow_slow' && slowCooldown > 0) return;
+    if (effect === 'nitro' && nitroCooldown > 0) return;
+
+    setBoost(prev => prev - cost);
+
+    if (effect === 'swap') { triggerSwap('player'); setSwapCooldown(SWAP_COOLDOWN) }
+    if (effect === 'chains') { triggerChains('player'); setChainsCooldown(CHAINS_COOLDOWN) }
+    if (effect === 'bullet') { triggerBullet('player'); setBulletCooldown(BULLET_COOLDOWN) }
+    if (effect === 'tnt') { triggerTNT('player'); setTntCooldown(TNT_COOLDOWN) }
+    if (effect === 'tornado') { triggerTornado('player'); setTornadoCooldown(TORNADO_COOLDOWN) }
+    if (effect === 'nitro_power') { triggerNitroPower('player'); setNitroCooldown(NITRO_COOLDOWN) }
+    if (effect === 'slow_slow') {
+      botsRef.current.forEach(bot => applyCardEffect('slow_slow', bot.id, 'player'));
+      setSlowCooldown(SLOW_COOLDOWN)
+    }
+
+  }
+
 
   /* ================= DA O IMPULSO ================= */
   function handleAddImpulse() {
@@ -883,10 +945,10 @@ export default function Mapa() {
     const allRacers = [{ id: 'player', x: playerXRef.current, isPlayer: true }, ...botsRef.current.map(b => ({ id: b.id, x: b.x, isPlayer: false }))].sort((a, b) => b.x - a.x);
 
     botsRef.current.forEach(bot => {
+      if (bot.isDead) return;
       if (bot.thinkTimer > 0) { bot.thinkTimer--; return; }
 
       const availableCards = bot.deck.filter(card => card.currentCooldown <= 0);
-
       if (availableCards.length === 0) return;
 
       const myRank = allRacers.findIndex(r => r.id === bot.id);
@@ -897,24 +959,26 @@ export default function Mapa() {
         const opponentsAhead = allRacers.slice(0, myRank);
 
         if (opponentsAhead.length > 0) {
-          if (chosenCard.effect === 'swap') {
-            target = Math.random() > 0.4 ? opponentsAhead[0].id : opponentsAhead[Math.floor(Math.random() * opponentsAhead.length)].id;
+          // SE O JOGADOR ESTIVER À FRENTE, EXISTE 70% DE CHANCE DE ELE SER O ALVO DO ATAQUE!
+          const playerAhead = opponentsAhead.find(r => r.id === 'player');
+          if (playerAhead && Math.random() < 0.7) {
+            target = 'player';
           } else {
-            target = Math.random() > 0.3 ? opponentsAhead[opponentsAhead.length - 1].id : opponentsAhead[Math.floor(Math.random() * opponentsAhead.length)].id;
+            // Caso contrário, ataca o rival mais próximo à frente
+            target = opponentsAhead[opponentsAhead.length - 1].id;
           }
         } else {
+          // Se o bot estiver em primeiro, ele joga itens para trás sem piedade
           const opponentsBehind = allRacers.slice(myRank + 1);
           if (opponentsBehind.length > 0) target = opponentsBehind[0].id;
           else return;
         }
       }
 
+      // Executa o poder
       if (chosenCard.effect === 'swap') {
         const targetRacer = allRacers.find(r => r.id === target);
-        if (targetRacer && targetRacer.x <= bot.x) { bot.thinkTimer = 30; return; }
-      }
-
-      if (chosenCard.effect === 'swap') {
+        if (targetRacer && targetRacer.x <= bot.x) return; // Evita swap inútil para trás
         triggerSwap(bot.id);
       } else if (chosenCard.effect === 'tnt') {
         triggerTNT(bot.id);
@@ -927,7 +991,8 @@ export default function Mapa() {
       }
 
       chosenCard.currentCooldown = chosenCard.baseCooldown;
-      bot.thinkTimer = 60 + Math.floor(Math.random() * 120);
+
+      bot.thinkTimer = 15 + Math.floor(Math.random() * 25);
     });
   }
 
@@ -952,20 +1017,20 @@ export default function Mapa() {
         }
       } else if (sourceBot) {
         if (targetId === 'player') {
-          const tempY = y.current; 
+          const tempY = y.current;
           const tempX = playerXRef.current;
-          y.current = sourceBot.y; 
+          y.current = sourceBot.y;
           playerXRef.current = sourceBot.x;
-          sourceBot.y = tempY; 
+          sourceBot.y = tempY;
           sourceBot.x = tempX;
         } else {
           const targetBot = botsRef.current.find(b => b.id === targetId);
           if (targetBot) {
-            const tempY = targetBot.y; 
+            const tempY = targetBot.y;
             const tempX = targetBot.x;
-            targetBot.y = sourceBot.y; 
+            targetBot.y = sourceBot.y;
             sourceBot.y = tempY;
-            targetBot.x = sourceBot.x; 
+            targetBot.x = sourceBot.x;
             sourceBot.x = tempX;
           }
         }
@@ -1004,7 +1069,6 @@ export default function Mapa() {
       const targetBot = botsRef.current.find(b => b.id === targetId);
       if (targetBot) {
         targetBot.activeEffectsTimers[effect] = DURATION;
-        if (effect === 'panic') targetBot.status.isPanicking = true;
         if (effect === 'blind') {
           targetBot.status.isBlind = true;
           targetBot.activeEffectsTimers.blind = DURATION;
@@ -1106,8 +1170,8 @@ export default function Mapa() {
       callerId,
       x: callerX - 60,
       y: callerY,
-      timer: 1,
-      state: 'exploding'
+      timer: 60 * 10,
+      state: 'counting'
     });
   }
 
@@ -1226,8 +1290,8 @@ export default function Mapa() {
 
   // Preparação do Mini-mapa
   const allRacersPositions = [
-    { id: 'player', x: playerX, color: selectedColor || '#00D084', isPlayer: true },
-    ...bots.map(b => ({ id: b.id, x: b.x, color: b.carColor, isPlayer: false }))
+    { id: 'player', x: playerX, color: selectedColorFront || '#00D084', isPlayer: true },
+    ...bots.map(b => ({ id: b.id, x: b.x, color: b.carColorFront, isPlayer: false }))
   ];
 
   const minMapX = Math.min(...allRacersPositions.map(r => r.x));
@@ -1236,6 +1300,7 @@ export default function Mapa() {
 
   return (
     <View style={styles.container}>
+      <CenarioBackground isMoving={started && !gameOver} />
       <View style={StyleSheet.absoluteFillObject} />
 
       <View style={styles.leaderboardContainer} pointerEvents="none">
@@ -1402,29 +1467,57 @@ export default function Mapa() {
       >
         {blocks.map((b) => {
           if (b.type === 'flat') {
-            return <View key={`flat-${b.id}`} style={[styles.block, { left: b.x, top: b.y, width: b.width }]} />;
-          } else if (b.type === 'ramp') {
-            const dy = b.endY! - b.startY!;
-            const dx = b.width;
-            const length = Math.sqrt(dx * dx + dy * dy);
-            const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-            const midX = b.x + dx / 2;
-            const midY = (b.startY! + b.endY!) / 2;
-
             return (
               <View
-                key={`ramp-${b.id}`}
+                key={`flat-${b.id}`}
                 style={[
                   styles.block,
                   {
-                    left: midX - length / 2,
-                    top: midY - 1000,
-                    width: length,
-                    height: 2000,
-                    transform: [{ rotate: `${angle}deg` }, { translateY: 1000 }]
+                    left: b.x,
+                    top: b.y,
+                    width: b.width,
+                    height: SCREEN_HEIGHT,
+                    backgroundColor: '#2e8b565b', // Terra/Grama escura interna
+                    borderTopWidth: 5,
+                    borderTopColor: '#34C759',  // Linha verde viva da superfície
                   }
                 ]}
               />
+            );
+          } else if (b.type === 'ramp') {
+            // Fatiamos a curva em múltiplos pedacinhos para gerar o efeito visual curvo perfeito
+            const SLICES = 16;
+            const sliceWidth = b.width / SLICES;
+
+            return (
+              <View key={`ramp-${b.id}`} style={{ position: 'absolute', left: b.x, width: b.width, height: SCREEN_HEIGHT, zIndex: 3 }}>
+                {Array.from({ length: SLICES }).map((_, i) => {
+                  const pStart = i / SLICES;
+                  const pEnd = (i + 1) / SLICES;
+
+                  const smoothPStart = (1 - Math.cos(pStart * Math.PI)) / 2;
+                  const smoothPEnd = (1 - Math.cos(pEnd * Math.PI)) / 2;
+
+                  const yStart = b.startY! + (b.endY! - b.startY!) * smoothPStart;
+                  const yEnd = b.startY! + (b.endY! - b.startY!) * smoothPEnd;
+
+                  return (
+                    <View
+                      key={i}
+                      style={{
+                        position: 'absolute',
+                        left: i * sliceWidth,
+                        top: Math.min(yStart, yEnd),
+                        width: sliceWidth + 0.8, // Compensação de sub-pixel para evitar gaps brancos
+                        height: SCREEN_HEIGHT,
+                        backgroundColor: '#2e8b565b',
+                        borderTopWidth: 5,
+                        borderTopColor: '#34C759',
+                      }}
+                    />
+                  );
+                })}
+              </View>
             );
           }
         })}
@@ -1453,8 +1546,9 @@ export default function Mapa() {
             <View style={{ width: '200%', alignItems: 'center' }}>
 
               <Carro
-                carType={"fusca"}
-                carColor={bot.carColor}
+                carType={selectedCar}
+                carColorFront={bot.carColorFront}
+                carColorBack={bot.carColorBack}
                 speed={bot.speed}
                 skin={bot.skin} />
             </View>
@@ -1484,7 +1578,8 @@ export default function Mapa() {
           <View style={{ width: '200%', alignItems: 'center' }}>
             <Carro
               carType={selectedCar}
-              carColor={selectedColor}
+              carColorFront={selectedColorFront}
+              carColorBack={selectedColorBack}
               speed={playerSpeed.current}
               skin="default" />
           </View>
@@ -1599,236 +1694,60 @@ export default function Mapa() {
 
       {isBlindActive && <View style={styles.blindEffect} pointerEvents="none" />}
 
-      <TouchableOpacity
-        activeOpacity={0.9}
-        onPress={handleSwapPress}
-        style={{
-          width: 82,
-          height: 82,
-          borderRadius: 41,
-          overflow: 'hidden',
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: '#1B1B1B',
-          borderWidth: 3,
-          borderColor: '#FF004D',
-          position: 'absolute',
-          bottom: 2,
-          left: 5
-        }}
-      >
-        {/* PROGRESSO DO COOLDOWN */}
-        {swapCooldown > 0 && (
-          <View
-            style={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: `${(swapCooldown / SWAP_COOLDOWN) * 100}%`,
-              backgroundColor: 'rgba(255,0,77,0.45)',
-            }}
-          />
-        )}
+      <View style={styles.boostBarContainer}>
+        <View style={[styles.boostBarFill, { width: `${(boost / MAX_BOOST) * 100}%` }]} />
+        <Text style={styles.boostBarText}>💧 boost: {boost}/{MAX_BOOST}</Text>
+      </View>
 
-        {/* TEXTO */}
-        <Text
-          style={{
-            color: 'white',
-            fontWeight: '900',
-            fontSize: 18,
-            letterSpacing: 1,
-          }}
-        >
-          SWAP
-        </Text>
-      </TouchableOpacity>
 
-      <TouchableOpacity
-        activeOpacity={0.9}
-        onPress={handleBulletPress}
-        style={{
-          width: 82,
-          height: 82,
-          borderRadius: 41,
-          overflow: 'hidden',
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: '#1B1B1B',
-          borderWidth: 3,
-          borderColor: '#FF004D',
-          position: 'absolute',
-          bottom: 2,
-          left: 30 + 82
-        }}
-      >
-        {/* PROGRESSO DO COOLDOWN */}
-        {bulletCooldown > 0 && (
-          <View
-            style={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: `${(bulletCooldown / BULLET_COOLDOWN) * 100}%`,
-              backgroundColor: 'rgba(255,0,77,0.45)',
-            }}
-          />
-        )}
+      <View style={styles.deckHandContainer}>
+        {playerDeck.map((cardId, index) => {
+          const cost = CARD_COSTS[cardId] || 0;
+          const hasboost = boost >= cost;
 
-        {/* TEXTO */}
-        <Text
-          style={{
-            color: 'white',
-            fontWeight: '900',
-            fontSize: 18,
-            letterSpacing: 1,
-          }}
-        >
-          MÍSSIL
-        </Text>
-      </TouchableOpacity>
+          // Recupera o estado atual de cooldown do card específico
+          let currentCooldown = 0;
+          let maxCooldown = 1;
+          if (cardId === 'swap') { currentCooldown = swapCooldown; maxCooldown = SWAP_COOLDOWN; }
+          if (cardId === 'chains') { currentCooldown = chainsCooldown; maxCooldown = CHAINS_COOLDOWN; }
+          if (cardId === 'bullet') { currentCooldown = bulletCooldown; maxCooldown = BULLET_COOLDOWN; }
+          if (cardId === 'tnt') { currentCooldown = tntCooldown; maxCooldown = TNT_COOLDOWN; }
+          if (cardId === 'tornado') { currentCooldown = tornadoCooldown; maxCooldown = TORNADO_COOLDOWN; }
+          if (cardId === 'slow_slow') { currentCooldown = slowCooldown; maxCooldown = SLOW_COOLDOWN; }
+          if (cardId === 'nitro_power') { currentCooldown = nitroCooldown; maxCooldown = NITRO_COOLDOWN; }
 
-      <TouchableOpacity
-        activeOpacity={0.9}
-        onPress={handleChainsPress}
-        style={{
-          width: 82,
-          height: 82,
-          borderRadius: 41,
-          overflow: 'hidden',
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: '#1B1B1B',
-          borderWidth: 3,
-          borderColor: '#FF004D',
-          position: 'absolute',
-          bottom: 2,
-          left: 30 + 82 * 2
-        }}
-      >
-        {/* PROGRESSO DO COOLDOWN */}
-        {chainsCooldown > 0 && (
-          <View
-            style={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: `${(chainsCooldown / CHAINS_COOLDOWN) * 100}%`,
-              backgroundColor: 'rgba(255,0,77,0.45)',
-            }}
-          />
-        )}
+          return (
+            <TouchableOpacity
+              key={`${cardId}-${index}`}
+              activeOpacity={0.9}
+              onPress={() => handleUseCard(cardId)}
+              style={[
+                styles.dynamicCardBtn,
+                { left: 15 + index * 95 },
+                !hasboost && { opacity: 0.4 } // Fica apagadinha/cinza sem boost!
+              ]}
+            >
+              {/* Progresso visual do cooldown */}
+              {currentCooldown > 0 && (
+                <View style={{
+                  position: 'absolute', bottom: 0, left: 0, right: 0,
+                  height: `${(currentCooldown / maxCooldown) * 100}%`,
+                  backgroundColor: 'rgba(255,0,77,0.45)',
+                }} />
+              )}
 
-        {/* TEXTO */}
-        <Text
-          style={{
-            color: 'white',
-            fontWeight: '900',
-            fontSize: 18,
-            letterSpacing: 1,
-          }}
-        >
-          CHAINS
-        </Text>
-      </TouchableOpacity>
+              {/* Indicador de custo individual por carta */}
+              <View style={styles.cardCostBadge}>
+                <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '900' }}>💧{cost}</Text>
+              </View>
 
-      <TouchableOpacity
-        activeOpacity={0.9}
-        onPress={handleTNTPress}
-        style={{
-          width: 82, height: 82, borderRadius: 41, overflow: 'hidden',
-          justifyContent: 'center', alignItems: 'center',
-          backgroundColor: '#1B1B1B', borderWidth: 3, borderColor: '#FF4500',
-          position: 'absolute', bottom: 2,
-          left: 30 + 82 * 3 // Posicionado como o 4º botão
-        }}
-      >
-        {tntCooldown > 0 && (
-          <View style={{
-            position: 'absolute', bottom: 0, left: 0, right: 0,
-            height: `${(tntCooldown / TNT_COOLDOWN) * 100}%`,
-            backgroundColor: 'rgba(255,69,0,0.45)',
-          }}
-          />
-        )}
-        <Text style={{ color: 'white', fontWeight: '900', fontSize: 18, letterSpacing: 1 }}>
-          TNT
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        activeOpacity={0.9}
-        onPress={handleTornadoPress}
-        style={{
-          width: 82, height: 82, borderRadius: 41, overflow: 'hidden',
-          justifyContent: 'center', alignItems: 'center',
-          backgroundColor: '#1B1B1B', borderWidth: 3, borderColor: '#FF4500',
-          position: 'absolute', bottom: 2,
-          left: 30 + 82 * 4 // Posicionado como o 4º botão
-        }}
-      >
-        {tntCooldown > 0 && (
-          <View style={{
-            position: 'absolute', bottom: 0, left: 0, right: 0,
-            height: `${(tntCooldown / TNT_COOLDOWN) * 100}%`,
-            backgroundColor: 'rgba(255,69,0,0.45)',
-          }}
-          />
-        )}
-        <Text style={{ color: 'white', fontWeight: '900', fontSize: 18, letterSpacing: 1 }}>
-          TORNADO
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        activeOpacity={0.9}
-        onPress={handleSlowPress}
-        style={{
-          width: 82, height: 82, borderRadius: 41, overflow: 'hidden',
-          justifyContent: 'center', alignItems: 'center',
-          backgroundColor: '#1B1B1B', borderWidth: 3, borderColor: '#FF4500',
-          position: 'absolute', bottom: 2,
-          left: 30 + 82 * 5 // Posicionado como o 4º botão
-        }}
-      >
-        {tntCooldown > 0 && (
-          <View style={{
-            position: 'absolute', bottom: 0, left: 0, right: 0,
-            height: `${(tntCooldown / TNT_COOLDOWN) * 100}%`,
-            backgroundColor: 'rgba(255,69,0,0.45)',
-          }}
-          />
-        )}
-        <Text style={{ color: 'white', fontWeight: '900', fontSize: 18, letterSpacing: 1 }}>
-          SLOW
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        activeOpacity={0.9}
-        onPress={handleNitroPowerPress}
-        style={{
-          width: 82, height: 82, borderRadius: 41, overflow: 'hidden',
-          justifyContent: 'center', alignItems: 'center',
-          backgroundColor: '#1B1B1B', borderWidth: 3, borderColor: '#FF4500',
-          position: 'absolute', bottom: 2,
-          left: 30 + 82 * 6
-        }}
-      >
-        {nitroCooldown > 0 && (
-          <View style={{
-            position: 'absolute', bottom: 0, left: 0, right: 0,
-            height: `${(nitroCooldown / NITRO_COOLDOWN) * 100}%`,
-            backgroundColor: 'rgba(255,69,0,0.45)',
-          }}
-          />
-        )}
-        <Text style={{ color: 'white', fontWeight: '900', fontSize: 18, letterSpacing: 1 }}>
-          NTITRO POWER
-        </Text>
-      </TouchableOpacity>
+              <Text style={{ color: 'white', fontWeight: '900', fontSize: 13, textAlign: 'center' }}>
+                {cardId.replace('_', ' ').toUpperCase()}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
       {started && !gameOver && (
         <View style={styles.drivingControls}>
@@ -1889,7 +1808,7 @@ const styles = StyleSheet.create({
   throttleBtnText: { color: '#FFF', fontWeight: '900', fontSize: 14, fontStyle: 'italic' },
   nitroBtn: { width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(0, 255, 255, 0.9)', borderWidth: 3, borderColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 5 },
   nitroBtnText: { color: '#000', fontWeight: '900', fontSize: 14, fontStyle: 'italic' },
-  block: { position: 'absolute', height: 2000, borderTopWidth: 5, borderColor: '#FFF', zIndex: 3 },
+  block: { position: 'absolute', zIndex: 3 },
   overlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
@@ -1957,4 +1876,10 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: 'rgba(0,0,0,0.4)',
   }, blindEffect: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgb(255, 255, 255)', zIndex: 15 },
+  boostBarContainer: { position: 'absolute', bottom: 95, left: 20, width: 360, height: 16, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 8, borderWidth: 2, borderColor: '#FFF', overflow: 'hidden', justifyContent: 'center', alignItems: 'center', zIndex: 30 },
+  boostBarFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#FF007A' },
+  boostBarText: { color: '#FFF', fontWeight: '900', fontSize: 10, zIndex: 5 },
+  deckHandContainer: { position: 'absolute', bottom: 5, left: 5, height: 90, zIndex: 30 },
+  dynamicCardBtn: { width: 85, height: 82, borderRadius: 16, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', backgroundColor: '#1B1B1B', borderWidth: 3, borderColor: '#FF004D', position: 'absolute' },
+  cardCostBadge: { position: 'absolute', top: -2, right: -2, backgroundColor: '#FF007A', borderRadius: 8, paddingHorizontal: 4, paddingVertical: 1, borderWidth: 1, borderColor: '#FFF', zIndex: 10 },
 });

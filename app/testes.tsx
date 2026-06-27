@@ -1,4 +1,7 @@
+// PARA TESTES REMOVA SEMPRE O "USE EFFECT DE PREPARAÇÃO DO INICIO"
+
 import Carro from '@/components/Carro';
+import CenarioBackground from '@/components/Cenarios/CenarioBackground';
 import ChainsEffect from '@/components/Decks/ChainsEffect';
 import GuidedBulletEffect from '@/components/Decks/GuidedBulletEffect';
 import SwapEffect from '@/components/Decks/SwapEffect';
@@ -40,15 +43,14 @@ export default function Mapa() {
     UIManager.setLayoutAnimationEnabledExperimental(true);
   }
 
-  const { selectedCar, selectedColor } = useCarSelection();
+  const { selectedCar, selectedColorFront, selectedColorBack } = useCarSelection();
 
   const BASE_PLAYER_X = SCREEN_WIDTH * 0.4;
   const GAP_BETWEEN_RACERS = 130;
   const TOTAL_RACERS = 6;
 
-  type CardEffect = 'swap' | 'chains' | 'heavy_gravity' | 'invert_controls' |
-    'blind' | 'panic' | 'ghost' | 'score_boost' | 'tnt' |
-    'bullet' | 'tornado' | 'slow_slow';
+  type CardEffect = 'swap' | 'chains' | 'blind' |'score_boost' | 'tnt' |
+    'bullet' | 'tornado' | 'slow_slow' | 'nitro_power';
 
   type TNTBox = {
     id: string;
@@ -79,7 +81,7 @@ export default function Mapa() {
     HEAVY_ATTACK: ['swap', 'bullet', 'chains', 'tnt', 'tornado'],
     TIME_ATTACK: ['slow_slow'],
     LIGHT_ATTACK: ['invert_controls', 'panic'],
-    DEFENSE_BUFF: ['ghost', 'score_boost']
+    DEFENSE_BUFF: ['ghost', 'score_boost', 'nitro_power']
   };
 
   const COOLDOWNS = { HEAVY: 60 * 15, LIGHT: 60 * 8, DEFENSE: 60 * 12 };
@@ -124,11 +126,11 @@ export default function Mapa() {
   };
 
   const botsRef = useRef([
-    { id: 'bot1', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'default', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
-    { id: 'bot2', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'gangster', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
-    { id: 'bot3', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'ninja', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
-    { id: 'bot4', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'pirate', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
-    { id: 'bot5', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'surfer', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColor: getRandomColor() },
+    { id: 'bot1', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'default', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColorFront: getRandomColor(), carColorBack: getRandomColor() },
+    { id: 'bot2', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'gangster', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColorFront: getRandomColor(), carColorBack: getRandomColor() },
+    { id: 'bot3', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'ninja', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColorFront: getRandomColor(), carColorBack: getRandomColor() },
+    { id: 'bot4', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'pirate', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColorFront: getRandomColor(), carColorBack: getRandomColor() },
+    { id: 'bot5', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'surfer', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColorFront: getRandomColor(), carColorBack: getRandomColor() },
   ]);
 
 
@@ -206,6 +208,11 @@ export default function Mapa() {
   const [slowCooldown, setSlowCooldown] = useState(0);
   const [isSlowActive, setIsSlowActive] = useState(false);
 
+  // NITRO POWER
+  const NITRO_COOLDOWN = 4000;
+  const [nitroCooldown, setNitroCooldown] = useState(0);
+  const [isNitroPowerActive, setIsNitroPowerActive] = useState(false);
+
   /* ================= CORES DE VIDAS QUE IRÃO PARA O PLACAR DE POSIÇÕES ================= */
   const getLifeColor = (lives: number) => {
     if (lives >= 4) return '#00D084'; // Verde (Saudável)
@@ -239,7 +246,8 @@ export default function Mapa() {
       newBots[i].activeEffectsTimers = {};
       newBots[i].deck = generateRandomDeck();
       newBots[i].carType = getRandomCarType();
-      newBots[i].carColor = getRandomColor();
+      newBots[i].carColorFront = getRandomColor();
+      newBots[i].carColorBack = getRandomColor();
       newBots[i].angle = 0;
     }
     botsRef.current = newBots;
@@ -252,24 +260,24 @@ export default function Mapa() {
   };
 
   /* ================= USE EFFECT DE PREPARAÇÃO DO INICIO ================= */
-  useEffect(() => {
-    if (!started && !isCountingRef.current && !gameOver) {
-      const groundY = SCREEN_HEIGHT - 100;
-      const startY = groundY - PLAYER_SIZE;
+  // useEffect(() => {
+  //   if (!started && !isCountingRef.current && !gameOver) {
+  //     const groundY = SCREEN_HEIGHT - 100;
+  //     const startY = groundY - PLAYER_SIZE;
 
-      y.current = startY;
-      setPlayerY(y.current);
+  //     y.current = startY;
+  //     setPlayerY(y.current);
 
-      blocksRef.current = [{ id: 1, type: 'flat', x: -2000, y: groundY, width: SCREEN_WIDTH * 5 + 2000 }];
-      setBlocks(blocksRef.current);
+  //     blocksRef.current = [{ id: 1, type: 'flat', x: -2000, y: groundY, width: SCREEN_WIDTH * 5 + 2000 }];
+  //     setBlocks(blocksRef.current);
 
-      setupPositions();
+  //     setupPositions();
 
-      setTimeout(() => {
-        //startRaceSequence();
-      }, 2000);
-    }
-  }, [SCREEN_HEIGHT, SCREEN_WIDTH]);
+  //     setTimeout(() => {
+  //       startRaceSequence();
+  //     }, 2000);
+  //   }
+  // }, [SCREEN_HEIGHT, SCREEN_WIDTH]);
 
   /* ================= GAME LOOP ================= */
   useEffect(() => {
@@ -307,9 +315,10 @@ export default function Mapa() {
         });
       }
 
-      // 1, 2 & 3: Lógica Nitro / Velocidade mantidas iguais / Slow Slow
       if (playerStatus.current.isStunned) {
-        playerSpeed.current = 0; // Fica totalmente parado
+        playerSpeed.current = 0;
+      } else if (activeEffectsTimers.current['nitro_power'] && activeEffectsTimers.current['nitro_power'] > 0) {
+        playerSpeed.current = NITRO_SPEED * 0.7;
       } else if (isNitroActive.current) {
         playerSpeed.current = NITRO_SPEED;
         nitroTimer.current -= 1;
@@ -381,48 +390,39 @@ export default function Mapa() {
       velocity.current += currentGravity;
       y.current += velocity.current;
 
-      // --- 4. GERAÇÃO E MOVIMENTO DOS BLOCOS (AGORA COM BURACOS INTELIGENTES) ---
+      // --- 4. GERAÇÃO E MOVIMENTO DOS BLOCOS (AGORA COM LIMITES DINÂMICOS) ---
       let updatedBlocks = blocksRef.current.map(block => ({ ...block, x: block.x - dynamicSpeed }));
       const lastBlock = updatedBlocks[updatedBlocks.length - 1];
 
-      if (lastBlock && lastBlock.x + lastBlock.width < SCREEN_WIDTH + 1500) {
-        const minWidth = 150;
-        const maxWidth = 350;
-        const newWidth = Math.random() * (maxWidth - minWidth) + minWidth;
+      const maxRacerX = Math.max(playerXRef.current, ...botsRef.current.map(b => b.x));
+      const minRacerX = Math.min(playerXRef.current, ...botsRef.current.map(b => b.x));
 
+      if (lastBlock && lastBlock.x + lastBlock.width < maxRacerX + SCREEN_WIDTH + 1500) {
+        const minWidth = 200;
+        const maxWidth = 400;
+        const newWidth = Math.random() * (maxWidth - minWidth) + minWidth;
         let direction = Math.floor(Math.random() * 3) - 1;
         const currentY = lastBlock.type === 'ramp' ? lastBlock.endY! : lastBlock.y!;
-        let nextY = currentY + (direction * 80);
 
-        if (nextY < 150) nextY = 150;
-        if (nextY > SCREEN_HEIGHT - 100) nextY = SCREEN_HEIGHT - 100;
+        // Aumentamos a variação de altura para descidas e subidas mais radicais
+        let nextY = currentY + (direction * (100 + Math.random() * 80));
+
+        if (nextY < 180) nextY = 180;
+        if (nextY > SCREEN_HEIGHT - 120) nextY = SCREEN_HEIGHT - 120;
 
         const heightDiff = nextY - currentY;
         const newId = Math.random().toString(36).substr(2, 9);
 
         if (Math.abs(heightDiff) > 20) {
-          // No RN, Y maior significa mais para baixo na tela.
-          // Só geramos buraco se a próxima plataforma for mais BAIXA (heightDiff > 0)
-          if (heightDiff > 0 && Math.random() > 0.4) {
-            // Gera um buraco de 160px adicionando espaço VAZIO ao 'x' do próximo bloco
-            updatedBlocks.push({
-              id: newId,
-              type: 'flat',
-              x: lastBlock.x + lastBlock.width + 160,
-              y: nextY,
-              width: newWidth,
-            });
-          } else {
-            // Se for subida (heightDiff < 0) ou se a chance de buraco falhou, gera uma rampa
-            updatedBlocks.push({
-              id: newId,
-              type: 'ramp',
-              x: lastBlock.x + lastBlock.width,
-              startY: currentY,
-              endY: nextY,
-              width: 250,
-            });
-          }
+          // Rampas/Curvas um pouco mais largas (ex: 320px) para suavizar a descida em alta velocidade
+          updatedBlocks.push({
+            id: newId,
+            type: 'ramp',
+            x: lastBlock.x + lastBlock.width,
+            startY: currentY,
+            endY: nextY,
+            width: 320,
+          });
         } else {
           updatedBlocks.push({
             id: newId,
@@ -434,7 +434,7 @@ export default function Mapa() {
         }
       }
 
-      blocksRef.current = updatedBlocks.filter(block => block.x + block.width > -200);
+      blocksRef.current = updatedBlocks.filter(block => block.x + block.width > minRacerX - 500);
 
       // --- 5. INTELIGÊNCIA DE CORRIDA DOS BOTS  ---
       botsRef.current.forEach(bot => {
@@ -456,7 +456,10 @@ export default function Mapa() {
         if (bot.speed > targetSpeed) bot.speed -= FRICTION;
 
         if (bot.status.isSlowed) {
-          targetSpeed = MAX_SPEED * 0.3;
+          targetSpeed = MAX_SPEED * -1.5;
+        } else if (bot.activeEffectsTimers['nitro_power'] && bot.activeEffectsTimers['nitro_power'] > 0) {
+          targetSpeed = NITRO_SPEED * 1.3;
+          bot.speed = targetSpeed;
         }
 
         bot.x += (bot.speed - dynamicSpeed);
@@ -488,7 +491,7 @@ export default function Mapa() {
 
         // Novo cálculo de colisão do Bot baseado no "find" em vez de um for loop falho
         const currentBotBlock = blocksRef.current.find(
-          block => botCenterX >= block.x && botCenterX <= block.x + block.width
+          block => botCenterX >= block.x && block.x + block.width >= botCenterX
         );
 
         if (currentBotBlock) {
@@ -498,14 +501,17 @@ export default function Mapa() {
             groundYAtX = currentBotBlock.y!;
             targetBotAngle = 0;
           } else if (currentBotBlock.type === 'ramp') {
-            const progress = (botCenterX - currentBotBlock.x) / currentBotBlock.width;
-            groundYAtX = currentBotBlock.startY! + ((currentBotBlock.endY! - currentBotBlock.startY!) * progress);
-            const dy = currentBotBlock.endY! - currentBotBlock.startY!;
-            targetBotAngle = Math.atan2(dy, currentBotBlock.width) * (180 / Math.PI);
+            const progress = Math.max(0, Math.min(1, (botCenterX - currentBotBlock.x) / currentBotBlock.width));
+
+            const smoothProgress = (1 - Math.cos(progress * Math.PI)) / 2;
+            groundYAtX = currentBotBlock.startY! + ((currentBotBlock.endY! - currentBotBlock.startY!) * smoothProgress);
+
+            const slope = ((currentBotBlock.endY! - currentBotBlock.startY!) * Math.sin(progress * Math.PI) * Math.PI) / (2 * currentBotBlock.width);
+            targetBotAngle = Math.atan2(slope, 1) * (180 / Math.PI);
           }
 
           if (bot.status.isStunned) {
-            targetBotAngle = (gameTime.current * 35) % 360; // Ajuste o 35 para girar mais rápido/devagar
+            targetBotAngle = (gameTime.current * 35) % 360;
           }
 
           // Verificação sólida cravando no chão
@@ -538,16 +544,13 @@ export default function Mapa() {
         const callerX = callerId === 'player' ? playerXRef.current : botsRef.current.find(b => b.id === callerId)?.x || -1000;
         const targetX = targetId === 'player' ? playerXRef.current : botsRef.current.find(b => b.id === targetId)?.x || -1000;
 
-        // Math.abs garante que a distância seja positiva, mesmo se o caller passar o target
         const distanceBetween = Math.abs(targetX - callerX);
 
         if (distanceBetween <= 20) {
-          // Os carros colidiram/se passaram. Limpamos o estado!
           activeChainsStateRef.current = null;
           setActiveChainsState(null);
           setActiveChains(null);
 
-          // REMOVIDO: O "return;" perigoso que travava o jogo sumiu daqui.
         } else {
           const PULL_FORCE = 0.11;
           const POSITION_PULL = 0.4;
@@ -636,14 +639,12 @@ export default function Mapa() {
       });
       activeBulletsRef.current = remainingBullets;
 
-      // --- 6.2. FÍSICA DO TNT (CRASH BANDICOOT BOX) ---
+      // --- 6.2. FÍSICA DO TNT  ---
       let remainingTNT: TNTBox[] = [];
       activeTNTRef.current.forEach(tnt => {
-        // Move a caixa junto com o cenário para trás
         tnt.x -= dynamicSpeed;
 
         if (tnt.state === 'exploding') {
-          // Mantém a explosão na tela por alguns frames para o visual
           tnt.timer -= 1;
           if (tnt.timer > 0) remainingTNT.push(tnt);
         } else {
@@ -726,17 +727,23 @@ export default function Mapa() {
           groundYAtX = currentBlock.y!;
           targetAngle = 0;
         } else if (currentBlock.type === 'ramp') {
-          const progress = (playerCenterX - currentBlock.x) / currentBlock.width;
-          groundYAtX = currentBlock.startY! + ((currentBlock.endY! - currentBlock.startY!) * progress);
-          const dy = currentBlock.endY! - currentBlock.startY!;
-          targetAngle = Math.atan2(dy, currentBlock.width) * (180 / Math.PI);
+          // Garante que o progresso fique estrito entre 0 e 1
+          const progress = Math.max(0, Math.min(1, (playerCenterX - currentBlock.x) / currentBlock.width));
+
+          // Mágica do Cosseno: Suaviza o topo e a base da curva
+          const smoothProgress = (1 - Math.cos(progress * Math.PI)) / 2;
+          groundYAtX = currentBlock.startY! + ((currentBlock.endY! - currentBlock.startY!) * smoothProgress);
+
+          // Derivada da função para obter a inclinação exata da curva neste ponto
+          const slope = ((currentBlock.endY! - currentBlock.startY!) * Math.sin(progress * Math.PI) * Math.PI) / (2 * currentBlock.width);
+          targetAngle = Math.atan2(slope, 1) * (180 / Math.PI);
         }
 
         if (playerStatus.current.isStunned) {
           targetAngle = (gameTime.current * 35) % 360;
         }
 
-        // CRAVA NO CHÃO se estiver caindo e passou/chegou da linha do chão 
+        // CRAVA NO CHÃO se estiver caindo
         if (velocity.current >= 0 && playerFootY >= groundYAtX - 25) {
           y.current = groundYAtX - PLAYER_SIZE + 6;
           velocity.current = 0;
@@ -766,8 +773,7 @@ export default function Mapa() {
 
   /* ================= GERENCIADOR ÚNICO DE COOLDOWNS (UI) ================= */
   useEffect(() => {
-    // Criamos um intervalo que roda apenas se houver algum cooldown ativo
-    const hasActiveCooldown = swapCooldown > 0 || chainsCooldown > 0 || bulletCooldown > 0;
+    const hasActiveCooldown = swapCooldown > 0 || chainsCooldown > 0 || bulletCooldown > 0 || tntCooldown > 0 || tornadoCooldown > 0 || slowCooldown > 0 || nitroCooldown > 0;
 
     if (!hasActiveCooldown) return;
 
@@ -796,10 +802,15 @@ export default function Mapa() {
       if (slowCooldown > 0) {
         setSlowCooldown(prev => Math.max(0, prev - 100));
       }
+
+      // Reduz o Nitro Power
+      if (nitroCooldown > 0) {
+        setNitroCooldown(prev => Math.max(0, prev - 100));
+      }
     }, 100);
 
     return () => clearInterval(globalInterval);
-  }, [swapCooldown, chainsCooldown, bulletCooldown, tntCooldown, tornadoCooldown, slowCooldown]);
+  }, [swapCooldown, chainsCooldown, bulletCooldown, tntCooldown, tornadoCooldown, slowCooldown, nitroCooldown]);
 
   /* ================= GERA NOME ALEATORIO DOS BOTS ================= */
   function getRandomName() {
@@ -808,7 +819,7 @@ export default function Mapa() {
 
   /* ================= GERA CARTA ALEATORIA QUE OS BOTS VÃO ATACAR ================= */
   function generateRandomDeck() {
-    const allEffects: CardEffect[] = ['swap', 'blind', 'score_boost', 'bullet', 'chains', 'tnt', 'tornado'];
+    const allEffects: CardEffect[] = ['swap', 'blind', 'score_boost', 'bullet', 'chains', 'tnt', 'tornado', 'nitro_power'];
     const shuffled = allEffects.sort(() => 0.5 - Math.random());
     return [
       { effect: shuffled[0], currentCooldown: 60 * 3 + Math.floor(Math.random() * 120), baseCooldown: COOLDOWNS.HEAVY },
@@ -855,6 +866,11 @@ export default function Mapa() {
   function triggerTornado(callerId: string) {
     if (activeTornado) return;
     setActiveTornado({ callerId });
+  }
+
+  function triggerNitroPower(callerId: string) {
+    applyCardEffect('nitro_power', 'player', 'player')
+    setIsNitroPowerActive(true);
   }
 
 
@@ -934,15 +950,21 @@ export default function Mapa() {
         }
       } else if (sourceBot) {
         if (targetId === 'player') {
-          const tempY = y.current; const tempX = playerXRef.current;
-          y.current = sourceBot.y; playerXRef.current = sourceBot.x;
-          sourceBot.y = tempY; sourceBot.x = tempX;
+          const tempY = y.current;
+          const tempX = playerXRef.current;
+          y.current = sourceBot.y;
+          playerXRef.current = sourceBot.x;
+          sourceBot.y = tempY;
+          sourceBot.x = tempX;
         } else {
           const targetBot = botsRef.current.find(b => b.id === targetId);
           if (targetBot) {
-            const tempY = targetBot.y; const tempX = targetBot.x;
-            targetBot.y = sourceBot.y; sourceBot.y = tempY;
-            targetBot.x = sourceBot.x; sourceBot.x = tempX;
+            const tempY = targetBot.y;
+            const tempX = targetBot.x;
+            targetBot.y = sourceBot.y;
+            sourceBot.y = tempY;
+            targetBot.x = sourceBot.x;
+            sourceBot.x = tempX;
           }
         }
       }
@@ -964,17 +986,33 @@ export default function Mapa() {
     if (targetId === 'player') {
       activeEffectsTimers.current[effect] = DURATION;
       switch (effect) {
-        case 'blind': playerStatus.current.isBlind = true; setIsBlindActive(true); break;
-        case 'score_boost': playerStatus.current.scoreMultiplier = 2; break;
-        case 'slow_slow': playerStatus.current.isSlowed = true; setIsSlowActive(true); break;
+        case 'blind':
+          playerStatus.current.isBlind = true;
+          setIsBlindActive(true);
+          break;
+        case 'score_boost':
+          playerStatus.current.scoreMultiplier = 2;
+          break;
+        case 'slow_slow':
+          playerStatus.current.isSlowed = true;
+          setIsSlowActive(true);
+          break;
       }
     } else {
       const targetBot = botsRef.current.find(b => b.id === targetId);
       if (targetBot) {
         targetBot.activeEffectsTimers[effect] = DURATION;
-        if (effect === 'panic') targetBot.status.isPanicking = true;
-        if (effect === 'blind') { targetBot.status.isBlind = true; targetBot.activeEffectsTimers.blind = DURATION; }
-        if (effect === 'slow_slow') { targetBot.status.isSlowed = true; targetBot.activeEffectsTimers.slow_slow = DURATION; }
+        if (effect === 'panic') {
+          targetBot.status.isPanicking = true;
+        }
+        if (effect === 'blind') {
+          targetBot.status.isBlind = true;
+          targetBot.activeEffectsTimers.blind = DURATION;
+        }
+        if (effect === 'slow_slow') {
+          targetBot.status.isSlowed = true;
+          targetBot.activeEffectsTimers.slow_slow = DURATION;
+        }
       }
     }
   }
@@ -1041,6 +1079,13 @@ export default function Mapa() {
     setTornadoCooldown(TORNADO_COOLDOWN);
   }
 
+  /* ================= APLICA EFEITO DO NITRO (VAI SER REMOVIDO) ================= */
+  function handleNitroPowerPress() {
+    if (nitroCooldown > 0) return;
+    triggerNitroPower('player');
+    setNitroCooldown(NITRO_COOLDOWN);
+  }
+
   /* ================= APLICA EFEITO DO SLOW SLOW (VAI SER REMOVIDO) ================= */
   function handleSlowPress() {
     if (slowCooldown > 0) return;
@@ -1061,8 +1106,8 @@ export default function Mapa() {
       callerId,
       x: callerX - 60,
       y: callerY,
-      timer: 180,
-      state: 'counting'
+      timer: 1,
+      state: 'exploding'
     });
   }
 
@@ -1122,7 +1167,7 @@ export default function Mapa() {
       setFocusedDriver(1);
       focusOn(botsRef.current[1].x);
     }
-    await sleep(1000); 
+    await sleep(1000);
 
     if (botsRef.current[2]) {
       setIsCameraLocked(true);
@@ -1181,8 +1226,8 @@ export default function Mapa() {
 
   // Preparação do Mini-mapa
   const allRacersPositions = [
-    { id: 'player', x: playerX, color: selectedColor || '#00D084', isPlayer: true },
-    ...bots.map(b => ({ id: b.id, x: b.x, color: b.carColor, isPlayer: false }))
+    { id: 'player', x: playerX, color: selectedColorFront || '#00D084', isPlayer: true },
+    ...bots.map(b => ({ id: b.id, x: b.x, color: b.carColorFront, isPlayer: false }))
   ];
 
   const minMapX = Math.min(...allRacersPositions.map(r => r.x));
@@ -1191,6 +1236,7 @@ export default function Mapa() {
 
   return (
     <View style={styles.container}>
+      <CenarioBackground isMoving={started && !gameOver} />
       <View style={StyleSheet.absoluteFillObject} />
 
       <View style={styles.leaderboardContainer} pointerEvents="none">
@@ -1357,29 +1403,57 @@ export default function Mapa() {
       >
         {blocks.map((b) => {
           if (b.type === 'flat') {
-            return <View key={`flat-${b.id}`} style={[styles.block, { left: b.x, top: b.y, width: b.width }]} />;
-          } else if (b.type === 'ramp') {
-            const dy = b.endY! - b.startY!;
-            const dx = b.width;
-            const length = Math.sqrt(dx * dx + dy * dy);
-            const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-            const midX = b.x + dx / 2;
-            const midY = (b.startY! + b.endY!) / 2;
-
             return (
               <View
-                key={`ramp-${b.id}`}
+                key={`flat-${b.id}`}
                 style={[
                   styles.block,
                   {
-                    left: midX - length / 2,
-                    top: midY - 1000,
-                    width: length,
-                    height: 2000,
-                    transform: [{ rotate: `${angle}deg` }, { translateY: 1000 }]
+                    left: b.x,
+                    top: b.y,
+                    width: b.width,
+                    height: SCREEN_HEIGHT,
+                    backgroundColor: '#2e8b565b', // Terra/Grama escura interna
+                    borderTopWidth: 5,
+                    borderTopColor: '#34C759',  // Linha verde viva da superfície
                   }
                 ]}
               />
+            );
+          } else if (b.type === 'ramp') {
+            // Fatiamos a curva em múltiplos pedacinhos para gerar o efeito visual curvo perfeito
+            const SLICES = 16;
+            const sliceWidth = b.width / SLICES;
+
+            return (
+              <View key={`ramp-${b.id}`} style={{ position: 'absolute', left: b.x, width: b.width, height: SCREEN_HEIGHT, zIndex: 3 }}>
+                {Array.from({ length: SLICES }).map((_, i) => {
+                  const pStart = i / SLICES;
+                  const pEnd = (i + 1) / SLICES;
+
+                  const smoothPStart = (1 - Math.cos(pStart * Math.PI)) / 2;
+                  const smoothPEnd = (1 - Math.cos(pEnd * Math.PI)) / 2;
+
+                  const yStart = b.startY! + (b.endY! - b.startY!) * smoothPStart;
+                  const yEnd = b.startY! + (b.endY! - b.startY!) * smoothPEnd;
+
+                  return (
+                    <View
+                      key={i}
+                      style={{
+                        position: 'absolute',
+                        left: i * sliceWidth,
+                        top: Math.min(yStart, yEnd),
+                        width: sliceWidth + 0.8, // Compensação de sub-pixel para evitar gaps brancos
+                        height: SCREEN_HEIGHT,
+                        backgroundColor: '#2e8b565b',
+                        borderTopWidth: 5,
+                        borderTopColor: '#34C759',
+                      }}
+                    />
+                  );
+                })}
+              </View>
             );
           }
         })}
@@ -1408,8 +1482,9 @@ export default function Mapa() {
             <View style={{ width: '200%', alignItems: 'center' }}>
 
               <Carro
-                carType={bot.carType}
-                carColor={bot.carColor}
+                carType={selectedCar}
+                carColorFront={bot.carColorFront}
+                carColorBack={bot.carColorBack}
                 speed={bot.speed}
                 skin={bot.skin} />
             </View>
@@ -1421,7 +1496,7 @@ export default function Mapa() {
             position: 'absolute',
             zIndex: 5,
             opacity: isGhostActive ? 0.4 : 1,
-            left: 100,
+            left: playerX,
             top: playerY,
             transform: [{ rotate: `${angle}deg` }],
             width: PLAYER_SIZE,
@@ -1439,7 +1514,8 @@ export default function Mapa() {
           <View style={{ width: '200%', alignItems: 'center' }}>
             <Carro
               carType={selectedCar}
-              carColor={selectedColor}
+              carColorFront={selectedColorFront}
+              carColorBack={selectedColorBack}
               speed={playerSpeed.current}
               skin="default" />
           </View>
@@ -1502,8 +1578,6 @@ export default function Mapa() {
 
         {/* ================= RENDER DAS CAIXAS DE TNT ================= */}
         {tntsToRender.map((tnt) => {
-          const numberToShow = Math.ceil(tnt.timer / 60);
-
           if (tnt.state === 'exploding') {
             return (
               <View key={tnt.id} style={{
@@ -1534,7 +1608,7 @@ export default function Mapa() {
               <Text style={{
                 color: '#FFF', fontSize: 24, fontWeight: '900', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2
               }}>
-                {numberToShow > 0 ? numberToShow : 0}
+                TNT
               </Text>
             </View>
           );
@@ -1726,10 +1800,10 @@ export default function Mapa() {
           left: 30 + 82 * 4 // Posicionado como o 4º botão
         }}
       >
-        {tntCooldown > 0 && (
+        {tornadoCooldown > 0 && (
           <View style={{
             position: 'absolute', bottom: 0, left: 0, right: 0,
-            height: `${(tntCooldown / TNT_COOLDOWN) * 100}%`,
+            height: `${(tornadoCooldown / TORNADO_COOLDOWN) * 100}%`,
             backgroundColor: 'rgba(255,69,0,0.45)',
           }}
           />
@@ -1750,16 +1824,40 @@ export default function Mapa() {
           left: 30 + 82 * 5 // Posicionado como o 4º botão
         }}
       >
-        {tntCooldown > 0 && (
+        {slowCooldown > 0 && (
           <View style={{
             position: 'absolute', bottom: 0, left: 0, right: 0,
-            height: `${(tntCooldown / TNT_COOLDOWN) * 100}%`,
+            height: `${(slowCooldown / SLOW_COOLDOWN) * 100}%`,
             backgroundColor: 'rgba(255,69,0,0.45)',
           }}
           />
         )}
         <Text style={{ color: 'white', fontWeight: '900', fontSize: 18, letterSpacing: 1 }}>
           SLOW
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={handleNitroPowerPress}
+        style={{
+          width: 82, height: 82, borderRadius: 41, overflow: 'hidden',
+          justifyContent: 'center', alignItems: 'center',
+          backgroundColor: '#1B1B1B', borderWidth: 3, borderColor: '#FF4500',
+          position: 'absolute', bottom: 2,
+          left: 30 + 82 * 6
+        }}
+      >
+        {nitroCooldown > 0 && (
+          <View style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0,
+            height: `${(nitroCooldown / NITRO_COOLDOWN) * 100}%`,
+            backgroundColor: 'rgba(255,69,0,0.45)',
+          }}
+          />
+        )}
+        <Text style={{ color: 'white', fontWeight: '900', fontSize: 18, letterSpacing: 1 }}>
+          NTITRO POWER
         </Text>
       </TouchableOpacity>
 
@@ -1822,8 +1920,8 @@ const styles = StyleSheet.create({
   throttleBtnText: { color: '#FFF', fontWeight: '900', fontSize: 14, fontStyle: 'italic' },
   nitroBtn: { width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(0, 255, 255, 0.9)', borderWidth: 3, borderColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 5 },
   nitroBtnText: { color: '#000', fontWeight: '900', fontSize: 14, fontStyle: 'italic' },
-  block: { position: 'absolute', height: 2000, borderTopWidth: 5, borderColor: '#FFF', zIndex: 3 },
-  overlay: {
+  block: { position: 'absolute', zIndex: 3 },
+   overlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',

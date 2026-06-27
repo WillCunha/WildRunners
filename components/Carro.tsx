@@ -8,14 +8,16 @@ interface CarroProps {
   speed: number;
   skin?: string;
   carType?: CarKey;
-  carColor?: string;
+  carColorFront?: string;
+  carColorBack?: string;
 }
 
 export default function Carro({
   speed,
   skin = 'default',
   carType = 'fusca',
-  carColor = '#D32F2F'
+  carColorFront = '#cc0000',
+  carColorBack = '#000'
 }: CarroProps) {
 
   const car = carMaps[carType];
@@ -40,6 +42,7 @@ export default function Carro({
       loop.start();
 
       return () => loop.stop();
+
     }
   }, [speed]);
 
@@ -70,8 +73,13 @@ export default function Carro({
 
       {/* Corpo */}
       <Image
-        source={car.corpoBranco}
-        style={[styles.carBase, { tintColor: carColor }]}
+        source={car.corpoBrancoFrente}
+        style={[styles.carBase, { tintColor: carColorFront }]}
+        resizeMode="contain"
+      />
+      <Image
+        source={car.corpoBrancoTras}
+        style={[styles.carBase, { tintColor: carColorBack }]}
         resizeMode="contain"
       />
 

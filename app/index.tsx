@@ -23,23 +23,21 @@ const AVAILABLE_COLORS = [
 
 export default function CarSelectionScreen() {
     const navigation = useNavigation();
-    const { setSelectedCar, setSelectedColor } = useCarSelection();
+    const { setSelectedCar, setSelectedColorFront, setSelectedColoBack } = useCarSelection();
 
-    // Estados locais para preview antes de confirmar
     const [previewCar, setPreviewCar] = useState<CarKey>('fusca');
-    const [previewColor, setPreviewColor] = useState<string>(AVAILABLE_COLORS[0]);
+    const [previewColorFront, setPreviewColorFront] = useState<string>(AVAILABLE_COLORS[0]);
+    const [previewColorBack, setPreviewColorBack] = useState<string>(AVAILABLE_COLORS[0]);
 
     const currentCar = carMaps[previewCar];
     const carKeys = Object.keys(carMaps) as CarKey[];
 
     const handlePlayPress = () => {
-        // Salva a seleção no contexto global
         setSelectedCar(previewCar);
-        setSelectedColor(previewColor);
+        setSelectedColorFront(previewColorFront);
+        setSelectedColoBack(previewColorBack);
 
-        // Navega para a tela do jogo 
-        // Ajuste o nome da rota conforme sua navegação
-        router.navigate('/mapa' as any);
+        router.navigate('/deckselection' as any);
     };
 
     return (
@@ -47,29 +45,49 @@ export default function CarSelectionScreen() {
             <Text style={styles.title}>GARAGEM</Text>
             <Text style={styles.subtitle}>Selecione o veículo para sua próxima corrida.</Text>
             <View style={styles.controlsContainer}>
-                {/* SELETOR DE CORES */}
-                <ScrollView showsVerticalScrollIndicator={false} style={styles.colorScroll}>
-                    {AVAILABLE_COLORS.map((color) => (
-                        <TouchableOpacity
-                            key={color}
-                            style={[
-                                styles.colorOption,
-                                { backgroundColor: color },
-                                previewColor === color && styles.colorOptionSelected
-                            ]}
-                            onPress={() => setPreviewColor(color)}
-                            activeOpacity={0.8}
-                        />
-                    ))}
-                </ScrollView>
+                {/* SELETOR DE COR FRENTE */}
+                    <ScrollView showsVerticalScrollIndicator={false} style={styles.colorScroll}>
+                        {AVAILABLE_COLORS.map((color) => (
+                            <TouchableOpacity
+                                key={color}
+                                style={[
+                                    styles.colorOption,
+                                    { backgroundColor: color },
+                                    previewColorFront === color && styles.colorOptionSelected
+                                ]}
+                                onPress={() => setPreviewColorFront(color)}
+                                activeOpacity={0.8}
+                            />
+                        ))}
+                    </ScrollView>
+                {/* SELETOR DE COR TRAS */}
+                    <ScrollView showsVerticalScrollIndicator={false} style={[styles.colorScroll, {marginLeft: '-15%'}]}>
+                        {AVAILABLE_COLORS.map((color) => (
+                            <TouchableOpacity
+                                key={color}
+                                style={[
+                                    styles.colorOption,
+                                    { backgroundColor: color },
+                                    previewColorBack === color && styles.colorOptionSelected
+                                ]}
+                                onPress={() => setPreviewColorBack(color)}
+                                activeOpacity={0.8}
+                            />
+                        ))}
+                    </ScrollView>
 
 
                 {/* ÁREA DE PREVIEW DO CARRO */}
                 <View style={styles.carWrapper}>
                     {/* Camada 1: Corpo Branco atua como base (sem position absolute) */}
                     <Image
-                        source={currentCar.corpoBranco}
-                        style={[styles.carBase, { tintColor: previewColor }]}
+                        source={currentCar.corpoBrancoFrente}
+                        style={[styles.carBase, { tintColor: previewColorBack }]}
+                        resizeMode="contain"
+                    />
+                    <Image
+                        source={currentCar.corpoBrancoTras}
+                        style={[styles.carBase, { tintColor: previewColorFront }]}
                         resizeMode="contain"
                     />
                     {/* Camada 2: Detalhes por cima (com position absolute ancorado) */}
@@ -135,7 +153,7 @@ export default function CarSelectionScreen() {
                 activeOpacity={0.9}
                 onPress={handlePlayPress}
             >
-                <Text style={styles.playButtonText}>CORRER!</Text>
+                <Text style={styles.playButtonText}>CONTINUAR</Text>
             </TouchableOpacity>
         </View>
     );
@@ -168,7 +186,13 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 30,
-
+    },
+    selectorColumn: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        display: 'flex',
+        flexDirection: 'row',
+        width: '18%',
     },
     carWrapper: {
         width: '30%',
@@ -182,6 +206,9 @@ const styles = StyleSheet.create({
         width: '100%',
         height: '100%',
         zIndex: 999,
+        position: 'absolute',
+        top: 0,
+        left: 0
     },
     carOverlay: {
         width: '100%',
@@ -195,6 +222,7 @@ const styles = StyleSheet.create({
         width: 55,
         height: 55,
         position: 'absolute',
+        zIndex: 999
     },
     controlsContainer: {
         marginBottom: 20,
@@ -203,6 +231,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         width: '100%',
+        
+        
     },
     sectionLabel: {
         fontSize: 18,
@@ -210,16 +240,19 @@ const styles = StyleSheet.create({
         color: '#1C1C1E',
         marginBottom: 10,
         marginLeft: 5,
+        
+        
     },
     colorScroll: {
         marginBottom: 30,
-        maxWidth: '20%',
+        maxWidth: '5%',
         maxHeight: 150,
         minHeight: 150,
         overflow: 'hidden',
         marginLeft: 20,
         paddingLeft: 10,
         paddingTop: 5,
+        
     },
     colorOption: {
         width: 30,
@@ -227,7 +260,6 @@ const styles = StyleSheet.create({
         borderRadius: 24,
         borderWidth: 1,
         borderColor: 'rgba(0,0,0,0.1)',
-        marginRight: 15,
         marginBottom: 4,
     },
     colorOptionSelected: {
@@ -243,6 +275,7 @@ const styles = StyleSheet.create({
         minHeight: 150,
         overflow: 'hidden',
         paddingTop: 5,
+        
 
     },
     modelOption: {
