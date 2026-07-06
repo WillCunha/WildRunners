@@ -9,7 +9,7 @@ interface CarContextType {
   selectedColorBack: string;
   setSelectedCar: (car: CarKey) => void;
   setSelectedColorFront: (color: string) => void;
-  setSelectedColoBack: (color: string) => void;
+  setSelectedColorBack: (color: string) => void;
 }
 
 const CarContext = createContext<CarContextType | undefined>(undefined);
@@ -17,10 +17,10 @@ const CarContext = createContext<CarContextType | undefined>(undefined);
 export const CarProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [selectedCar, setSelectedCar] = useState<CarKey>('fusca');
   const [selectedColorFront, setSelectedColorFront] = useState<string>('#FF3B30');
-  const [selectedColorBack, setSelectedColoBack] = useState<string>('#FF3B30');
+  const [selectedColorBack, setSelectedColorBack] = useState<string>('#FF3B30');
 
   return (
-    <CarContext.Provider value={{ selectedCar, selectedColorFront, selectedColorBack, setSelectedCar, setSelectedColorFront, setSelectedColoBack }}>
+    <CarContext.Provider value={{ selectedCar, selectedColorFront, selectedColorBack, setSelectedCar, setSelectedColorFront, setSelectedColorBack }}>
       {children}
     </CarContext.Provider>
   );

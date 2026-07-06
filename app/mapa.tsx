@@ -1,6 +1,6 @@
 // PARA TESTES REMOVA SEMPRE O "USE EFFECT DE PREPARAÇÃO DO INICIO"
 
-import { useLocalSearchParams } from '@/.expo/types/router';
+
 import Carro from '@/components/Carro';
 import CenarioBackground from '@/components/Cenarios/CenarioBackground';
 import ChainsEffect from '@/components/Decks/ChainsEffect';
@@ -11,11 +11,23 @@ import CorrenteVisual from '@/components/ui/CorrenteVisual';
 import GuidedBulletVisual from '@/components/ui/GuidedBulletVisual';
 import TornadoVisual from '@/components/ui/TornadoVisual';
 import { useCarSelection } from '@/context/CarContext';
+import { usePlayerStore } from '@/src/store/playerStore';
 import { carMaps } from '@/src/utils/carMaps';
+import { useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, LayoutAnimation, Platform, StyleSheet, Text, TouchableOpacity, UIManager, View, useWindowDimensions } from 'react-native';
 
 type CarKey = keyof typeof carMaps;
+
+type PartType = 'motor' | 'spray' | 'engrenagem';
+
+type DroppedPiece = {
+  id: string;
+  x: number;
+  y: number;
+  type: PartType;
+  velY: number; // Para o item dar um pequeno "pulo" quando cair
+};
 
 interface MapaProps {
   initialDeck?: string[];
@@ -230,6 +242,13 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const [nitroCooldown, setNitroCooldown] = useState(0);
   const [isNitroPowerActive, setIsNitroPowerActive] = useState(false);
 
+  //PEÇAS
+  const activePiecesRef = useRef<DroppedPiece[]>([]);
+  const [piecesToRender, setPiecesToRender] = useState<DroppedPiece[]>([]);
+
+  // Caixa da Partida (O que ele pegou - O que ele perdeu)
+  const sessionPartsRef = useRef({ motor: 0, spray: 0, engrenagem: 0 });
+
   /* ================= CORES DE VIDAS QUE IRÃO PARA O PLACAR DE POSIÇÕES ================= */
   const getLifeColor = (lives: number) => {
     if (lives >= 4) return '#00D084'; // Verde (Saudável)
@@ -299,6 +318,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   /* ================= GAME LOOP ================= */
   useEffect(() => {
     if (!started || gameOver) return;
+    const addParts = usePlayerStore((state) => state.addParts);
 
     const loop = setInterval(() => {
       gameTime.current += 1;
@@ -311,7 +331,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         playerStatus.current.invincibleTimer -= 1;
       }
 
-      // ================= LÓGICA DO TIMER =================
+      // ================= 1. LÓGICA DO TIMER =================
       const elapsedSeconds = Math.floor((gameTime.current * 16) / 1000);
       const currentSecs = raceTimeRef.current - elapsedSeconds;
       const CAMERA_OFFSET_X = SCREEN_WIDTH * 0.35;
@@ -324,6 +344,11 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
       // Fim de jogo pelo tempo esgotado
       if (currentSecs <= 0 && !gameOver) {
+        addParts(
+          sessionPartsRef.current.motor,
+          sessionPartsRef.current.spray,
+          sessionPartsRef.current.engrenagem
+        );
         setGameOver(true);
       }
 
@@ -406,7 +431,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       velocity.current += currentGravity;
       y.current += velocity.current;
 
-      // --- 4. GERAÇÃO E MOVIMENTO DOS BLOCOS (AGORA COM LIMITES DINÂMICOS) ---
+      // --- 2. GERAÇÃO E MOVIMENTO DOS BLOCOS (AGORA COM LIMITES DINÂMICOS) ---
       let updatedBlocks = blocksRef.current.map(block => ({ ...block, x: block.x - dynamicSpeed }));
       const lastBlock = updatedBlocks[updatedBlocks.length - 1];
 
@@ -452,7 +477,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
       blocksRef.current = updatedBlocks.filter(block => block.x + block.width > minRacerX - 500);
 
-      // --- 5. INTELIGÊNCIA DE CORRIDA DOS BOTS  ---
+      // --- 3. INTELIGÊNCIA DE CORRIDA DOS BOTS  ---
       botsRef.current.forEach(bot => {
 
         if (bot.status.invincibleTimer > 0) bot.status.invincibleTimer -= 1;
@@ -552,10 +577,10 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
       botsRef.current = botsRef.current.filter(bot => bot.y <= SCREEN_HEIGHT + 100);
 
-      // Agora eles avaliam o campo a cada 15 frames (~0.25s) em vez de 30 frames
+      // --- 4. AVALIAÇÃO DA INTELIGÊNCIA DOS BOTS ---
       if (gameTime.current % 15 === 0) processBotsAI();
 
-      // --- 6. EFEITO DA CORRENTE (CHAINS) ---
+      // --- 5. EFEITO DA CORRENTE (CHAINS) ---
       if (activeChainsStateRef.current && activeChainsStateRef.current.duration > 0) {
         const { callerId, targetId } = activeChainsStateRef.current;
 
@@ -610,7 +635,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         setActiveChains(null);
       }
 
-      // --- 6.1. FÍSICA DO MÍSSIL GUIADO ---
+      // --- 5.1. FÍSICA DO MÍSSIL GUIADO ---
       let remainingBullets: typeof activeBulletsRef.current = [];
       activeBulletsRef.current.forEach(bullet => {
         const getCoords = (id: string) => {
@@ -657,7 +682,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       });
       activeBulletsRef.current = remainingBullets;
 
-      // --- 6.2. FÍSICA DO TNT  ---
+      // --- 5.2. FÍSICA DO TNT  ---
       let remainingTNT: TNTBox[] = [];
       activeTNTRef.current.forEach(tnt => {
         tnt.x -= dynamicSpeed;
@@ -684,7 +709,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
             }
           }
 
-          // --- DETECÇÃO DE COLISÃO POR PROXIMIDADE ---
+          // --- 6DETECÇÃO DE COLISÃO POR PROXIMIDADE ---
           let hitRacer = false;
           // Pequena janela de 15 frames (~0.2s) de imunidade para evitar que quem soltou exploda instantaneamente
           const safetyWindow = tnt.timer < (60 * 10) - 15;
@@ -790,10 +815,54 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       setAngle(targetAngle);
       isGrounded.current = landedOnBlock;
 
-      if (y.current > SCREEN_HEIGHT + 100) setGameOver(true);
+      if (y.current > SCREEN_HEIGHT + 100) {
+        addParts(
+          sessionPartsRef.current.motor,
+          sessionPartsRef.current.spray,
+          sessionPartsRef.current.engrenagem
+        );
+        setGameOver(true);
+      }
 
       if (gameTime.current % 10 === 0) setScore(s => s + Math.floor(playerSpeed.current / 3));
 
+      // --- 6 FÍSICA E COLETA DAS PEÇAS ---
+      let remainingPieces: DroppedPiece[] = [];
+
+      activePiecesRef.current.forEach(piece => {
+        piece.x -= dynamicSpeed;
+
+        piece.velY += GRAVITY;
+        piece.y += piece.velY;
+
+        const currentPieceBlock = blocksRef.current.find(b => piece.x >= b.x && piece.x <= b.x + b.width);
+        if (currentPieceBlock) {
+          let groundY = currentPieceBlock.y || 0;
+          if (currentPieceBlock.type === 'ramp') {
+            const progress = (piece.x - currentPieceBlock.x) / currentPieceBlock.width;
+            groundY = currentPieceBlock.startY! + ((currentPieceBlock.endY! - currentPieceBlock.startY!) * progress);
+          }
+
+          if (piece.y + 20 >= groundY) {
+            piece.y = groundY - 20;
+            piece.velY = 0;
+          }
+        }
+
+        const distPlayer = Math.sqrt(Math.pow(playerXRef.current - piece.x, 2) + Math.pow(y.current - piece.y, 2));
+
+        if (distPlayer < PLAYER_SIZE) {
+          sessionPartsRef.current[piece.type] += 1;
+        } else {
+          if (piece.x > -100) {
+            remainingPieces.push(piece);
+          }
+        }
+      });
+
+      activePiecesRef.current = remainingPieces;
+
+      setPiecesToRender([...activePiecesRef.current]);
       setPlayerY(y.current);
       setPlayerX(playerXRef.current);
       setBlocks(blocksRef.current);
@@ -802,6 +871,8 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       setBulletsToRender([...activeBulletsRef.current]);
       setTntsToRender([...activeTNTRef.current]);
     }, 16);
+
+
 
     return () => clearInterval(loop);
   }, [started, gameOver, SCREEN_WIDTH, SCREEN_HEIGHT]);
@@ -1090,6 +1161,13 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       setPlayerLives(playerLivesRef.current);
       playerStatus.current.invincibleTimer = 90 // 1.5 segundos a 60 FPS piscando
 
+      spawnPieces(playerXRef.current, y.current, 3);
+      const types: PartType[] = ['motor', 'spray', 'engrenagem'];
+      for (let i = 0; i < 3; i++) {
+        const t = types[Math.floor(Math.random() * types.length)];
+        sessionPartsRef.current[t] -= 1;
+      }
+
       if (playerLives.current <= 0) {
         playerIsDead.current = true;
         playerSpeed.current = 0; // PARA O CARRO
@@ -1101,12 +1179,17 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       if (bot) {
         if (bot.status.invincibleTimer > 0 || bot.isDead) return false;
 
+
         bot.lives -= 1;
         bot.status.invincibleTimer = 90;
+
+        spawnPieces(bot.x, bot.y, 2);
 
         if (bot.lives <= 0) {
           bot.isDead = true;
           bot.speed = 0;
+
+          spawnPieces(bot.x, bot.y, 10);
         }
         return true;
       }
@@ -1192,6 +1275,25 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         targetBot.status.isStunned = true;
 
       }
+    }
+  }
+
+  /* ================= ESPALHA PEÇAS NO CAMPO ================= */
+  function spawnPieces(originX: number, originY: number, amount: number) {
+    const types: PartType[] = ['motor', 'spray', 'engrenagem'];
+
+    for (let i = 0; i < amount; i++) {
+      const randomType = types[Math.floor(Math.random() * types.length)];
+      // Espalha as peças um pouco no eixo X
+      const offsetX = (Math.random() * 60) - 30;
+
+      activePiecesRef.current.push({
+        id: Math.random().toString(36).substring(2, 9),
+        x: originX + offsetX,
+        y: originY,
+        type: randomType,
+        velY: -5 - Math.random() * 5, // Pulo inicial do drop
+      });
     }
   }
 
@@ -1690,7 +1792,37 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
             }}
           />
         ))}
+
+        {/* ================= RENDER DAS PEÇAS ================= */}
+        {piecesToRender.map((piece) => {
+          const getIcon = (type: string) => {
+            if (type === 'motor') return '⚙️';
+            if (type === 'spray') return '🎨';
+            return '🔧'; // engrenagem
+          };
+
+          return (
+            <View key={piece.id} style={{
+              position: 'absolute',
+              left: piece.x,
+              top: piece.y,
+              width: 30,
+              height: 30,
+              backgroundColor: '#FFD700', // Dourado Flat
+              borderRadius: 15, // Círculo perfeito
+              borderWidth: 3,
+              borderColor: '#000', // Borda preta sólida, sem blur/sombra
+              justifyContent: 'center',
+              alignItems: 'center',
+              zIndex: 2,
+            }}>
+              <Text style={{ fontSize: 14 }}>{getIcon(piece.type)}</Text>
+            </View>
+          );
+        })}
       </View>
+
+
 
       {isBlindActive && <View style={styles.blindEffect} pointerEvents="none" />}
 
