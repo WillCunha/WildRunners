@@ -224,6 +224,11 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
   const [countdownStep, setCountdownStep] = useState<number | string | null>(null);
 
+  // ---- MINI-GAME DE LARGADA ---- //
+  const [miniGameVisible, setMiniGameVisible] = useState(false);
+  const [miniGamePos, setMiniGamePos] = useState({ top: 0, left: 0 });
+  const miniGameClicksRef = useRef(0);
+
   const [cameraTransform, setCameraTransform] = useState({ x: 0, scale: 1 });
   const [focusedDriver, setFocusedDriver] = useState<number | string | null>(null);
 
@@ -1369,9 +1374,23 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const startRaceSequence = async () => {
     if (isCountingRef.current) return;
     isCountingRef.current = true;
+    miniGameClicksRef.current = 0;
 
     setCountdownStep('PREPARANDO');
     await sleep(1500);
+
+    const triggerMiniGame = () => {
+      const maxTop = SCREEN_HEIGHT - 120;
+      const maxLeft = SCREEN_WIDTH - 120;
+
+      setMiniGamePos({
+        top: Math.max(50, Math.floor(Math.random() * maxTop)),
+        left: Math.max(50, Math.floor(Math.random() * maxLeft))
+      })
+      setMiniGameVisible(true)
+
+      setTimeout(() => setMiniGameVisible(false), 800);
+    }
 
     if (botsRef.current[0]) {
       setIsCameraLocked(true);
@@ -1379,6 +1398,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       setFocusedDriver(null);
       setFocusedDriver(0);
       focusOn(botsRef.current[0].x);
+      triggerMiniGame();
     }
     await sleep(1000);
 
@@ -1388,6 +1408,8 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       setFocusedDriver(null);
       setFocusedDriver(1);
       focusOn(botsRef.current[1].x);
+      triggerMiniGame();
+
     }
     await sleep(1000);
 
@@ -1397,6 +1419,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       setFocusedDriver(null);
       setFocusedDriver(2);
       focusOn(botsRef.current[2].x);
+      triggerMiniGame();
     }
     await sleep(1000);
 
@@ -1406,8 +1429,20 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     setStarted(true);
 
     isCountingRef.current = false;
+
+    if (miniGameClicksRef.current >= 3) {
+      isNitroActive.current = true;
+      nitroTimer.current = NITRO_DURATION;
+    }
+
     await sleep(800);
     setCountdownStep(null);
+  };
+
+  const handleMiniGamePress = () => {
+    if (!miniGameVisible) return;
+    miniGameClicksRef.current += 1;
+    setMiniGameVisible(false);
   };
 
   function handleJump() {
@@ -1951,6 +1986,20 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         </View>
       )}
 
+      {/* ================= BOTÃO DE LARGADA PERFEITA ================= */}
+      {miniGameVisible && (
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={handleMiniGamePress}
+          style={[
+            styles.miniGameBtn,
+            { top: miniGamePos.top, left: miniGamePos.left }
+          ]}
+        >
+          <Text style={styles.miniGameBtnText}>⚡</Text>
+        </TouchableOpacity>
+      )}
+
       {countdownStep && (
         <View style={styles.overlay} pointerEvents="none">
           {countdownStep === 'PREPARANDO' && <Text style={styles.titleText}>PREPARANDO...</Text>}
@@ -2000,6 +2049,26 @@ const styles = StyleSheet.create({
   nitroBtn: { width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(0, 255, 255, 0.9)', borderWidth: 3, borderColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 5 },
   nitroBtnText: { color: '#000', fontWeight: '900', fontSize: 14, fontStyle: 'italic' },
   block: { position: 'absolute', zIndex: 3 },
+  miniGameBtn: {
+    position: 'absolute',
+    width: 64,
+    height: 64,
+    backgroundColor: '#FFCC00',
+    borderWidth: 4,
+    borderColor: '#1C1C1E',
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 2, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 3,
+  },
+  miniGameBtnText: {
+    fontSize: 28,
+  },
   overlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',

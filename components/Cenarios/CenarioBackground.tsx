@@ -56,10 +56,9 @@ const CenarioBackground: React.FC<CenarioBackgroundProps> = ({ isMoving, mapImag
 
   return (
     <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-      {/* Primeira Imagem de Fundo (A que começa na tela) */}
       <Animated.Image
         source={fonteCenario}
-        resizeMode="stretch" // Garante que a imagem se estique para ocupar exatamente o container
+        resizeMode="stretch"
         style={[
           styles.backgroundImage,
           {
@@ -70,7 +69,6 @@ const CenarioBackground: React.FC<CenarioBackgroundProps> = ({ isMoving, mapImag
         ]}
       />
 
-      {/* Segunda Imagem de Fundo (A emenda à direita) */}
       <Animated.Image
         source={IMAGEM_SAO_PAULO}
         resizeMode="stretch"
@@ -80,7 +78,6 @@ const CenarioBackground: React.FC<CenarioBackgroundProps> = ({ isMoving, mapImag
             position: 'absolute',
             width: SCREEN_WIDTH,
             height: SCREEN_HEIGHT,
-            // Usamos a interpolação para ela seguir a primeira
             transform: [{ translateX: segundaImagemX }],
           },
         ]}
