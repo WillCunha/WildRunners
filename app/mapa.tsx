@@ -60,10 +60,25 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     UIManager.setLayoutAnimationEnabledExperimental(true);
   }
 
-  const params = useLocalSearchParams<{ deck?: string }>();
+  const params = useLocalSearchParams<{ deck?: string; mapImage?: string }>();
   const { selectedCar, selectedColorFront, selectedColorBack } = useCarSelection();
+
   const fallbackDeck = ['swap', 'bullet', 'chains', 'tnt'];
-  const finalDeck = params.deck ? JSON.parse(params.deck) : fallbackDeck;
+  const finalDeck = params.deck ? JSON.parse(params.deck as string) : fallbackDeck;
+
+  const profile = usePlayerStore((state) => state.profile);
+  const carKey = (selectedCar || 'buggy') as string;
+
+  const carStats = profile?.garage?.[carKey as any] || {
+    motor: { speedLevel: 1, accelerationLevel: 1, jumpPowerLevel: 1 },
+    engrenagem: { defenseLevel: 1 },
+  };
+
+  const DYNAMIC_MAX_SPEED = MAX_SPEED + ((carStats.motor.speedLevel - 1) * 0.8);
+  const DYNAMIC_IMPULSE = IMPULSE_FORCE + ((carStats.motor.accelerationLevel - 1) * 0.15);
+  const DYNAMIC_JUMP_FORCE = JUMP_FORCE - ((carStats.motor.jumpPowerLevel - 1) * 0.6);
+  // Nível 1 = 5 Vidas, Nível 2 = 6 Vidas...
+  const INITIAL_LIVES = 4 + carStats.engrenagem.defenseLevel;
 
   const BASE_PLAYER_X = SCREEN_WIDTH * 0.4;
   const GAP_BETWEEN_RACERS = 130;
@@ -146,13 +161,36 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     return carKeys[Math.floor(Math.random() * carKeys.length)];
   };
 
-  const botsRef = useRef([
-    { id: 'bot1', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'default', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColorFront: getRandomColor(), carColorBack: getRandomColor() },
-    { id: 'bot2', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'gangster', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColorFront: getRandomColor(), carColorBack: getRandomColor() },
-    { id: 'bot3', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'ninja', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColorFront: getRandomColor(), carColorBack: getRandomColor() },
-    { id: 'bot4', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'pirate', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColorFront: getRandomColor(), carColorBack: getRandomColor() },
-    { id: 'bot5', name: getRandomName(), lives: 5, isDead: false, deck: generateRandomDeck(), angle: 0, x: 0, y: SCREEN_HEIGHT / 2, speed: 0, targetSpeed: MAX_SPEED, skin: 'surfer', isCrouching: false, velocity: 0, score: 0, thinkTimer: 0, status: { ...defaultStatus }, activeEffectsTimers: {}, carType: getRandomCarType(), carColorFront: getRandomColor(), carColorBack: getRandomColor() },
-  ]);
+  const botsRef = useRef(
+    ['bot1', 'bot2', 'bot3', 'bot4', 'bot5'].map((id, index) => {
+      const bStats = generateBotsStats(carStats);
+      const skins = ['default', 'gangster', 'ninja', 'pirate', 'surger'];
+
+      return {
+        id,
+        name: getRandomName(),
+        lives: 5,
+        isDead: false,
+        deck: generateRandomDeck(),
+        angle: 0,
+        x: 0,
+        y: SCREEN_HEIGHT / 2,
+        speed: 0,
+        targetSpeed: bStats.maxSpeed,
+        stats: bStats,
+        skin: skins[index],
+        isCrouching: false,
+        velocity: 0,
+        score: 0,
+        thinkTimer: 0,
+        status: { ...defaultStatus },
+        activeEffectsTimers: {},
+        carType: getRandomCarType(),
+        carColorFront: getRandomColor(),
+        carColorBack: getRandomColor(),
+      }
+    })
+  )
 
 
   // ---- CRONOMETRO DA PARTIDA ---- //
@@ -257,6 +295,24 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     if (lives === 1) return '#FF4500'; // Vermelho (Por um fio)
     return '#888888';                  // Cinza (Eliminado)
   };
+
+
+  /* ================= CONFIGURA OS MULTIPLICADORES DE FISICA DOS BOTS ================= */
+  function generateBotsStats(playerStats: typeof carStats) {
+    const randomFactor = () => Math.floor(Math.random() * 3) - 1;
+
+    const botSpeedLevel = Math.max(1, playerStats.motor.speedLevel + randomFactor());
+    const botAccelLevel = Math.max(1, playerStats.motor.accelerationLevel + randomFactor());
+    const botJumpLevel = Math.max(1, playerStats.motor.jumpPowerLevel + randomFactor());
+    const botDefenseLevel = Math.max(1, playerStats.engrenagem.defenseLevel + randomFactor());
+
+    return {
+      maxSpeed: MAX_SPEED + ((botSpeedLevel - 1) * 0.8),
+      impulse: IMPULSE_FORCE + ((botAccelLevel - 1) * 0.15),
+      jumpForce: JUMP_FORCE - ((botJumpLevel - 1) * 0.6)
+    }
+  }
+
 
   /* ================= SETA AS POSIÇÕES DE MODO ALEATORIO ================= */
   const setupPositions = () => {
@@ -490,12 +546,12 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
           return; // ESSE RETURN IMPEDE A IA DO BOT DO LOOP SER EXECUTADA
         }
 
-        let targetSpeed = MAX_SPEED * (0.8 + Math.random() * 0.2);
+        let targetSpeed = bot.stats.maxSpeed * (0.85 + Math.random() * 0.2);
         if (bot.x < playerXRef.current - 100) {
-          targetSpeed = MAX_SPEED * 1.35;
+          targetSpeed = bot.stats.maxSpeed * 1.35;
         }
 
-        if (bot.speed < targetSpeed) bot.speed += ACCELERATION * 0.8;
+        if (bot.speed < targetSpeed) bot.speed += (ACCELERATION * (1 + (bot.stats.impulse - IMPULSE_FORCE)));
         if (bot.speed > targetSpeed) bot.speed -= FRICTION;
 
         if (bot.status.isSlowed) {
@@ -567,7 +623,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
               const distanceToEnd = (currentBotBlock.x + currentBotBlock.width) - bot.x;
               let reactionDistance = 80 + (Math.random() * 40);
               if (!bot.status.isBlind && distanceToEnd < reactionDistance) {
-                bot.velocity = JUMP_FORCE;
+                bot.velocity = bot.stats.jumpForce;
               }
             }
           }
@@ -965,7 +1021,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   /* ================= DA O IMPULSO ================= */
   function handleAddImpulse() {
     if (gameOver || isNitroActive.current) return;
-    playerSpeed.current = Math.min(playerSpeed.current + IMPULSE_FORCE, MAX_SPEED);
+    playerSpeed.current = Math.min(playerSpeed.current + DYNAMIC_IMPULSE, DYNAMIC_MAX_SPEED);
   }
 
 
@@ -1383,7 +1439,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       return;
     }
 
-    if (isGrounded.current) { velocity.current = JUMP_FORCE; isGrounded.current = false; }
+    if (isGrounded.current) { velocity.current = DYNAMIC_JUMP_FORCE; isGrounded.current = false; }
   }
 
   function handleActivateNitro() {
@@ -1402,7 +1458,10 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
   return (
     <View style={styles.container}>
-      <CenarioBackground isMoving={started && !gameOver} />
+      <CenarioBackground
+        isMoving={started && !gameOver}
+        mapImage={params.mapImage}
+      />
       <View style={StyleSheet.absoluteFillObject} />
 
       <View style={styles.leaderboardContainer} pointerEvents="none">

@@ -37,7 +37,7 @@ export default function DeckSelection() {
 
         // Navega para o mapa passando as cartas selecionadas por parâmetro
         router.navigate({
-            pathname: '/mapa',
+            pathname: '/MapSelectionScreen',
             params: { deck: JSON.stringify(selectedDeck) }
         });
     };

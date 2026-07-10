@@ -5,17 +5,16 @@ const IMAGEM_SAO_PAULO = require('@/assets/images/components/cenarios/sao_pauloV
 
 interface CenarioBackgroundProps {
   isMoving: boolean;
+  mapImage: string;
 }
 
-const CenarioBackground: React.FC<CenarioBackgroundProps> = ({ isMoving }) => {
+const CenarioBackground: React.FC<CenarioBackgroundProps> = ({ isMoving, mapImage }) => {
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
   const scrollX = useRef(new Animated.Value(0)).current;
 
-  // Precisamos rastrear o valor para dar o pause/play exatamente onde parou
   const [currentXValue, setCurrentXValue] = useState(0);
 
   useEffect(() => {
-    // Escuta o valor da animação para guardar no estado quando pausar
     const listenerId = scrollX.addListener(({ value }) => {
       setCurrentXValue(value);
     });
@@ -29,18 +28,16 @@ const CenarioBackground: React.FC<CenarioBackgroundProps> = ({ isMoving }) => {
     let animation: Animated.CompositeAnimation | null = null;
 
     if (isMoving) {
-      // Inicia o loop infinito
       animation = Animated.loop(
         Animated.timing(scrollX, {
-          toValue: -SCREEN_WIDTH, // Move uma largura de tela inteira para a esquerda
-          duration: 15000, // Ajuste de velocidade (quanto maior, mais lento)
-          easing: Easing.linear, // Movimento constante, sem aceleração/desaceleração
-          useNativeDriver: true, // Crucial para performance suave em 60fps
+          toValue: -SCREEN_WIDTH, 
+          duration: 15000, 
+          easing: Easing.linear, 
+          useNativeDriver: true, 
         })
       );
       animation.start();
     } else {
-      // Se parou (countdown/gameover), congela onde está
       scrollX.stopAnimation();
     }
 
@@ -49,19 +46,19 @@ const CenarioBackground: React.FC<CenarioBackgroundProps> = ({ isMoving }) => {
     };
   }, [isMoving, scrollX, SCREEN_WIDTH]);
 
-  // Interpolação para a segunda imagem que vem grudada atrás
-  // Quando a Imagem 1 estiver na posição translateX: 0, a Imagem 2 estará na translateX: SCREEN_WIDTH.
-  // Quando a Imagem 1 estiver na posição translateX: -SCREEN_WIDTH (toda fora), a Imagem 2 estará na translateX: 0 (cobrindo a tela).
+ 
   const segundaImagemX = scrollX.interpolate({
     inputRange: [-SCREEN_WIDTH, 0],
     outputRange: [0, SCREEN_WIDTH],
   });
 
+  const fonteCenario = mapImage ? {uri: mapImage} : IMAGEM_SAO_PAULO;
+
   return (
     <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
       {/* Primeira Imagem de Fundo (A que começa na tela) */}
       <Animated.Image
-        source={IMAGEM_SAO_PAULO}
+        source={fonteCenario}
         resizeMode="stretch" // Garante que a imagem se estique para ocupar exatamente o container
         style={[
           styles.backgroundImage,
