@@ -4,7 +4,7 @@ import React, { useRef } from 'react';
 import { Animated, Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const { width } = Dimensions.get('window');
-const ITEM_SIZE = width * 0.65;
+const ITEM_SIZE = 220;
 const SPACER_ITEM_SIZE = (width - ITEM_SIZE) / 2;
 
 export default function TrackSelectionScreen({ currentLevel = 2 }) {
@@ -36,7 +36,7 @@ export default function TrackSelectionScreen({ currentLevel = 2 }) {
       <View style={{ width: ITEM_SIZE, alignItems: 'center', justifyContent: 'center' }}>
         <Animated.View style={[styles.cardContainer, { transform: [{ scale }] }]}>
           <View style={styles.imageContainer}>
-            <Image source={{ uri: item.image }} style={[styles.image, !isUnlocked && { opacity: 0.4 }]} />
+            <Image source={item.image} style={[styles.image, !isUnlocked && { opacity: 0.4 }]} />
             {!isUnlocked && <View style={styles.lockedOverlay} />}
           </View>
 
@@ -51,7 +51,7 @@ export default function TrackSelectionScreen({ currentLevel = 2 }) {
                     pathname: '/mapa',
                     params: {
                       deck: params.deck,
-                      mapImage: item.image 
+                      mapImage: item.image
                     }
                   });
                 }}
@@ -71,7 +71,7 @@ export default function TrackSelectionScreen({ currentLevel = 2 }) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.headerTitle}>ESCOLHA A PISTA</Text>
+      <Text style={styles.headerTitle}>ESCOLHA A PISTA:</Text>
 
       <Animated.FlatList
         data={dataWithSpacers}
@@ -95,9 +95,9 @@ export default function TrackSelectionScreen({ currentLevel = 2 }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: '#212c5e',
     justifyContent: 'center',
-    paddingVertical: 50,
+    alignContent: 'center',
   },
   headerTitle: {
     color: '#FFF',
@@ -108,34 +108,26 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   cardContainer: {
-    width: ITEM_SIZE * 0.9,
-    backgroundColor: '#FFF',
+    width: ITEM_SIZE,
     borderRadius: 24,
-    borderWidth: 4,
-    borderColor: '#000',
-    overflow: 'hidden',
     // Sombra para destacar o card
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 8,
+
   },
   imageContainer: {
-    height: 200,
-    width: '100%',
-    backgroundColor: '#E0E0E0',
-    borderBottomWidth: 4,
-    borderColor: '#000',
+    width: 220,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   image: {
-    width: '100%',
-    height: '100%',
+    width: 220,
+    height: 220,
     resizeMode: 'cover',
+    borderRadius: 24,
   },
   lockedOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.32)',
+    borderRadius: 24,
   },
   infoContainer: {
     padding: 16,
@@ -144,18 +136,20 @@ const styles = StyleSheet.create({
   cityText: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#000',
-    marginBottom: 16,
+    color: '#fff',
+    marginBottom: 6,
+    marginTop: -6,
     textTransform: 'uppercase',
+    textAlign: 'center',
   },
   btnContinue: {
     backgroundColor: '#4CAF50',
     paddingVertical: 12,
+    width: 200,
     paddingHorizontal: 24,
     borderRadius: 12,
     borderWidth: 3,
     borderColor: '#000',
-    width: '100%',
     alignItems: 'center',
   },
   btnContinueText: {

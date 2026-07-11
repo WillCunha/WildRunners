@@ -1,3 +1,4 @@
+import * as Font from 'expo-font';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
@@ -14,11 +15,45 @@ export default function LoadingScreen() {
   const { next } = useLocalSearchParams(); // Pega a rota de destino
   
   const [tip, setTip] = useState('');
+  const [fontsLoaded, setFontsLoaded] = useState(false);
   const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const randomTip = TIPS[Math.floor(Math.random() * TIPS.length)];
     setTip(randomTip);
+
+    let isAnimationDone = false;
+    let areFontLoaded = false;
+
+    const checkAndNavigate = () => {
+      if(isAnimationDone && areFontLoaded) {
+        if (next) {
+          router.replace(next as string);
+        } else {
+          router.replace('/'); // Fallback de segurança
+        }
+      }
+    }
+
+    async function loadFonts() {
+      try {
+        await Font.loadAsync({
+          'Fredoka-Regular': require('@/assets/fonts/Fredoka-Regular.ttf'),
+          'Fredoka-Medium': require('@/assets/fonts/Fredoka-Medium.ttf'),
+          'Fredoka-Semibold': require('@/assets/fonts/Fredoka-Semibold.ttf'),
+          'Fredoka-Bold': require('@/assets/fonts/Fredoka-Bold.ttf'),
+        });
+        areFontLoaded = true;
+        setFontsLoaded(true);
+        checkAndNavigate();
+      } catch (error) {
+        console.warn("Erro ao carregar as fontes: ", error);
+        areFontLoaded = true; // Mesmo que falhe, consideramos como carregado para não travar a navegação
+        checkAndNavigate();
+      }
+    }
+
+    loadFonts();
 
     Animated.timing(progress, {
       toValue: 1,
@@ -26,12 +61,8 @@ export default function LoadingScreen() {
       easing: Easing.linear,
       useNativeDriver: false, 
     }).start(() => {
-      // Navega para a próxima tela substituindo o Loading na pilha
-      if (next) {
-        router.replace(next as string);
-      } else {
-        router.replace('/'); // Fallback de segurança
-      }
+      isAnimationDone = true;
+      checkAndNavigate();
     });
   }, []);
 
@@ -39,6 +70,10 @@ export default function LoadingScreen() {
     inputRange: [0, 1],
     outputRange: ['0%', '100%'],
   });
+
+  if(!fontsLoaded){
+    return <View style={styles.container}></View>
+  }
 
   return (
     <View style={styles.container}>

@@ -1,22 +1,21 @@
 export const CITY_MAPS = [
   {
     id: 'saopaulo',
-    city: 'São Paulo', // Sua cidade natal como mapa inicial!
+    city: 'São Paulo', 
     levelRequired: 1,
-    image: 'https://via.placeholder.com/400x400/87CEFA/000000?text=São+Paulo',
-    // Propriedades futuras para o mapa:
+    image: require('@/assets/images/components/cityMaps/sao_paulo.png'),
     gameplay: {
-      trackLength: 1500, // Tamanho da pista
+      trackLength: 1500, 
       baseSpeed: 5,
-      hazards: ['buraco', 'cone'], // Obstáculos específicos dessa pista
-      boostDropRate: 0.8, // Configuração da taxa de spawn de Boost (antigo elixir)
+      hazards: ['buraco', 'cone'],
+      boostDropRate: 0.8, 
     }
   },
   {
     id: 'rio',
     city: 'Rio de Janeiro',
     levelRequired: 2,
-    image: 'https://via.placeholder.com/400x400/FFB6C1/000000?text=Rio+de+Janeiro',
+    image: require('@/assets/images/components/cityMaps/rio.png'),
     gameplay: {
       trackLength: 2500,
       baseSpeed: 7,
@@ -26,38 +25,50 @@ export const CITY_MAPS = [
   },
   {
     id: 'salvador',
-    city: 'Salvador', // Sua outra viagem planejada
+    city: 'Salvador', 
     levelRequired: 4,
-    image: 'https://via.placeholder.com/400x400/98FB98/000000?text=Salvador',
+    image: require('@/assets/images/components/cityMaps/salvador.png'),
     gameplay: {
       trackLength: 3000,
       baseSpeed: 9,
       hazards: ['chuva', 'onibus_vermelho'],
-      boostDropRate: 0.3, // Mais difícil achar Boost aqui
+      boostDropRate: 0.3,
     }
   },
   {
     id: 'Manaus',
-    city: 'Manaus', // Sua outra viagem planejada
+    city: 'Manaus',
     levelRequired: 7,
-    image: 'https://via.placeholder.com/400x400/98FB98/000000?text=Manaus',
+    image: require('@/assets/images/components/cityMaps/manaus.png'),
     gameplay: {
       trackLength: 3000,
       baseSpeed: 9,
       hazards: ['chuva', 'onibus_vermelho'],
-      boostDropRate: 0.3, // Mais difícil achar Boost aqui
+      boostDropRate: 0.3, 
     }
   },
   {
     id: 'brasilia',
-    city: 'Brasília', // Sua outra viagem planejada
+    city: 'Brasília',
     levelRequired: 8,
-    image: 'https://via.placeholder.com/400x400/98FB98/000000?text=Brasília',
+    image: require('@/assets/images/components/cityMaps/brasilia.png'),
     gameplay: {
       trackLength: 3000,
       baseSpeed: 9,
       hazards: ['chuva', 'onibus_vermelho'],
-      boostDropRate: 0.3, // Mais difícil achar Boost aqui
+      boostDropRate: 0.3, 
+    }
+  },
+  {
+    id: 'balenario',
+    city: 'Balneário Camboriú',
+    levelRequired: 8,
+    image: require('@/assets/images/components/cityMaps/balneario_camburiu.png'),
+    gameplay: {
+      trackLength: 3000,
+      baseSpeed: 9,
+      hazards: ['chuva', 'onibus_vermelho'],
+      boostDropRate: 0.3, 
     }
   },
 ];

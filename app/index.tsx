@@ -14,7 +14,7 @@ import {
 export default function StartScreen() {
   const router = useRouter();
   const profile = usePlayerStore((state) => state.profile);
-  
+
   const scaleValue = useRef(new Animated.Value(1)).current;
 
   const player = useAudioPlayer(require('@/assets/audio/wild_runners_main_title.mp3'));
@@ -41,7 +41,7 @@ export default function StartScreen() {
     pulseAnimation.start();
 
     return () => {
-        pulseAnimation.stop();
+      pulseAnimation.stop();
     };
   }, [player]);
 
@@ -51,22 +51,23 @@ export default function StartScreen() {
     if (!profile) {
       router.push({ pathname: '/LoadingScreen', params: { next: '/RegistrationScreen' } });
     } else {
-      router.push({ pathname: '/LoadingScreen', params: { next: '/CarSelectionScreen' } }); 
+      router.push({ pathname: '/LoadingScreen', params: { next: '/CarSelectionScreen' } });
     }
   };
 
   return (
     <View style={styles.container}>
-      <Image 
-        source={require('@/assets/images/gameLogoV3.png')} 
+      <Image
+        source={require('@/assets/images/gameLogoV3.png')}
         style={styles.logo}
         resizeMode="contain"
       />
 
-      <TouchableOpacity activeOpacity={0.85} onPress={handleStartPress}>
-        <Animated.View style={[styles.button, { transform: [{ scale: scaleValue }] }]}>
-          <Text style={styles.buttonText}>PRESSIONE PARA COMEÇAR</Text>
-        </Animated.View>
+      <TouchableOpacity activeOpacity={0.8} style={styles.button} onPress={handleStartPress}>
+        <Text style={styles.buttonText}>PRESSIONE PARA COMEÇAR</Text>
+
+        {/* detalhe inferior */}
+        <View style={styles.bottomGlow} />
       </TouchableOpacity>
     </View>
   );
@@ -75,31 +76,42 @@ export default function StartScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000', 
+    backgroundColor: '#000',
     justifyContent: 'space-evenly',
     alignItems: 'center',
   },
   logo: {
-    width: 300,
-    height: 300,
+    width: 800,
+    height: 800,
   },
   button: {
-    backgroundColor: '#FFD700', 
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 24,
-    borderWidth: 4,
-    borderColor: '#000000', 
-    shadowColor: '#000000',
-    shadowOffset: { width: 5, height: 5 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 10, 
+    width: 290,
+    height: 70,
+    backgroundColor: "#121212",
+    borderWidth: 1.5,
+    borderColor: "#C79A32",
+    borderRadius: 6,
+    justifyContent: "center",
+    alignItems: "center",
+    position: "relative",
   },
   buttonText: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#000000',
-    letterSpacing: 1.5,
-  }
+    color: "#E9C56C",
+    fontSize: 22,
+    fontWeight: "700",
+    letterSpacing: 2,
+  },
+  bottomGlow: {
+    position: "absolute",
+    bottom: -2,
+    width: 80,
+    height: 4,
+    borderRadius: 100,
+    backgroundColor: "#FFD24D",
+    shadowColor: "#FFD24D",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 10,
+  },
 });
