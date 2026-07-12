@@ -11,6 +11,7 @@ interface CenarioBackgroundProps {
 const CenarioBackground: React.FC<CenarioBackgroundProps> = ({ isMoving, mapImage }) => {
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
   const scrollX = useRef(new Animated.Value(0)).current;
+  console.log('mapImage: ', mapImage);
 
   const [currentXValue, setCurrentXValue] = useState(0);
 
@@ -52,7 +53,7 @@ const CenarioBackground: React.FC<CenarioBackgroundProps> = ({ isMoving, mapImag
     outputRange: [0, SCREEN_WIDTH],
   });
 
-  const fonteCenario = mapImage ? {uri: mapImage} : IMAGEM_SAO_PAULO;
+  const fonteCenario = mapImage ? mapImage : IMAGEM_SAO_PAULO;
 
   return (
     <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
@@ -70,7 +71,7 @@ const CenarioBackground: React.FC<CenarioBackgroundProps> = ({ isMoving, mapImag
       />
 
       <Animated.Image
-        source={IMAGEM_SAO_PAULO}
+        source={fonteCenario}
         resizeMode="stretch"
         style={[
           styles.backgroundImage,

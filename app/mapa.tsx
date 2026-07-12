@@ -1481,7 +1481,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     if (isNitroReady && !isNitroActive.current) { isNitroActive.current = true; nitroTimer.current = NITRO_DURATION; setIsNitroReady(false); }
   }
 
-  // Preparação do Mini-mapa
   const allRacersPositions = [
     { id: 'player', x: playerX, color: selectedColorFront || '#00D084', isPlayer: true },
     ...bots.map(b => ({ id: b.id, x: b.x, color: b.carColorFront, isPlayer: false }))

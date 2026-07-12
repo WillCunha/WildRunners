@@ -5,6 +5,7 @@ import React, { useEffect, useRef } from 'react';
 import {
   Animated,
   Image,
+  ImageBackground,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -55,63 +56,92 @@ export default function StartScreen() {
     }
   };
 
-  return (
-    <View style={styles.container}>
-      <Image
-        source={require('@/assets/images/gameLogoV3.png')}
-        style={styles.logo}
-        resizeMode="contain"
-      />
+    return (
+        <ImageBackground
+            source={require("@/assets/images/components/background/start_screen.png")}
+            resizeMode="cover"
+            style={styles.background}
+        >
 
-      <TouchableOpacity activeOpacity={0.8} style={styles.button} onPress={handleStartPress}>
-        <Text style={styles.buttonText}>PRESSIONE PARA COMEÇAR</Text>
+            <View style={styles.overlay}>
 
-        {/* detalhe inferior */}
-        <View style={styles.bottomGlow} />
-      </TouchableOpacity>
-    </View>
-  );
+                <Image
+                    source={require("@/assets/images/gameLogoV3.png")}
+                    style={styles.logo}
+                    resizeMode="contain"
+                />
+
+                <TouchableOpacity style={styles.button} onPress={handleStartPress}>
+                    <Text style={styles.buttonText}>
+                        PRESSIONE PARA COMEÇAR
+                    </Text>
+
+                    <View style={styles.bottomGlow}/>
+                </TouchableOpacity>
+
+            </View>
+
+        </ImageBackground>
+    );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-    justifyContent: 'space-evenly',
-    alignItems: 'center',
-  },
-  logo: {
-    width: 800,
-    height: 800,
-  },
-  button: {
-    width: 290,
-    height: 70,
-    backgroundColor: "#121212",
-    borderWidth: 1.5,
-    borderColor: "#C79A32",
-    borderRadius: 6,
-    justifyContent: "center",
-    alignItems: "center",
-    position: "relative",
-  },
-  buttonText: {
-    color: "#E9C56C",
-    fontSize: 22,
-    fontWeight: "700",
-    letterSpacing: 2,
-  },
-  bottomGlow: {
-    position: "absolute",
-    bottom: -2,
-    width: 80,
-    height: 4,
-    borderRadius: 100,
-    backgroundColor: "#FFD24D",
-    shadowColor: "#FFD24D",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1,
-    shadowRadius: 10,
-    elevation: 10,
-  },
+
+    background:{
+        flex:1,
+        width:"100%",
+        height:"100%",
+    },
+
+    overlay:{
+        flex:1,
+        justifyContent:"space-evenly",
+        alignItems:"center",
+
+        backgroundColor:"rgba(0,0,0,0.15)"
+    },
+
+    logo:{
+        width:450,
+        height:170
+    },
+
+    button:{
+        width:'50%',
+        height:50,
+        backgroundColor:"#111",
+        borderWidth:1.5,
+        borderColor:"#D4A734",
+        justifyContent:"center",
+        alignItems:"center",
+        borderRadius:6,
+        position:"relative",
+    },
+
+    buttonText:{
+        color:"#F2C55A",
+        fontWeight:"700",
+        letterSpacing:2,
+        fontSize:22,
+        textAlign: 'center',
+    },
+
+    bottomGlow:{
+        position:"absolute",
+        bottom:-2,
+
+        width:90,
+        height:3,
+
+        borderRadius:10,
+
+        backgroundColor:"#FFD24D",
+
+        shadowColor:"#FFD24D",
+        shadowOpacity:1,
+        shadowRadius:10,
+
+        elevation:8,
+    }
+
 });

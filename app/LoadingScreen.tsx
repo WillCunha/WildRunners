@@ -40,7 +40,7 @@ export default function LoadingScreen() {
         await Font.loadAsync({
           'Fredoka-Regular': require('@/assets/fonts/Fredoka-Regular.ttf'),
           'Fredoka-Medium': require('@/assets/fonts/Fredoka-Medium.ttf'),
-          'Fredoka-Semibold': require('@/assets/fonts/Fredoka-Semibold.ttf'),
+          'Fredoka-Semibold': require('@/assets/fonts/Fredoka_SemiExpanded-Bold.ttf'),
           'Fredoka-Bold': require('@/assets/fonts/Fredoka-Bold.ttf'),
         });
         areFontLoaded = true;

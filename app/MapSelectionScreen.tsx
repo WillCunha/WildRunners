@@ -1,15 +1,25 @@
 import { CITY_MAPS } from '@/src/utils/cityMaps';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useRef } from 'react';
-import { Animated, Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  Animated,
+  Dimensions,
+  Image,
+  ImageBackground,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
 
 const { width } = Dimensions.get('window');
-const ITEM_SIZE = 220;
+
+const ITEM_SIZE = width * 0.35;
 const SPACER_ITEM_SIZE = (width - ITEM_SIZE) / 2;
 
 export default function TrackSelectionScreen({ currentLevel = 2 }) {
   const scrollX = useRef(new Animated.Value(0)).current;
-  const params = useLocalSearchParams<{ deck?: string }>();
+  const params = useLocalSearchParams<{deck?: string}>();
 
   const dataWithSpacers = [
     { id: 'left-spacer' },
@@ -22,82 +32,109 @@ export default function TrackSelectionScreen({ currentLevel = 2 }) {
       return <View style={{ width: SPACER_ITEM_SIZE }} />;
     }
 
-    // ... lógica de animação do scroll continua exatamente igual ...
-    const inputRange = [(index - 2) * ITEM_SIZE, (index - 1) * ITEM_SIZE, index * ITEM_SIZE];
+    const inputRange = [
+      (index - 2) * ITEM_SIZE,
+      (index - 1) * ITEM_SIZE,
+      index * ITEM_SIZE
+    ];
+
     const scale = scrollX.interpolate({
       inputRange,
-      outputRange: [0.8, 1, 0.8],
+      outputRange: [0.85, 1, 0.85],
       extrapolate: 'clamp',
     });
 
     const isUnlocked = currentLevel >= item.levelRequired;
 
     return (
+
       <View style={{ width: ITEM_SIZE, alignItems: 'center', justifyContent: 'center' }}>
-        <Animated.View style={[styles.cardContainer, { transform: [{ scale }] }]}>
-          <View style={styles.imageContainer}>
-            <Image source={item.image} style={[styles.image, !isUnlocked && { opacity: 0.4 }]} />
-            {!isUnlocked && <View style={styles.lockedOverlay} />}
+        <Animated.View style={[styles.cardScaleWrapper, { transform: [{ scale }] }]}>
+
+          <View style={styles.cardVisual}>
+
+            <View style={styles.imageWrapper}>
+              <Image
+                source={isUnlocked ? item.icon : item.iconGRAY}
+                style={styles.image}
+              />
+              {!isUnlocked && <View style={styles.lockedOverlay} />}
+            </View>
+
+            <View style={styles.cityTextContainer}>
+              <Text style={styles.cityText}>{item.city}</Text>
+            </View>
+
           </View>
 
-          <View style={styles.infoContainer}>
-            <Text style={styles.cityText}>{item.city}</Text>
+          {isUnlocked ? (
+            <TouchableOpacity
+              style={styles.btnContinue}
+              activeOpacity={0.8}
+              onPress={() => {
+                console.log("url do background passada: ", item.background)
+                router.navigate({
+                  pathname: '/mapa',
+                  params: {
+                    deck: params.deck,
+                    mapImage: item.background,
+                  }
+                })
+              }}
+            >
+              <Text style={styles.btnContinueText}>CONTINUAR</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.btnLocked}>
+              <Text style={styles.btnLockedText}>🔒 NÍVEL {item.levelRequired}</Text>
+            </View>
+          )}
 
-            {isUnlocked ? (
-              <TouchableOpacity
-                style={styles.btnContinue}
-                onPress={() => {
-                  router.navigate({
-                    pathname: '/mapa',
-                    params: {
-                      deck: params.deck,
-                      mapImage: item.image
-                    }
-                  });
-                }}
-              >
-                <Text style={styles.btnContinueText}>CONTINUAR</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.btnLocked}>
-                <Text style={styles.btnLockedText}>🔒 NÍVEL {item.levelRequired}</Text>
-              </View>
-            )}
-          </View>
         </Animated.View>
       </View>
     );
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.headerTitle}>ESCOLHA A PISTA:</Text>
+    <ImageBackground
+      source={require("@/assets/images/components/background/start_screen.png")}
+      resizeMode="cover"
+      style={styles.background}
+    >
+      <View style={styles.container}>
+        <Text style={styles.headerTitle}>ESCOLHA A PISTA</Text>
 
-      <Animated.FlatList
-        data={dataWithSpacers}
-        keyExtractor={(item) => item.id}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        snapToInterval={ITEM_SIZE}
-        decelerationRate="fast"
-        bounces={false}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-          { useNativeDriver: true }
-        )}
-        scrollEventThrottle={16}
-        renderItem={renderItem}
-      />
-    </View>
+        <Animated.FlatList
+          data={dataWithSpacers}
+          keyExtractor={(item) => item.id}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          snapToInterval={ITEM_SIZE}
+          decelerationRate="fast"
+          bounces={false}
+          contentContainerStyle={{ alignItems: 'center' }}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+            { useNativeDriver: true }
+          )}
+          scrollEventThrottle={16}
+          renderItem={renderItem}
+        />
+      </View>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
+  background: {
+    flex: 1,
+    width: "100%",
+    height: "100%",
+  },
+
   container: {
     flex: 1,
-    backgroundColor: '#212c5e',
     justifyContent: 'center',
-    alignContent: 'center',
   },
   headerTitle: {
     color: '#FFF',
@@ -105,71 +142,90 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textAlign: 'center',
     marginBottom: 40,
-    letterSpacing: 2,
+    letterSpacing: 4,
+    fontFamily: 'Fredoka-Bold',
   },
-  cardContainer: {
-    width: ITEM_SIZE,
+  cardScaleWrapper: {
+    width: '90%',
+    paddingBottom: 25,
+    position: 'relative',
+  },
+  cardVisual: {
+    backgroundColor: '#FFF',
     borderRadius: 24,
-    // Sombra para destacar o card
-
+    borderWidth: 4,
+    borderColor: '#000',
+    padding: 5,
   },
-  imageContainer: {
-    width: 220,
-    justifyContent: 'center',
-    alignItems: 'center',
+  imageWrapper: {
+    width: '100%',
+    height: 200,
+    borderRadius: 16,
+    borderWidth: 3,
+    borderColor: '#000',
+    overflow: 'hidden',
+    backgroundColor: '#E0E0E0',
   },
   image: {
-    width: 220,
-    height: 220,
+    width: '100%',
+    height: '100%',
     resizeMode: 'cover',
-    borderRadius: 24,
   },
   lockedOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.32)',
-    borderRadius: 24,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
   },
-  infoContainer: {
-    padding: 16,
+  cityTextContainer: {
+    paddingTop: 16,
+    paddingBottom: 24, // Espaço para o texto não ficar colado no botão
     alignItems: 'center',
   },
   cityText: {
     fontSize: 22,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 6,
-    marginTop: -6,
+    fontWeight: '900',
+    color: '#000',
     textTransform: 'uppercase',
-    textAlign: 'center',
+    fontFamily: 'Fredoka-Regular'
   },
   btnContinue: {
-    backgroundColor: '#4CAF50',
-    paddingVertical: 12,
-    width: 200,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    borderWidth: 3,
+    position: 'absolute',
+    bottom: 0,
+    alignSelf: 'center',
+    width: '50%',
+    height: 50,
+    backgroundColor: '#FFEB3B', // Um amarelo/verde vibrante para dar destaque no estilo noir
+    borderRadius: 15,
+    borderWidth: 4,
     borderColor: '#000',
+    justifyContent: 'center',
     alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
   },
   btnContinueText: {
-    color: '#FFF',
+    color: '#000',
     fontSize: 16,
     fontWeight: '900',
   },
   btnLocked: {
+    position: 'absolute',
+    bottom: 0,
+    alignSelf: 'center',
+    width: '50%',
+    height: 50,
     backgroundColor: '#9E9E9E',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    borderWidth: 3,
-    borderColor: '#555',
-    width: '100%',
+    borderRadius: 15,
+    borderWidth: 4,
+    borderColor: '#000',
+    justifyContent: 'center',
     alignItems: 'center',
   },
   btnLockedText: {
-    color: '#333',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: '#000',
+    fontSize: 14,
+    fontWeight: '900',
   },
 });
