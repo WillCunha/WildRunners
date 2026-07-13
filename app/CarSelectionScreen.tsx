@@ -1,4 +1,3 @@
-// app/CarSelectionScreen.tsx
 import { useCarSelection } from '@/context/CarContext';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { carMaps } from '@/src/utils/carMaps';
@@ -113,6 +112,32 @@ export default function CarSelectionScreen() {
 
     return (
         <View style={styles.container}>
+            <View style={styles.headerLeftInfoContainer}>
+                <View style={styles.infoBadge}>
+                    <Text style={styles.infoUsernameText}>@{profile?.username}</Text>
+                </View>
+                <View style={styles.infoBadge}>
+                    <Text style={styles.infoBadgeText}>NÍVEL {playerTier}</Text>
+                </View>
+                <View style={[styles.infoBadge, { backgroundColor: '#FFCC00' }]}>
+                    <Text style={styles.iconText}>🏆</Text>
+                    <Text style={styles.infoBadgeText}>{profile?.trophies || 0}</Text>
+                </View>
+            </View>
+            <View style={styles.headerInfoContainer}>
+                <View style={styles.infoBadge}>
+                    <Text style={styles.iconText}>⚙️</Text>
+                    <Text style={styles.infoBadgeText}>{profile?.parts?.motor || 0}</Text>
+                </View>
+                <View style={styles.infoBadge}>
+                    <Text style={styles.iconText}>🎨</Text>
+                    <Text style={styles.infoBadgeText}>{profile?.parts?.spray || 0}</Text>
+                </View>
+                <View style={styles.infoBadge}>
+                    <Text style={styles.iconText}>🔧</Text>
+                    <Text style={styles.infoBadgeText}>{profile?.parts?.engrenagem || 0}</Text>
+                </View>
+            </View>
             <Text style={styles.title}>GARAGEM</Text>
             <Text style={styles.subtitle}>Selecione o veículo para sua próxima corrida.</Text>
 
@@ -150,6 +175,8 @@ export default function CarSelectionScreen() {
 
 
                 <ScrollView showsVerticalScrollIndicator={false} style={styles.modelScroll}>
+                    <Text style={styles.modelTitle}>LISTA DE VEÍCULOS</Text>
+
                     {carKeys.map((carKey) => {
                         const carTier = carMaps[carKey].tier;
                         const isCarOwned = profile?.garage[carKey] !== undefined;
@@ -185,32 +212,85 @@ export default function CarSelectionScreen() {
                 <StatBar label="Defesa" progress={defProgress} />
             </View>
 
-            <TouchableOpacity style={dynamicButtonStyle} activeOpacity={isLockedByTier ? 1 : 0.9} onPress={handleActionPress}>
-                <Text style={styles.playButtonText}>{buttonText}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.btnOficina} onPress={handleOpenOficina}>
-                <Text style={styles.openOficinaText}>Oficina</Text>
-            </TouchableOpacity>
+            <View style={styles.btnContainer}>
+                <TouchableOpacity style={styles.btnOficina} onPress={handleOpenOficina}>
+                    <Text style={styles.openOficinaText}>OFICINA</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={dynamicButtonStyle} activeOpacity={isLockedByTier ? 1 : 0.9} onPress={handleActionPress}>
+                    <Text style={styles.playButtonText}>{buttonText}</Text>
+                </TouchableOpacity>
 
+            </View>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F8F9FA', padding: 20 },
+    headerLeftInfoContainer: {
+        position: 'absolute',
+        top: 40,
+        left: 20,
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'flex-start', // Alinha os itens à esquerda
+        gap: 8,
+        zIndex: 100,
+    },
+    headerInfoContainer: {
+        position: 'absolute',
+        top: 40,
+        right: 20,
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        gap: 8,
+        zIndex: 100,
+    },
+    infoBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#FFFFFF',
+        paddingVertical: 6,
+        paddingHorizontal: 14,
+        borderRadius: 16,
+        borderWidth: 3,
+        borderColor: '#1C1C1E',
+        shadowColor: '#1C1C1E',
+        shadowOffset: { width: 2, height: 2 },
+        shadowOpacity: 1,
+        shadowRadius: 0,
+        elevation: 4,
+        gap: 6,
+    },
+    infoUsernameText: {
+        fontSize: 14,
+        fontWeight: '900',
+        color: '#1C1C1E',
+        letterSpacing: 1,
+    },
+    infoBadgeText: {
+        fontSize: 14,
+        fontWeight: '900',
+        color: '#1C1C1E',
+        letterSpacing: 1,
+    },
+    iconText: {
+        fontSize: 14,
+    },
     title: { fontSize: 32, fontWeight: '900', color: '#1C1C1E', textAlign: 'center', marginTop: 20, textTransform: 'uppercase', letterSpacing: 2 },
     subtitle: { fontSize: 16, fontWeight: 'bold', color: '#8E8E93', textAlign: 'center', marginBottom: 30 },
 
-    // Status Container no canto inferior esquerdo
     statsContainer: {
         position: 'absolute',
-        bottom: 80, // Fica logo acima do botão "CONTINUAR"
+        bottom: 80,
         left: 20,
         backgroundColor: '#FFFFFF',
         padding: 12,
         borderRadius: 16,
         borderWidth: 3,
-        borderColor: '#1C1C1E', // Contorno grosso
+        borderColor: '#1C1C1E',
         width: 160,
         zIndex: 10,
         elevation: 5,
@@ -235,7 +315,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#34C759', // Verde do progresso
     },
 
-    previewContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 30 },
+    previewContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 30, },
     selectorColumn: { alignItems: 'center', justifyContent: 'center', display: 'flex', flexDirection: 'row', width: '18%' },
     carWrapper: { width: '30%', height: 100, justifyContent: 'center', alignItems: 'center', zIndex: 999 },
     carBase: { width: '100%', height: '100%', zIndex: 999, position: 'absolute', top: 0, left: 0 },
@@ -246,14 +326,16 @@ const styles = StyleSheet.create({
     colorScroll: { marginBottom: 30, maxWidth: '5%', maxHeight: 150, minHeight: 150, overflow: 'hidden', marginLeft: 20, paddingLeft: 10, paddingTop: 5 },
     colorOption: { width: 30, height: 30, borderRadius: 24, borderWidth: 1, borderColor: 'rgba(0,0,0,0.1)', marginBottom: 4 },
     colorOptionSelected: { borderColor: '#1C1C1E', borderWidth: 3, transform: [{ scale: 1.1 }] },
-    modelScroll: { marginBottom: 10, maxWidth: '20%', textAlign: 'center', maxHeight: 150, minHeight: 150, overflow: 'hidden', paddingTop: 5 },
-    modelOption: { backgroundColor: '#FFFFFF', paddingVertical: 5, paddingHorizontal: 20, borderRadius: 16, borderWidth: 3, borderColor: '#D1D1D6', marginRight: 12, marginBottom: 4 },
+    modelScroll: { padding: 12, marginTop: -18, backgroundColor: '#fff', marginBottom: 2, maxWidth: 160, textAlign: 'center', maxHeight: 200, minHeight: 200, overflow: 'hidden', paddingTop: 5, paddingBottom: 10, borderRadius: 16, borderWidth: 3, borderColor: '#1C1C1E', elevation: 5,shadowColor: '#1C1C1E',shadowOffset: { width: 3, height: 3 },shadowOpacity: 1,shadowRadius: 0,},
+    modelTitle: { fontSize: 12, fontWeight: '900', color: '#1C1C1E', marginBottom: 10, textAlign: 'center' },
+    modelOption: { backgroundColor: '#FFFFFF', paddingVertical: 5, borderRadius: 16, borderWidth: 3, borderColor: '#000', marginBottom: 4 },
     modelOptionSelected: { borderColor: '#1C1C1E', backgroundColor: '#1C1C1E' },
-    modelText: { fontSize: 16, fontWeight: 'bold', color: '#8E8E93', textAlign: 'center' },
+    modelText: { fontSize: 10, fontWeight: 'bold', color: '#8E8E93', textAlign: 'center' },
     modelTextSelected: { color: '#FFFFFF' },
     scrollCars: { display: 'flex', flexDirection: 'column' },
-    btnOficina: { backgroundColor: '#007AFF', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 20, borderWidth: 4, borderColor: '#fff', alignItems: 'center', marginTop: 10, shadowColor: '#1C1C1E', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 5 },
-    openOficinaText: { fontSize: 12, fontWeight: '900', color: '#FFF', letterSpacing: 2 },
-    playButton: { backgroundColor: '#FFCC00', paddingVertical: 10, borderRadius: 20, borderWidth: 4, borderColor: '#1C1C1E', alignItems: 'center', shadowColor: '#1C1C1E', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 5 },
+    btnContainer: { display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, gap: 10 },
+    openOficinaText: { fontSize: 18, fontWeight: '900', color: '#FFF', letterSpacing: 2 },
+    btnOficina: { backgroundColor: '#007AFF', paddingVertical: 10, borderRadius: 20, textTransform: 'uppercase', width: '33%', borderWidth: 4, borderColor: '#1C1C1E', alignItems: 'center', shadowColor: '#1C1C1E', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 5 },
+    playButton: { backgroundColor: '#FFCC00', paddingVertical: 10, borderRadius: 20, textTransform: 'uppercase', width: '33%', borderWidth: 4, borderColor: '#1C1C1E', alignItems: 'center', shadowColor: '#1C1C1E', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 5 },
     playButtonText: { fontSize: 18, fontWeight: '900', color: '#FFF', letterSpacing: 2 },
 });

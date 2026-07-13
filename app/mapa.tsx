@@ -11,6 +11,7 @@ import CorrenteVisual from '@/components/ui/CorrenteVisual';
 import GuidedBulletVisual from '@/components/ui/GuidedBulletVisual';
 import TornadoVisual from '@/components/ui/TornadoVisual';
 import { useCarSelection } from '@/context/CarContext';
+import { useLoadingStore } from '@/src/store/LoadingStore';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { carMaps } from '@/src/utils/carMaps';
 import { useLocalSearchParams } from 'expo-router';
@@ -54,11 +55,13 @@ const AVAILABLE_BOT_COLORS = [
 
 export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: MapaProps) {
 
+  const hideLoading = useLoadingStore((state) => state.hideLoading);
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
 
   if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
   }
+
 
   const params = useLocalSearchParams<{ deck?: string; mapImage?: string }>();
   const { selectedCar, selectedColorFront, selectedColorBack } = useCarSelection();
@@ -67,6 +70,8 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const finalDeck = params.deck ? JSON.parse(params.deck as string) : fallbackDeck;
 
   const profile = usePlayerStore((state) => state.profile);
+  const addParts = usePlayerStore((state) => state.addParts);
+
   const carKey = (selectedCar || 'buggy') as string;
 
   const carStats = profile?.garage?.[carKey as any] || {
@@ -371,6 +376,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       setupPositions();
 
       setTimeout(() => {
+        hideLoading();
         startRaceSequence();
       }, 2000);
     }
@@ -379,7 +385,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   /* ================= GAME LOOP ================= */
   useEffect(() => {
     if (!started || gameOver) return;
-    const addParts = usePlayerStore((state) => state.addParts);
 
     const loop = setInterval(() => {
       gameTime.current += 1;
@@ -770,7 +775,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
             }
           }
 
-          // --- 6DETECÇÃO DE COLISÃO POR PROXIMIDADE ---
+          // --- 6 DETECÇÃO DE COLISÃO POR PROXIMIDADE ---
           let hitRacer = false;
           // Pequena janela de 15 frames (~0.2s) de imunidade para evitar que quem soltou exploda instantaneamente
           const safetyWindow = tnt.timer < (60 * 10) - 15;

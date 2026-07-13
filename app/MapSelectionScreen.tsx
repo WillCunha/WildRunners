@@ -1,3 +1,4 @@
+import { usePlayerStore } from '@/src/store/playerStore';
 import { CITY_MAPS } from '@/src/utils/cityMaps';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useRef } from 'react';
@@ -17,9 +18,11 @@ const { width } = Dimensions.get('window');
 const ITEM_SIZE = width * 0.35;
 const SPACER_ITEM_SIZE = (width - ITEM_SIZE) / 2;
 
-export default function TrackSelectionScreen({ currentLevel = 2 }) {
+export default function TrackSelectionScreen() {
   const scrollX = useRef(new Animated.Value(0)).current;
-  const params = useLocalSearchParams<{deck?: string}>();
+  const params = useLocalSearchParams<{ deck?: string }>();
+  const profile = usePlayerStore((state) => state.profile);
+
 
   const dataWithSpacers = [
     { id: 'left-spacer' },
@@ -44,6 +47,7 @@ export default function TrackSelectionScreen({ currentLevel = 2 }) {
       extrapolate: 'clamp',
     });
 
+    const currentLevel = profile?.trophies || 0;
     const isUnlocked = currentLevel >= item.levelRequired;
 
     return (

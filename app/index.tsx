@@ -16,6 +16,8 @@ export default function StartScreen() {
   const router = useRouter();
   const profile = usePlayerStore((state) => state.profile);
 
+  
+
   const scaleValue = useRef(new Animated.Value(1)).current;
 
   const player = useAudioPlayer(require('@/assets/audio/wild_runners_main_title.mp3'));

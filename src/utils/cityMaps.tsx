@@ -2,7 +2,7 @@ export const CITY_MAPS = [
   {
     id: 'saopaulo',
     city: 'São Paulo', 
-    levelRequired: 1,
+    levelRequired: 0,
     icon: require('@/assets/images/components/cityMaps/sao_paulo.png'),
     background: require('@/assets/images/components/cenarios/sao_pauloV4.png'),
     gameplay: {
