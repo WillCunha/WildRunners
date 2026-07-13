@@ -1,4 +1,6 @@
+import { useLoadingStore } from '@/src/store/LoadingStore';
 import { usePlayerStore } from '@/src/store/playerStore';
+import { useAssets } from 'expo-asset'; // Instale com: npx expo install expo-asset
 import { useAudioPlayer } from 'expo-audio';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
@@ -15,16 +17,31 @@ import {
 export default function StartScreen() {
   const router = useRouter();
   const profile = usePlayerStore((state) => state.profile);
-
   
+  // Pegamos as funções do SEU loadingStore
+  const showLoading = useLoadingStore((state) => state.showLoading);
+  const hideLoading = useLoadingStore((state) => state.hideLoading);
 
   const scaleValue = useRef(new Animated.Value(1)).current;
-
   const player = useAudioPlayer(require('@/assets/audio/wild_runners_main_title.mp3'));
+
+  const [assets] = useAssets([
+    require("@/assets/images/components/background/start_screen.png"),
+    require("@/assets/images/gameLogoV3.png")
+  ]);
+
+  useEffect(() => {
+    if (assets) {
+      hideLoading();
+    } else {
+      showLoading();
+    }
+  }, [assets, hideLoading, showLoading]);
 
   useEffect(() => {
     player.loop = true;
     player.play();
+    player.volume = 0.5;
 
     const pulseAnimation = Animated.loop(
       Animated.sequence([
@@ -58,33 +75,33 @@ export default function StartScreen() {
     }
   };
 
-    return (
-        <ImageBackground
-            source={require("@/assets/images/components/background/start_screen.png")}
-            resizeMode="cover"
-            style={styles.background}
-        >
 
-            <View style={styles.overlay}>
+  if (!assets) {
+    return null; 
+  }
 
-                <Image
-                    source={require("@/assets/images/gameLogoV3.png")}
-                    style={styles.logo}
-                    resizeMode="contain"
-                />
+  return (
+      <ImageBackground
+          source={require("@/assets/images/components/background/start_screen.png")}
+          resizeMode="cover"
+          style={styles.background}
+      >
+          <View style={styles.overlay}>
+              <Image
+                  source={require("@/assets/images/gameLogoV3.png")}
+                  style={styles.logo}
+                  resizeMode="contain"
+              />
 
-                <TouchableOpacity style={styles.button} onPress={handleStartPress}>
-                    <Text style={styles.buttonText}>
-                        PRESSIONE PARA COMEÇAR
-                    </Text>
-
-                    <View style={styles.bottomGlow}/>
-                </TouchableOpacity>
-
-            </View>
-
-        </ImageBackground>
-    );
+              <TouchableOpacity style={styles.button} onPress={handleStartPress}>
+                  <Text style={styles.buttonText}>
+                      PRESSIONE PARA COMEÇAR
+                  </Text>
+                  <View style={styles.bottomGlow}/>
+              </TouchableOpacity>
+          </View>
+      </ImageBackground>
+  );
 }
 
 const styles = StyleSheet.create({

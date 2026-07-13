@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 interface LoadingState {
-  isLoading: true;
+  isLoading: boolean;
   tip: string;
   showLoading: (tip?: string) => void;
   hideLoading: () => void;
@@ -15,7 +15,7 @@ const TIPS = [
 ];
 
 export const useLoadingStore = create<LoadingState>((set) => ({
-  isLoading: false,
+  isLoading: true,
   tip: TIPS[0],
   showLoading: () => set({ 
     isLoading: true, 

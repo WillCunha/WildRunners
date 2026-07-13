@@ -1,4 +1,3 @@
-import * as Font from 'expo-font';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
@@ -15,69 +14,39 @@ export default function LoadingScreen() {
   const { next } = useLocalSearchParams(); // Pega a rota de destino
   
   const [tip, setTip] = useState('');
-  const [fontsLoaded, setFontsLoaded] = useState(false);
   const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // Escolhe uma dica aleatória ao montar a tela
     const randomTip = TIPS[Math.floor(Math.random() * TIPS.length)];
     setTip(randomTip);
 
-    let isAnimationDone = false;
-    let areFontLoaded = false;
-
-    const checkAndNavigate = () => {
-      if(isAnimationDone && areFontLoaded) {
-        if (next) {
-          router.replace(next as string);
-        } else {
-          router.replace('/'); // Fallback de segurança
-        }
-      }
-    }
-
-    async function loadFonts() {
-      try {
-        await Font.loadAsync({
-          'Fredoka-Regular': require('@/assets/fonts/Fredoka-Regular.ttf'),
-          'Fredoka-Medium': require('@/assets/fonts/Fredoka-Medium.ttf'),
-          'Fredoka-Semibold': require('@/assets/fonts/Fredoka_SemiExpanded-Bold.ttf'),
-          'Fredoka-Bold': require('@/assets/fonts/Fredoka-Bold.ttf'),
-        });
-        areFontLoaded = true;
-        setFontsLoaded(true);
-        checkAndNavigate();
-      } catch (error) {
-        console.warn("Erro ao carregar as fontes: ", error);
-        areFontLoaded = true; // Mesmo que falhe, consideramos como carregado para não travar a navegação
-        checkAndNavigate();
-      }
-    }
-
-    loadFonts();
-
+    // Dispara a animação da barra de progresso (4.5 segundos)
     Animated.timing(progress, {
       toValue: 1,
-      duration: 4500, // Tempo de loading
+      duration: 4500, 
       easing: Easing.linear,
-      useNativeDriver: false, 
+      useNativeDriver: false, // Necessário false pois animamos a propriedade 'width'
     }).start(() => {
-      isAnimationDone = true;
-      checkAndNavigate();
+      // Assim que a animação acaba, faz o redirecionamento direto
+      if (next) {
+        router.replace(next as string);
+      } else {
+        router.replace('/'); // Fallback de segurança
+      }
     });
   }, []);
 
+  // Interpola o valor numérico (0 a 1) para porcentagem (0% a 100%)
   const widthInterpolate = progress.interpolate({
     inputRange: [0, 1],
     outputRange: ['0%', '100%'],
   });
 
-  if(!fontsLoaded){
-    return <View style={styles.container}></View>
-  }
-
   return (
     <View style={styles.container}>
       <View style={styles.cardContainer}>
+        {/* Agora você pode usar a sua fonte Fredoka aqui sem medo se quiser! */}
         <Text style={styles.title}>CARREGANDO...</Text>
         
         <View style={styles.tipBox}>
@@ -95,9 +64,9 @@ export default function LoadingScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1a1a1a', justifyContent: 'center', alignItems: 'center', padding: 20 },
   cardContainer: { width: '90%', backgroundColor: '#333', borderWidth: 4, borderColor: '#000000', borderRadius: 20, padding: 24, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 6, height: 6 }, shadowOpacity: 1, shadowRadius: 0, elevation: 5 },
-  title: { fontSize: 28, fontWeight: '900', color: '#fff', marginBottom: 20, letterSpacing: 2 },
+  title: { fontSize: 28, color: '#fff', marginBottom: 20, letterSpacing: 2, fontFamily: 'Fredoka-Bold' }, // Exemplo aplicando a fonte
   tipBox: { width: '100%', backgroundColor: '#FFF275', borderWidth: 3, borderColor: '#000', borderRadius: 12, padding: 16, marginBottom: 30 },
-  tipText: { fontSize: 16, fontWeight: 'bold', color: '#000', textAlign: 'center', lineHeight: 22 },
+  tipText: { fontSize: 16, color: '#000', textAlign: 'center', lineHeight: 22, fontFamily: 'Fredoka-Medium' }, // Exemplo aplicando a fonte
   progressBarBackground: { width: '100%', height: 24, backgroundColor: '#e0e0e0', borderWidth: 3, borderColor: '#000', borderRadius: 12, overflow: 'hidden' },
   progressBarFill: { height: '100%', backgroundColor: '#34C759' },
 });

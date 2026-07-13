@@ -18,7 +18,7 @@ const { width } = Dimensions.get('window');
 const ITEM_SIZE = width * 0.35;
 const SPACER_ITEM_SIZE = (width - ITEM_SIZE) / 2;
 
-export default function TrackSelectionScreen() {
+export default function MapSelectionScreen() {
   const scrollX = useRef(new Animated.Value(0)).current;
   const params = useLocalSearchParams<{ deck?: string }>();
   const profile = usePlayerStore((state) => state.profile);
@@ -141,13 +141,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
+    fontFamily: 'Fredoka-Bold',
     color: '#FFF',
     fontSize: 24,
-    fontWeight: '900',
     textAlign: 'center',
     marginBottom: 40,
     letterSpacing: 4,
-    fontFamily: 'Fredoka-Bold',
   },
   cardScaleWrapper: {
     width: '90%',
@@ -181,15 +180,14 @@ const styles = StyleSheet.create({
   },
   cityTextContainer: {
     paddingTop: 16,
-    paddingBottom: 24, // Espaço para o texto não ficar colado no botão
+    paddingBottom: 24,
     alignItems: 'center',
   },
   cityText: {
+    fontFamily: 'Fredoka-Regular',
     fontSize: 22,
-    fontWeight: '900',
     color: '#000',
     textTransform: 'uppercase',
-    fontFamily: 'Fredoka-Regular'
   },
   btnContinue: {
     position: 'absolute',
@@ -197,7 +195,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: '50%',
     height: 50,
-    backgroundColor: '#FFEB3B', // Um amarelo/verde vibrante para dar destaque no estilo noir
+    backgroundColor: '#FFEB3B',
     borderRadius: 15,
     borderWidth: 4,
     borderColor: '#000',
@@ -212,7 +210,8 @@ const styles = StyleSheet.create({
   btnContinueText: {
     color: '#000',
     fontSize: 16,
-    fontWeight: '900',
+    fontFamily: 'Fredoka-Regular',
+
   },
   btnLocked: {
     position: 'absolute',
@@ -230,6 +229,7 @@ const styles = StyleSheet.create({
   btnLockedText: {
     color: '#000',
     fontSize: 14,
-    fontWeight: '900',
+    fontFamily: 'Fredoka-Bold',
+
   },
 });
