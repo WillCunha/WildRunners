@@ -1,6 +1,4 @@
 // PARA TESTES REMOVA SEMPRE O "USE EFFECT DE PREPARAÇÃO DO INICIO"
-
-
 import Carro from '@/components/Carro';
 import CenarioBackground from '@/components/Cenarios/CenarioBackground';
 import ChainsEffect from '@/components/Decks/ChainsEffect';
@@ -10,12 +8,13 @@ import TornadoEffect from '@/components/Decks/TornadoEffect';
 import CorrenteVisual from '@/components/ui/CorrenteVisual';
 import GuidedBulletVisual from '@/components/ui/GuidedBulletVisual';
 import TornadoVisual from '@/components/ui/TornadoVisual';
+import { AudioContext } from '@/context/AudioContext';
 import { useCarSelection } from '@/context/CarContext';
 import { useLoadingStore } from '@/src/store/LoadingStore';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { carMaps } from '@/src/utils/carMaps';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Animated, LayoutAnimation, Platform, StyleSheet, Text, TouchableOpacity, UIManager, View, useWindowDimensions } from 'react-native';
 
 type CarKey = keyof typeof carMaps;
@@ -161,7 +160,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const timeRemainingRef = useRef(0);
 
   const isCountingRef = useRef(false);
-
+  const { playBeep, playMusic } = useContext(AudioContext);
 
   const blocksRef = useRef<Block[]>([
     { id: 1, type: 'flat', x: 0, y: SCREEN_HEIGHT - 100, width: SCREEN_WIDTH * 1.5 }
@@ -448,7 +447,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
           setNitroPercent(0);
         }
       } else {
-        playerSpeed.current = Math.max(playerSpeed.current - FRICTION, MIN_SPEED);
+        playerSpeed.current = Math.min(playerSpeed.current + ACCELERATION, DYNAMIC_MAX_SPEED);
       }
 
       if (playerStatus.current.isSlowed) {
@@ -1405,6 +1404,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     }
 
     if (botsRef.current[0]) {
+      playBeep();
       setIsCameraLocked(true);
       setCountdownStep(3);
       setFocusedDriver(null);
@@ -1415,6 +1415,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     await sleep(1000);
 
     if (botsRef.current[1]) {
+      playBeep();
       setIsCameraLocked(true);
       setCountdownStep(2);
       setFocusedDriver(null);
@@ -1426,6 +1427,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     await sleep(1000);
 
     if (botsRef.current[2]) {
+      playBeep();
       setIsCameraLocked(true);
       setCountdownStep(1);
       setFocusedDriver(null);
@@ -1437,6 +1439,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
     setFocusedDriver(null);
     setCountdownStep('JÁ!');
+    playMusic(require('@/assets/audio/wild_runners_main_title.mp3'));
     setIsCameraLocked(false);
     setStarted(true);
 
@@ -1960,11 +1963,9 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
               onPress={() => handleUseCard(cardId)}
               style={[
                 styles.dynamicCardBtn,
-                { left: 15 + index * 95 },
                 !hasboost && { opacity: 0.4 } // Fica apagadinha/cinza sem boost!
               ]}
             >
-              {/* Progresso visual do cooldown */}
               {currentCooldown > 0 && (
                 <View style={{
                   position: 'absolute', bottom: 0, left: 0, right: 0,
@@ -1973,7 +1974,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
                 }} />
               )}
 
-              {/* Indicador de custo individual por carta */}
               <View style={styles.cardCostBadge}>
                 <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '900' }}>💧{cost}</Text>
               </View>
@@ -2150,7 +2150,28 @@ const styles = StyleSheet.create({
   boostBarContainer: { position: 'absolute', bottom: 95, left: 20, width: 360, height: 16, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 8, borderWidth: 2, borderColor: '#FFF', overflow: 'hidden', justifyContent: 'center', alignItems: 'center', zIndex: 30 },
   boostBarFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#FF007A' },
   boostBarText: { color: '#FFF', fontWeight: '900', fontSize: 10, zIndex: 5 },
-  deckHandContainer: { position: 'absolute', bottom: 5, left: 5, height: 90, zIndex: 30 },
-  dynamicCardBtn: { width: 85, height: 82, borderRadius: 16, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', backgroundColor: '#1B1B1B', borderWidth: 3, borderColor: '#FF004D', position: 'absolute' },
+  deckHandContainer: {
+    position: 'absolute',
+    bottom: 5,
+    left: 0,
+    right: 0,
+    height: 90,
+    zIndex: 30,
+    flexDirection: 'row',       // Alinha horizontalmente
+    justifyContent: 'center',   // Centraliza no meio da tela
+    alignItems: 'center',
+    gap: 10                     // Espaço entre as cartas
+  },
+  dynamicCardBtn: {
+    width: 85,
+    height: 82,
+    borderRadius: 16,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1B1B1B',
+    borderWidth: 3,
+    borderColor: '#FF004D'
+  },
   cardCostBadge: { position: 'absolute', top: -2, right: -2, backgroundColor: '#FF007A', borderRadius: 8, paddingHorizontal: 4, paddingVertical: 1, borderWidth: 1, borderColor: '#FFF', zIndex: 10 },
 });

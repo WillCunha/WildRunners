@@ -141,12 +141,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
-    fontFamily: 'Fredoka-Bold',
     color: '#FFF',
     fontSize: 24,
     textAlign: 'center',
     marginBottom: 40,
     letterSpacing: 4,
+    fontFamily: 'Fredoka-Bold',
   },
   cardScaleWrapper: {
     width: '90%',
@@ -180,14 +180,14 @@ const styles = StyleSheet.create({
   },
   cityTextContainer: {
     paddingTop: 16,
-    paddingBottom: 24,
+    paddingBottom: 24, // Espaço para o texto não ficar colado no botão
     alignItems: 'center',
   },
   cityText: {
-    fontFamily: 'Fredoka-Regular',
     fontSize: 22,
     color: '#000',
     textTransform: 'uppercase',
+    fontFamily: 'Fredoka-Regular'
   },
   btnContinue: {
     position: 'absolute',
@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: '50%',
     height: 50,
-    backgroundColor: '#FFEB3B',
+    backgroundColor: '#FFEB3B', // Um amarelo/verde vibrante para dar destaque no estilo noir
     borderRadius: 15,
     borderWidth: 4,
     borderColor: '#000',
@@ -210,8 +210,7 @@ const styles = StyleSheet.create({
   btnContinueText: {
     color: '#000',
     fontSize: 16,
-    fontFamily: 'Fredoka-Regular',
-
+    fontWeight: '900',
   },
   btnLocked: {
     position: 'absolute',
@@ -229,7 +228,5 @@ const styles = StyleSheet.create({
   btnLockedText: {
     color: '#000',
     fontSize: 14,
-    fontFamily: 'Fredoka-Bold',
-
   },
 });

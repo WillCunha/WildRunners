@@ -45,8 +45,9 @@ export default function CarSelectionScreen() {
     const [previewColorBack, setPreviewColorBack] = useState<string>(AVAILABLE_COLORS[0]);
 
     const currentCarData = carMaps[previewCar];
-    const carKeys = Object.keys(carMaps) as CarKey[];
-
+    const carKeys = (Object.keys(carMaps) as CarKey[]).filter(
+        (carKey) => profile?.garage[carKey] !== undefined
+    );
     const playerTier = getPlayerTier(profile?.trophies || 0);
     const isLockedByTier = currentCarData.tier > playerTier;
 
@@ -326,7 +327,7 @@ const styles = StyleSheet.create({
     colorScroll: { marginBottom: 30, maxWidth: '5%', maxHeight: 150, minHeight: 150, overflow: 'hidden', marginLeft: 20, paddingLeft: 10, paddingTop: 5 },
     colorOption: { width: 30, height: 30, borderRadius: 24, borderWidth: 1, borderColor: 'rgba(0,0,0,0.1)', marginBottom: 4 },
     colorOptionSelected: { borderColor: '#1C1C1E', borderWidth: 3, transform: [{ scale: 1.1 }] },
-    modelScroll: { padding: 12, marginTop: -18, backgroundColor: '#fff', marginBottom: 2, maxWidth: 160, textAlign: 'center', maxHeight: 200, minHeight: 200, overflow: 'hidden', paddingTop: 5, paddingBottom: 10, borderRadius: 16, borderWidth: 3, borderColor: '#1C1C1E', elevation: 5,shadowColor: '#1C1C1E',shadowOffset: { width: 3, height: 3 },shadowOpacity: 1,shadowRadius: 0,},
+    modelScroll: { padding: 12, marginTop: -18, backgroundColor: '#fff', marginBottom: 2, maxWidth: 160, textAlign: 'center', maxHeight: 200, minHeight: 200, overflow: 'hidden', paddingTop: 5, paddingBottom: 10, borderRadius: 16, borderWidth: 3, borderColor: '#1C1C1E', elevation: 5, shadowColor: '#1C1C1E', shadowOffset: { width: 3, height: 3 }, shadowOpacity: 1, shadowRadius: 0, },
     modelTitle: { fontSize: 12, fontWeight: '900', color: '#1C1C1E', marginBottom: 10, textAlign: 'center' },
     modelOption: { backgroundColor: '#FFFFFF', paddingVertical: 5, borderRadius: 16, borderWidth: 3, borderColor: '#000', marginBottom: 4 },
     modelOptionSelected: { borderColor: '#1C1C1E', backgroundColor: '#1C1C1E' },
