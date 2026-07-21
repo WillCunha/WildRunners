@@ -1,10 +1,12 @@
+import { AudioContext } from '@/context/AudioContext';
 import { useCarSelection } from '@/context/CarContext';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { carMaps } from '@/src/utils/carMaps';
 import { useNavigation } from '@react-navigation/native';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+
 
 type CarKey = keyof typeof carMaps;
 
@@ -23,6 +25,8 @@ const getPlayerTier = (trophies: number) => {
     return 1;
 };
 
+
+
 // Componente visual da barra de progresso
 const StatBar = ({ label, progress }: { label: string, progress: number }) => (
     <View style={styles.statRow}>
@@ -35,6 +39,7 @@ const StatBar = ({ label, progress }: { label: string, progress: number }) => (
 
 export default function CarSelectionScreen() {
     const navigation = useNavigation();
+    const {playMusic} = useContext(AudioContext);
     const { setSelectedCar, setSelectedColorFront, setSelectedColorBack } = useCarSelection();
 
     const profile = usePlayerStore((state) => state.profile);
@@ -56,6 +61,10 @@ export default function CarSelectionScreen() {
     const isOwned = ownedCarData !== undefined;
 
     const carCost = currentCarData.tier * 100;
+
+    useEffect(() => {
+        playMusic(require('@/assets/audio/dashboard/audio_one.mp3'));
+    }, [playMusic]);
 
     // Lógica das barras de progresso (0% a 100%)
     const calculateProgress = (level?: number) => {
@@ -105,11 +114,13 @@ export default function CarSelectionScreen() {
 
     if (isLockedByTier) {
         buttonText = `BLOQUEADO (REQUER NÍVEL ${currentCarData.tier})`;
-        dynamicButtonStyle = [styles.playButton, { backgroundColor: '#555555', borderColor: '#333333' }];
+        dynamicButtonStyle = [styles.playButton, { textAlign: 'center', backgroundColor:'#555555', borderColor: '#333333' }];
     } else if (!isOwned) {
         buttonText = `COMPRAR (${carCost} ENGRENAGENS)`;
         dynamicButtonStyle = [styles.playButton, { backgroundColor: '#FF3B30', borderColor: '#8B0000' }];
     }
+
+    
 
     return (
         <View style={styles.container}>
@@ -338,5 +349,5 @@ const styles = StyleSheet.create({
     openOficinaText: { fontSize: 18, fontWeight: '900', color: '#FFF', letterSpacing: 2 },
     btnOficina: { backgroundColor: '#007AFF', paddingVertical: 10, borderRadius: 20, textTransform: 'uppercase', width: '33%', borderWidth: 4, borderColor: '#1C1C1E', alignItems: 'center', shadowColor: '#1C1C1E', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 5 },
     playButton: { backgroundColor: '#FFCC00', paddingVertical: 10, borderRadius: 20, textTransform: 'uppercase', width: '33%', borderWidth: 4, borderColor: '#1C1C1E', alignItems: 'center', shadowColor: '#1C1C1E', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 5 },
-    playButtonText: { fontSize: 18, fontWeight: '900', color: '#FFF', letterSpacing: 2 },
+    playButtonText: { fontSize: 18, fontWeight: '900', color: '#FFF', letterSpacing: 2 , textAlign: 'center'},
 });

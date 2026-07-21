@@ -6,11 +6,12 @@ const ALL_CARDS = [
     { id: 'chains', name: 'CHAINS', cost: 3, color: '#AF52DE' },
     { id: 'tnt', name: 'TNT', cost: 4, color: '#FF4500' },
     { id: 'swap', name: 'SWAP', cost: 4, color: '#FF004D' },
-    { id: 'slow_slow', name: 'SLOW SLOW', cost: 5, color: '#FF9500' }, // ID corrigido para bater com o Mapa
+    { id: 'slow_slow', name: 'SLOW SLOW', cost: 5, color: '#FF9500' }, 
     { id: 'blind', name: 'BLIND', cost: 5, color: '#FFCC80' },
     { id: 'bullet', name: 'BULLET', cost: 3, color: '#007AFF' },
     { id: 'tornado', name: 'TORNADO', cost: 4, color: '#34C759' },
-    { id: 'nitro_power', name: 'NITRO POWER', cost: 2, color: '#00FFFF' }, // ID corrigido para bater com o Mapa
+    { id: 'nitro_power', name: 'NITRO POWER', cost: 2, color: '#00FFFF' }, 
+    { id: 'bubble_lift', name: 'BUBBLE LIFT', cost: 4, color: '#32CD32' }, 
 ];
 
 export default function DeckSelection() {

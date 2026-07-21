@@ -1,3 +1,4 @@
+import { AudioContext } from '@/context/AudioContext';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { CITY_MAPS } from '@/src/utils/cityMaps';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -22,6 +23,7 @@ export default function MapSelectionScreen() {
   const scrollX = useRef(new Animated.Value(0)).current;
   const params = useLocalSearchParams<{ deck?: string }>();
   const profile = usePlayerStore((state) => state.profile);
+  const { pauseMusic } = React.useContext(AudioContext);
 
 
   const dataWithSpacers = [
@@ -76,7 +78,8 @@ export default function MapSelectionScreen() {
               style={styles.btnContinue}
               activeOpacity={0.8}
               onPress={() => {
-                console.log("url do background passada: ", item.background)
+                console.log("url do background passada: ", item.background);
+                pauseMusic();
                 router.navigate({
                   pathname: '/mapa',
                   params: {
