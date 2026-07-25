@@ -8,6 +8,7 @@ interface Racer {
 
 interface TornadoVisualProps {
     callerX: number;
+    callerY: number;
     victims: Racer[];
     onHitVictim: (targetId: string) => void;
     onComplete: () => void;
