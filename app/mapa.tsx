@@ -6,6 +6,7 @@ import GuidedBulletEffect from '@/components/Decks/GuidedBulletEffect';
 import SwapEffect from '@/components/Decks/SwapEffect';
 import TornadoEffect from '@/components/Decks/TornadoEffect';
 import CorrenteVisual from '@/components/ui/CorrenteVisual';
+import ExplosionVisual from '@/components/ui/ExplosionVisual';
 import GuidedBulletVisual from '@/components/ui/GuidedBulletVisual';
 import TornadoVisual from '@/components/ui/TornadoVisual';
 import { AudioContext } from '@/context/AudioContext';
@@ -589,8 +590,12 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         if (bot.isDead) {
           bot.speed = Math.max(bot.speed - FRICTION, 0);
           bot.x += (bot.speed - dynamicSpeed);
-          bot.velocity = GRAVITY;
+
+          // Mantém o impulso recebido pela explosão e faz o carro destruído girar no ar.
+          bot.velocity += GRAVITY;
           bot.y += bot.velocity;
+          bot.angle = (bot.angle + 32) % 360;
+
           return; // ESSE RETURN IMPEDE A IA DO BOT DO LOOP SER EXECUTADA
         }
 
@@ -833,10 +838,10 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
           // EXPLOSÃO! (Ativa por tempo limite OU se algum corredor encostar)
           if (tnt.timer <= 0 || hitRacer) {
             tnt.state = 'exploding';
-            tnt.timer = 15;
+            tnt.timer = 34; // ~566 ms: tempo suficiente para os 8 frames da explosão
 
             const EXPLOSION_RADIUS = 160;
-            const JUMP_PENALTY = JUMP_FORCE * 1.6;
+            const JUMP_PENALTY = JUMP_FORCE * 2.0;
 
             const applyBlast = (racerId: string, rx: number, ry: number) => {
               const dx = rx - tnt.x;
@@ -2007,17 +2012,11 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         {tntsToRender.map((tnt) => {
           if (tnt.state === 'exploding') {
             return (
-              <View key={tnt.id} style={{
-                position: 'absolute', left: tnt.x - 50, top: tnt.y - 50,
-                width: PLAYER_SIZE + 100, height: PLAYER_SIZE + 100,
-                backgroundColor: 'rgba(255, 68, 0, 0.69)',
-                borderRadius: 100,
-                justifyContent: 'center', alignItems: 'center',
-                zIndex: 6,
-                borderWidth: 4, borderColor: '#FFFF00'
-              }}>
-                <Text style={{ fontSize: 32, fontWeight: '900', color: '#FFF' }}>BOOM!</Text>
-              </View>
+              <ExplosionVisual
+                key={tnt.id}
+                x={tnt.x}
+                y={tnt.y}
+              />
             );
           }
 
