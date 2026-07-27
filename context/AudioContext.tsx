@@ -1,87 +1,139 @@
 import { useAudioPlayer } from 'expo-audio';
-import React, { createContext, ReactNode, useEffect, useRef, useState } from 'react';
+import React, {
+  createContext,
+  ReactNode,
+  useCallback,
+  useMemo,
+  useRef,
+} from 'react';
+
+type MusicOptions = {
+  volume?: number;
+  loop?: boolean;
+  restart?: boolean;
+};
 
 interface AudioContextProps {
-  playMusic: (source: any) => void;
+  playMusic: (source: any, options?: MusicOptions) => void;
   pauseMusic: () => void;
+  stopMusic: () => void;
   playBeep: () => void;
-  //playGo: () => void;
 }
 
 export const AudioContext = createContext<AudioContextProps>({
   playMusic: () => {},
   pauseMusic: () => {},
+  stopMusic: () => {},
   playBeep: () => {},
-  //playGo: () => {},
 });
 
-export const AudioProvider = ({ children }: { children: ReactNode }) => {
-  const [musicSource, setMusicSource] = useState<any>(null);
-  const bgMusic = useAudioPlayer(musicSource);
-  
-  // 1. POOL DE BIPES: Criamos 3 players independentes apontando para o mesmo arquivo
-  const beepPlayer1 = useAudioPlayer(require('@/assets/audio/beep.mp3'));
-  const beepPlayer2 = useAudioPlayer(require('@/assets/audio/beep.mp3'));
-  const beepPlayer3 = useAudioPlayer(require('@/assets/audio/beep.mp3'));
-  
-  //const goSound = useAudioPlayer(require('@/assets/audio/go.mp3'));
+export const AudioProvider = ({
+  children,
+}: {
+  children: ReactNode;
+}) => {
+  /*
+   * Existe apenas um player para todas as músicas:
+   * dashboard, corrida, menus etc.
+   */
+  const musicPlayer = useAudioPlayer(null);
 
-  const nextBeepRef = useRef(1);
+  const musicPlayerRef = useRef(musicPlayer);
+  musicPlayerRef.current = musicPlayer;
 
-  useEffect(() => {
-    if (bgMusic && musicSource) {
-      bgMusic.loop = true;
-      bgMusic.volume = 0.15;
-      bgMusic.play();
-    }
-  }, [bgMusic, musicSource]);
+  const currentMusicSourceRef = useRef<any>(null);
 
-  const playMusic = (source: any) => {
-    if (musicSource === source) {
-      if (bgMusic) bgMusic.play();
-      return;
-    }
-    if (bgMusic) {
-      bgMusic.pause();
-    }
-    setMusicSource(source);
-  };
+  const beepPlayer1 = useAudioPlayer(
+    require('@/assets/audio/beep.mp3')
+  );
 
-  const pauseMusic = () => {
-    if (bgMusic) {
-      bgMusic.pause();
-    }
-  };
+  const beepPlayer2 = useAudioPlayer(
+    require('@/assets/audio/beep.mp3')
+  );
 
-  const playBeep = () => {
-    let activePlayer;
+  const beepPlayer3 = useAudioPlayer(
+    require('@/assets/audio/beep.mp3')
+  );
 
-    if (nextBeepRef.current === 1) {
-      activePlayer = beepPlayer1;
-      nextBeepRef.current = 2;
-    } else if (nextBeepRef.current === 2) {
-      activePlayer = beepPlayer2;
-      nextBeepRef.current = 3;
-    } else {
-      activePlayer = beepPlayer3;
-      nextBeepRef.current = 1; 
-    }
+  const beepPlayersRef = useRef([
+    beepPlayer1,
+    beepPlayer2,
+    beepPlayer3,
+  ]);
 
-    if (activePlayer) {
-      activePlayer.seekTo(0); 
-      activePlayer.play();    
-    }
-  };
+  beepPlayersRef.current = [
+    beepPlayer1,
+    beepPlayer2,
+    beepPlayer3,
+  ];
 
-  // const playGo = () => {
-  //   if (goSound) {
-  //     goSound.seekTo(0);
-  //     goSound.play();
-  //   }
-  // };
+  const nextBeepRef = useRef(0);
+
+  const playMusic = useCallback(
+    (source: any, options: MusicOptions = {}) => {
+      const player = musicPlayerRef.current;
+
+      const {
+        volume = 0.15,
+        loop = true,
+        restart = false,
+      } = options;
+
+      const isNewSource =
+        currentMusicSourceRef.current !== source;
+
+ 
+      if (isNewSource) {
+        player.pause();
+        player.replace(source);
+
+        currentMusicSourceRef.current = source;
+      } else if (restart) {
+
+        void player.seekTo(0);
+      }
+
+      player.loop = loop;
+      player.volume = volume;
+      player.play();
+    },
+    []
+  );
+
+  const pauseMusic = useCallback(() => {
+    musicPlayerRef.current.pause();
+  }, []);
+
+  const stopMusic = useCallback(() => {
+    const player = musicPlayerRef.current;
+
+    player.pause();
+    void player.seekTo(0);
+  }, []);
+
+  const playBeep = useCallback(() => {
+    const players = beepPlayersRef.current;
+    const activePlayer = players[nextBeepRef.current];
+
+    nextBeepRef.current =
+      (nextBeepRef.current + 1) % players.length;
+
+    void activePlayer.seekTo(0);
+    activePlayer.play();
+  }, []);
+
+  const contextValue = useMemo(
+    () => ({
+      playMusic,
+      pauseMusic,
+      stopMusic,
+      playBeep,
+    }),
+    [playMusic, pauseMusic, stopMusic, playBeep]
+  );
 
   return (
-    <AudioContext.Provider value={{ playMusic, pauseMusic, playBeep }}>
+    <AudioContext.Provider value={contextValue}>
       {children}
     </AudioContext.Provider>
   );

@@ -26,6 +26,9 @@ const getPlayerTier = (trophies: number) => {
 };
 
 
+const DASHBOARD_MUSIC = require(
+    '@/assets/audio/dashboard/audio_one.mp3'
+);
 
 // Componente visual da barra de progresso
 const StatBar = ({ label, progress }: { label: string, progress: number }) => (
@@ -39,32 +42,55 @@ const StatBar = ({ label, progress }: { label: string, progress: number }) => (
 
 export default function CarSelectionScreen() {
     const navigation = useNavigation();
-    const {playMusic} = useContext(AudioContext);
+    const { playMusic } = useContext(AudioContext);
     const { setSelectedCar, setSelectedColorFront, setSelectedColorBack } = useCarSelection();
 
     const profile = usePlayerStore((state) => state.profile);
     const buyCar = usePlayerStore((state) => state.buyCar);
 
-    const [previewCar, setPreviewCar] = useState<CarKey>('fusca');
+    // Começa sem carro para não exibir um veículo que ainda não foi carregado da garagem.
+    const [previewCar, setPreviewCar] = useState<CarKey | null>(null);
     const [previewColorFront, setPreviewColorFront] = useState<string>(AVAILABLE_COLORS[0]);
     const [previewColorBack, setPreviewColorBack] = useState<string>(AVAILABLE_COLORS[0]);
 
-    const currentCarData = carMaps[previewCar];
+    // A lista contém somente veículos realmente comprados pelo jogador.
     const carKeys = (Object.keys(carMaps) as CarKey[]).filter(
         (carKey) => profile?.garage[carKey] !== undefined
     );
+    const firstOwnedCar = carKeys[0] ?? null;
+
     const playerTier = getPlayerTier(profile?.trophies || 0);
-    const isLockedByTier = currentCarData.tier > playerTier;
+    const currentCarData = previewCar ? carMaps[previewCar] : null;
 
-    // Dados do carro na garagem
-    const ownedCarData = profile?.garage[previewCar];
+    // Dados do carro atualmente selecionado na lista.
+    const ownedCarData = previewCar ? profile?.garage[previewCar] : undefined;
     const isOwned = ownedCarData !== undefined;
+    const isLockedByTier = currentCarData
+        ? currentCarData.tier > playerTier
+        : false;
 
-    const carCost = currentCarData.tier * 100;
+    const carCost = currentCarData ? currentCarData.tier * 100 : 0;
 
     useEffect(() => {
-        playMusic(require('@/assets/audio/dashboard/audio_one.mp3'));
+        playMusic(DASHBOARD_MUSIC, {
+            volume: 0.15,
+            loop: true,
+        });
     }, [playMusic]);
+
+    // Quando o Zustand terminar de carregar o perfil, seleciona o primeiro carro comprado.
+    // Se o carro atual continuar pertencendo ao jogador, mantém a seleção feita na lista.
+    useEffect(() => {
+        if (!profile) return;
+
+        setPreviewCar((currentPreview) => {
+            const currentStillOwned = currentPreview
+                ? profile.garage[currentPreview] !== undefined
+                : false;
+
+            return currentStillOwned ? currentPreview : firstOwnedCar;
+        });
+    }, [profile, firstOwnedCar]);
 
     // Lógica das barras de progresso (0% a 100%)
     const calculateProgress = (level?: number) => {
@@ -79,7 +105,7 @@ export default function CarSelectionScreen() {
     const defProgress = calculateProgress(ownedCarData?.engrenagem?.defenseLevel);
 
     const handleOpenOficina = () => {
-        if (!isOwned) {
+        if (!previewCar || !currentCarData || !isOwned) {
             Alert.alert("Bloqueado", "Você precisa comprar o carro antes de melhorá-lo.");
             return;
         }
@@ -93,7 +119,7 @@ export default function CarSelectionScreen() {
     };
 
     const handleActionPress = () => {
-        if (isLockedByTier) return;
+        if (!previewCar || !currentCarData || isLockedByTier) return;
 
         if (!isOwned) {
             const success = buyCar(previewCar, 0, carCost);
@@ -112,15 +138,18 @@ export default function CarSelectionScreen() {
     let buttonText = 'CONTINUAR';
     let dynamicButtonStyle = styles.playButton;
 
-    if (isLockedByTier) {
+    if (!currentCarData) {
+        buttonText = 'NENHUM VEÍCULO DISPONÍVEL';
+        dynamicButtonStyle = [styles.playButton, { backgroundColor: '#555555', borderColor: '#333333' }];
+    } else if (isLockedByTier) {
         buttonText = `BLOQUEADO (REQUER NÍVEL ${currentCarData.tier})`;
-        dynamicButtonStyle = [styles.playButton, { textAlign: 'center', backgroundColor:'#555555', borderColor: '#333333' }];
+        dynamicButtonStyle = [styles.playButton, { textAlign: 'center', backgroundColor: '#555555', borderColor: '#333333' }];
     } else if (!isOwned) {
         buttonText = `COMPRAR (${carCost} ENGRENAGENS)`;
         dynamicButtonStyle = [styles.playButton, { backgroundColor: '#FF3B30', borderColor: '#8B0000' }];
     }
 
-    
+
 
     return (
         <View style={styles.container}>
@@ -177,11 +206,17 @@ export default function CarSelectionScreen() {
                 </ScrollView>
 
                 <View style={[styles.carWrapper, isLockedByTier && { opacity: 0.3 }]}>
-                    <Image source={currentCarData.corpoBrancoFrente} style={[styles.carBase, { tintColor: previewColorBack }]} resizeMode="contain" />
-                    <Image source={currentCarData.corpoBrancoTras} style={[styles.carBase, { tintColor: previewColorFront }]} resizeMode="contain" />
-                    <Image source={currentCarData.corpoTransparente} style={styles.carOverlay} resizeMode="contain" />
-                    <Image source={currentCarData.wheelImage} style={[styles.wheel, { width: currentCarData.size.width, height: currentCarData.size.height, left: currentCarData.rodaTras.x, bottom: currentCarData.rodaTras.y }]} />
-                    <Image source={currentCarData.wheelImage} style={[styles.wheel, { width: currentCarData.size.width, height: currentCarData.size.height, left: currentCarData.rodaFrente.x, bottom: currentCarData.rodaFrente.y }]} />
+                    {currentCarData && isOwned ? (
+                        <>
+                            <Image source={currentCarData.corpoBrancoFrente} style={[styles.carBase, { tintColor: previewColorBack }]} resizeMode="contain" />
+                            <Image source={currentCarData.corpoBrancoTras} style={[styles.carBase, { tintColor: previewColorFront }]} resizeMode="contain" />
+                            <Image source={currentCarData.corpoTransparente} style={styles.carOverlay} resizeMode="contain" />
+                            <Image source={currentCarData.wheelImage} style={[styles.wheel, { width: currentCarData.size.width, height: currentCarData.size.height, left: currentCarData.rodaTras.x, bottom: currentCarData.rodaTras.y }]} />
+                            <Image source={currentCarData.wheelImage} style={[styles.wheel, { width: currentCarData.size.width, height: currentCarData.size.height, left: currentCarData.rodaFrente.x, bottom: currentCarData.rodaFrente.y }]} />
+                        </>
+                    ) : (
+                        <Text style={styles.noCarText}>NENHUM VEÍCULO COMPRADO</Text>
+                    )}
                 </View>
 
 
@@ -330,6 +365,7 @@ const styles = StyleSheet.create({
     previewContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 30, },
     selectorColumn: { alignItems: 'center', justifyContent: 'center', display: 'flex', flexDirection: 'row', width: '18%' },
     carWrapper: { width: '30%', height: 100, justifyContent: 'center', alignItems: 'center', zIndex: 999 },
+    noCarText: { fontSize: 12, fontWeight: '900', color: '#8E8E93', textAlign: 'center' },
     carBase: { width: '100%', height: '100%', zIndex: 999, position: 'absolute', top: 0, left: 0 },
     carOverlay: { width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, zIndex: 999 },
     wheel: { width: 55, height: 55, position: 'absolute', zIndex: 999 },
@@ -349,5 +385,5 @@ const styles = StyleSheet.create({
     openOficinaText: { fontSize: 18, fontWeight: '900', color: '#FFF', letterSpacing: 2 },
     btnOficina: { backgroundColor: '#007AFF', paddingVertical: 10, borderRadius: 20, textTransform: 'uppercase', width: '33%', borderWidth: 4, borderColor: '#1C1C1E', alignItems: 'center', shadowColor: '#1C1C1E', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 5 },
     playButton: { backgroundColor: '#FFCC00', paddingVertical: 10, borderRadius: 20, textTransform: 'uppercase', width: '33%', borderWidth: 4, borderColor: '#1C1C1E', alignItems: 'center', shadowColor: '#1C1C1E', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 5 },
-    playButtonText: { fontSize: 18, fontWeight: '900', color: '#FFF', letterSpacing: 2 , textAlign: 'center'},
+    playButtonText: { fontSize: 18, fontWeight: '900', color: '#FFF', letterSpacing: 2, textAlign: 'center' },
 });

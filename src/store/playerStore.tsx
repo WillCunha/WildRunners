@@ -6,6 +6,13 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 type CarStat = 'speedLevel' | 'accelerationLevel' | 'jumpPowerLevel' | 'defenseLevel' | 'rarityLevel';
 
+type MatchRewards = {
+    motor: number;
+    spray: number;
+    engrenagem: number;
+    trophies: number;
+};
+
 interface PlayerState {
     buyCar: any;
     profile: PlayerProfile | null;
@@ -14,6 +21,7 @@ interface PlayerState {
     createProfile: (username: string) => void;
     addTrophies: (amount: number) => void;
     addParts: (motor: number, spray: number, engrenagem: number) => void;
+    addMatchRewards: (rewards: MatchRewards) => void;
     upgradeCar: (carId: string, partCategory: 'motor' | 'spray' | 'engrenagem', stat: CarStat, cost: number) => boolean;
 }
 
@@ -59,6 +67,28 @@ export const usePlayerStore = create<PlayerState>()(
                             motor: state.profile.parts.motor + motor,
                             spray: state.profile.parts.spray + spray,
                             engrenagem: state.profile.parts.engrenagem + engrenagem,
+                        }
+                    }
+                };
+            }),
+
+            // Credita toda a recompensa da partida em uma única atualização persistida.
+            addMatchRewards: ({ motor, spray, engrenagem, trophies }) => set((state) => {
+                if (!state.profile) return state;
+
+                const safeMotor = Math.max(0, Math.floor(motor));
+                const safeSpray = Math.max(0, Math.floor(spray));
+                const safeEngrenagem = Math.max(0, Math.floor(engrenagem));
+                const safeTrophies = Math.max(0, Math.floor(trophies));
+
+                return {
+                    profile: {
+                        ...state.profile,
+                        trophies: state.profile.trophies + safeTrophies,
+                        parts: {
+                            motor: state.profile.parts.motor + safeMotor,
+                            spray: state.profile.parts.spray + safeSpray,
+                            engrenagem: state.profile.parts.engrenagem + safeEngrenagem,
                         }
                     }
                 };

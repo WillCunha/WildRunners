@@ -14,8 +14,7 @@ import { useCarSelection } from '@/context/CarContext';
 import { useLoadingStore } from '@/src/store/LoadingStore';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { carMaps } from '@/src/utils/carMaps';
-import { useAudioPlayer } from 'expo-audio';
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 
@@ -34,6 +33,11 @@ type DroppedPiece = {
 interface MapaProps {
   initialDeck?: string[];
 };
+
+const MAP_MUSIC = require(
+  '@/assets/audio/maps/level_one.mp3'
+);
+
 
 /* ================= CONFIGURAÇÕES DA FÍSICA E VELOCIDADE ================= */
 const GRAVITY = 0.8;
@@ -57,6 +61,7 @@ const AVAILABLE_BOT_COLORS = [
 export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: MapaProps) {
 
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
+  const router = useRouter();
 
   const showLoading = useLoadingStore((state) => state.showLoading);
   const hideLoading = useLoadingStore((state) => state.hideLoading);
@@ -74,7 +79,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const finalDeck = params.deck ? JSON.parse(params.deck as string) : fallbackDeck;
 
   const profile = usePlayerStore((state) => state.profile);
-  const addParts = usePlayerStore((state) => state.addParts);
+  const addMatchRewards = usePlayerStore((state) => state.addMatchRewards);
 
   const carKey = (selectedCar || 'buggy') as string;
 
@@ -158,8 +163,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const timeRemainingRef = useRef(0);
 
   const isCountingRef = useRef(false);
-  const mapMusic = useAudioPlayer(require('@/assets/audio/maps/level_one.mp3'));
-  const { playBeep, playMusic } = useContext(AudioContext);
+  const { playBeep, playMusic, pauseMusic } = useContext(AudioContext);
 
   const blocksRef = useRef<Block[]>([
     { id: 1, type: 'flat', x: 0, y: SCREEN_HEIGHT - 100, width: SCREEN_WIDTH * 1.5 }
@@ -318,8 +322,19 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const activePiecesRef = useRef<DroppedPiece[]>([]);
   const [piecesToRender, setPiecesToRender] = useState<DroppedPiece[]>([]);
 
-  // Caixa da Partida (O que ele pegou - O que ele perdeu)
+  // Caixa da partida: motor = peças, spray = pinturas e engrenagem = engrenagens.
   const sessionPartsRef = useRef({ motor: 0, spray: 0, engrenagem: 0 });
+
+  // Evita creditar a mesma partida mais de uma vez.
+  const gameOverHandledRef = useRef(false);
+
+  const getTrophyReward = (position: number) => {
+    if (position === 1) return 5;
+    if (position === 2) return 3;
+    if (position === 3) return 2;
+    if (position <= 5) return 1;
+    return 0;
+  };
 
   /* ================= CORES DE VIDAS QUE IRÃO PARA O PLACAR DE POSIÇÕES ================= */
   const getLifeColor = (lives: number) => {
@@ -385,9 +400,20 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     setTimeRemaining(randomSeconds);
   };
 
+  
+  /* ================= PAUSE DA MUSICA CASO PLAYER SAIA DA TELA ================= */
+  useEffect(() => {
+  return () => {
+    pauseMusic();
+  };
+}, [pauseMusic]);
+
   /* ================= USE EFFECT DE PREPARAÇÃO DO INICIO ================= */
   useEffect(() => {
     if (!started && !isCountingRef.current && !gameOver) {
+      sessionPartsRef.current = { motor: 0, spray: 0, engrenagem: 0 };
+      gameOverHandledRef.current = false;
+
       const groundY = SCREEN_HEIGHT - 100;
       const startY = groundY - PLAYER_SIZE;
 
@@ -405,6 +431,55 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       }, 2000);
     }
   }, [SCREEN_HEIGHT, SCREEN_WIDTH]);
+
+  /* ================= FINALIZAÇÃO ÚNICA DA PARTIDA ================= */
+  useEffect(() => {
+    if (!gameOver || gameOverHandledRef.current) return;
+
+    pauseMusic();
+
+    gameOverHandledRef.current = true;
+    setStarted(false);
+
+    const finalRanking = [
+      { id: 'player', x: playerXRef.current },
+      ...botsRef.current.map(bot => ({ id: bot.id, x: bot.x })),
+    ].sort((a, b) => b.x - a.x);
+
+    // Quando o jogador foi eliminado ou caiu do mapa, ele termina em último.
+    const playerPosition = playerIsDead.current
+      ? TOTAL_RACERS
+      : finalRanking.findIndex(racer => racer.id === 'player') + 1;
+
+    const rewards = {
+      // Não deixa um saldo temporário negativo retirar itens antigos da conta.
+      motor: Math.max(0, sessionPartsRef.current.motor),
+      spray: Math.max(0, sessionPartsRef.current.spray),
+      engrenagem: Math.max(0, sessionPartsRef.current.engrenagem),
+      trophies: getTrophyReward(playerPosition),
+    };
+
+    // Uma única atualização persistida no Zustand/AsyncStorage.
+    addMatchRewards(rewards);
+
+    // Exibe a LoadingScreen global e, depois, troca a rota sem permitir voltar ao mapa finalizado.
+    showLoading();
+    const navigationTimer = setTimeout(() => {
+      router.replace('/SelectionCar' as any);
+
+      // Dá tempo para a SelectionCar montar antes de retirar a tela de loading.
+      setTimeout(() => hideLoading(), 350);
+    }, 1400);
+
+    return () => clearTimeout(navigationTimer);
+  }, [
+    addMatchRewards,
+    gameOver,
+    pauseMusic,
+    hideLoading,
+    router,
+    showLoading,
+  ]);
 
   /* ================= GAME LOOP ================= */
   useEffect(() => {
@@ -439,12 +514,8 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
       // Fim de jogo pelo tempo esgotado
       if (currentSecs <= 0 && !gameOver) {
-        addParts(
-          sessionPartsRef.current.motor,
-          sessionPartsRef.current.spray,
-          sessionPartsRef.current.engrenagem
-        );
         setGameOver(true);
+        return;
       }
 
       if (!isCameraLocked) {
@@ -884,9 +955,9 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         const targetCoords = bubble.targetId === 'player'
           ? { x: playerXRef.current + PLAYER_SIZE / 2, y: y.current + PLAYER_SIZE / 2 }
           : (() => {
-              const bot = botsRef.current.find(b => b.id === bubble.targetId);
-              return bot ? { x: bot.x + PLAYER_SIZE / 2, y: bot.y + PLAYER_SIZE / 2 } : null;
-            })();
+            const bot = botsRef.current.find(b => b.id === bubble.targetId);
+            return bot ? { x: bot.x + PLAYER_SIZE / 2, y: bot.y + PLAYER_SIZE / 2 } : null;
+          })();
 
         if (!targetCoords) return;
 
@@ -953,12 +1024,9 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       isGrounded.current = landedOnBlock;
 
       if (y.current > SCREEN_HEIGHT + 100) {
-        addParts(
-          sessionPartsRef.current.motor,
-          sessionPartsRef.current.spray,
-          sessionPartsRef.current.engrenagem
-        );
+        playerIsDead.current = true;
         setGameOver(true);
+        return;
       }
 
       if (gameTime.current % 10 === 0) setScore(s => s + Math.floor(playerSpeed.current / 3));
@@ -1307,7 +1375,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       const types: PartType[] = ['motor', 'spray', 'engrenagem'];
       for (let i = 0; i < 3; i++) {
         const t = types[Math.floor(Math.random() * types.length)];
-        sessionPartsRef.current[t] -= 1;
+        sessionPartsRef.current[t] = Math.max(0, sessionPartsRef.current[t] - 1);
       }
 
       if (playerLivesRef.current <= 0) {
@@ -1340,50 +1408,50 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     return false;
   }
 
-  /* ================= APLICA EFEITO DO SWAP (VAI SER REMOVIDO) ================= */
-  function handleSwapPress() {
-    if (swapCooldown > 0) return;
-    triggerSwap('player');
-    setSwapCooldown(SWAP_COOLDOWN);
-  }
+  // /* ================= APLICA EFEITO DO SWAP (VAI SER REMOVIDO) ================= */
+  // function handleSwapPress() {
+  //   if (swapCooldown > 0) return;
+  //   triggerSwap('player');
+  //   setSwapCooldown(SWAP_COOLDOWN);
+  // }
 
-  /* ================= APLICA EFEITO DO CHAINS (VAI SER REMOVIDO) ================= */
-  function handleChainsPress() {
-    if (chainsCooldown > 0) return;
-    triggerChains('player');
-    setChainsCooldown(CHAINS_COOLDOWN);
-  }
+  // /* ================= APLICA EFEITO DO CHAINS (VAI SER REMOVIDO) ================= */
+  // function handleChainsPress() {
+  //   if (chainsCooldown > 0) return;
+  //   triggerChains('player');
+  //   setChainsCooldown(CHAINS_COOLDOWN);
+  // }
 
-  /* ================= APLICA EFEITO DO MISSIL GUIADO (VAI SER REMOVIDO) ================= */
-  function handleBulletPress() {
-    if (bulletCooldown > 0) return;
-    triggerBullet('player');
-    setBulletCooldown(BULLET_COOLDOWN);
-  }
+  // /* ================= APLICA EFEITO DO MISSIL GUIADO (VAI SER REMOVIDO) ================= */
+  // function handleBulletPress() {
+  //   if (bulletCooldown > 0) return;
+  //   triggerBullet('player');
+  //   setBulletCooldown(BULLET_COOLDOWN);
+  // }
 
-  /* ================= APLICA EFEITO DO TORNADO (VAI SER REMOVIDO) ================= */
-  function handleTornadoPress() {
-    if (tornadoCooldown > 0) return;
-    triggerTornado('player');
-    setTornadoCooldown(TORNADO_COOLDOWN);
-  }
+  // /* ================= APLICA EFEITO DO TORNADO (VAI SER REMOVIDO) ================= */
+  // function handleTornadoPress() {
+  //   if (tornadoCooldown > 0) return;
+  //   triggerTornado('player');
+  //   setTornadoCooldown(TORNADO_COOLDOWN);
+  // }
 
-  /* ================= APLICA EFEITO DO NITRO (VAI SER REMOVIDO) ================= */
-  function handleNitroPowerPress() {
-    if (nitroCooldown > 0) return;
-    triggerNitroPower('player');
-    setNitroCooldown(NITRO_COOLDOWN);
-  }
+  // /* ================= APLICA EFEITO DO NITRO (VAI SER REMOVIDO) ================= */
+  // function handleNitroPowerPress() {
+  //   if (nitroCooldown > 0) return;
+  //   triggerNitroPower('player');
+  //   setNitroCooldown(NITRO_COOLDOWN);
+  // }
 
-  /* ================= APLICA EFEITO DO SLOW SLOW (VAI SER REMOVIDO) ================= */
-  function handleSlowPress() {
-    if (slowCooldown > 0) return;
-    botsRef.current.forEach(bot => {
-      applyCardEffect('slow_slow', bot.id, 'player');
-    });
+  // /* ================= APLICA EFEITO DO SLOW SLOW (VAI SER REMOVIDO) ================= */
+  // function handleSlowPress() {
+  //   if (slowCooldown > 0) return;
+  //   botsRef.current.forEach(bot => {
+  //     applyCardEffect('slow_slow', bot.id, 'player');
+  //   });
 
-    setSlowCooldown(SLOW_COOLDOWN);
-  }
+  //   setSlowCooldown(SLOW_COOLDOWN);
+  // }
 
   /* ================= APLICA O EFEITO DA CAIXA 'TNT' (VAI SER REMOVIDO) ================= */
   function triggerTNT(callerId: string) {
@@ -1541,9 +1609,11 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     setFocusedDriver(null);
     setCountdownStep('JÁ!');
 
-    mapMusic.loop = true;
-    mapMusic.play();
-    mapMusic.volume = 0.5;
+    playMusic(MAP_MUSIC, {
+      volume: 0.5,
+      loop: true,
+      restart: true,
+    });
 
     setIsCameraLocked(false);
     setStarted(true);
@@ -1566,28 +1636,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   };
 
   function handleJump() {
-    if (gameOver) {
-
-      const groundY = SCREEN_HEIGHT - 100;
-      const startY = groundY - PLAYER_SIZE;
-
-      setGameOver(false);
-      cameraTransformRef.current = { x: 0, scale: 1 };
-      setCameraTransform(cameraTransformRef.current);
-      setCountdownStep(null);
-      setStarted(false);
-      setScore(0);
-      gameTime.current = 0;
-      nitroCharge.current = 0;
-      setNitroPercent(0);
-      setNitroReady(false);
-      isNitroActive.current = false;
-      y.current = startY;
-      velocity.current = 0;
-      blocksRef.current = [{ id: Date.now(), type: 'flat', x: 0, y: groundY, width: SCREEN_WIDTH * 1.5 }];
-      setBlocks(blocksRef.current); setupPositions();
-      return;
-    }
+    if (gameOver) return;
 
     if (playerStatus.current.controlsInverted) {
       isCrouchingRef.current = true; setIsCrouching(true);
@@ -2183,9 +2232,9 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
       {gameOver && (
         <View style={styles.overlay} pointerEvents="none">
-          <Text style={styles.titleText}>CAIU!</Text>
+          <Text style={styles.titleText}>FIM DE CORRIDA!</Text>
           <Text style={{ color: '#fff', fontSize: 20 }}>Você correu {score}m</Text>
-          <Text style={{ color: '#aaa', marginTop: 20 }}>Toque para tentar de novo</Text>
+          <Text style={{ color: '#aaa', marginTop: 20 }}>Salvando suas recompensas...</Text>
         </View>
       )}
     </View >
@@ -2312,10 +2361,10 @@ const styles = StyleSheet.create({
     right: 0,
     height: 90,
     zIndex: 30,
-    flexDirection: 'row',      
-    justifyContent: 'center', 
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 10                    
+    gap: 10
   },
   dynamicCardBtn: {
     width: 85,
