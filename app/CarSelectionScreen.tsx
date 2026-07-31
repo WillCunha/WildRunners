@@ -78,8 +78,7 @@ export default function CarSelectionScreen() {
         });
     }, [playMusic]);
 
-    // Quando o Zustand terminar de carregar o perfil, seleciona o primeiro carro comprado.
-    // Se o carro atual continuar pertencendo ao jogador, mantém a seleção feita na lista.
+   
     useEffect(() => {
         if (!profile) return;
 

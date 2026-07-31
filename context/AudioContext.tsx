@@ -7,6 +7,10 @@ import React, {
   useRef,
 } from 'react';
 
+const DASHBOARD_MUSIC = require(
+  '@/assets/audio/dashboard/audio_one.mp3'
+);
+
 type MusicOptions = {
   volume?: number;
   loop?: boolean;
@@ -33,94 +37,119 @@ export const AudioProvider = ({
   children: ReactNode;
 }) => {
   /*
-   * Existe apenas um player para todas as músicas:
-   * dashboard, corrida, menus etc.
+   * A fonte passada ao hook nunca muda.
+   * As outras músicas são carregadas com replace().
    */
-  const musicPlayer = useAudioPlayer(null);
+  const musicPlayer = useAudioPlayer(DASHBOARD_MUSIC);
 
-  const musicPlayerRef = useRef(musicPlayer);
-  musicPlayerRef.current = musicPlayer;
-
-  const currentMusicSourceRef = useRef<any>(null);
+  const currentMusicSourceRef = useRef<any>(DASHBOARD_MUSIC);
+  const isMusicPlayingRef = useRef(false);
 
   const beepPlayer1 = useAudioPlayer(
     require('@/assets/audio/beep.mp3')
   );
-
   const beepPlayer2 = useAudioPlayer(
     require('@/assets/audio/beep.mp3')
   );
-
   const beepPlayer3 = useAudioPlayer(
     require('@/assets/audio/beep.mp3')
   );
 
-  const beepPlayersRef = useRef([
-    beepPlayer1,
-    beepPlayer2,
-    beepPlayer3,
-  ]);
-
-  beepPlayersRef.current = [
-    beepPlayer1,
-    beepPlayer2,
-    beepPlayer3,
-  ];
+  const beepPlayers = useMemo(
+    () => [beepPlayer1, beepPlayer2, beepPlayer3],
+    [beepPlayer1, beepPlayer2, beepPlayer3]
+  );
 
   const nextBeepRef = useRef(0);
 
   const playMusic = useCallback(
     (source: any, options: MusicOptions = {}) => {
-      const player = musicPlayerRef.current;
-
       const {
         volume = 0.15,
         loop = true,
         restart = false,
       } = options;
 
-      const isNewSource =
+      const sourceChanged =
         currentMusicSourceRef.current !== source;
 
- 
-      if (isNewSource) {
-        player.pause();
-        player.replace(source);
-
+      /*
+       * replace() já interrompe a fonte anterior.
+       * Não chamamos pause() antes da troca.
+       */
+      if (sourceChanged) {
+        musicPlayer.replace(source);
         currentMusicSourceRef.current = source;
-      } else if (restart) {
-
-        void player.seekTo(0);
       }
 
-      player.loop = loop;
-      player.volume = volume;
-      player.play();
+      musicPlayer.volume = volume;
+      musicPlayer.loop = loop;
+
+      if (restart && !sourceChanged) {
+        void musicPlayer
+          .seekTo(0)
+          .then(() => {
+            musicPlayer.play();
+            isMusicPlayingRef.current = true;
+          })
+          .catch((error) => {
+            console.warn(
+              '[AudioContext] Falha ao reiniciar música:',
+              error
+            );
+          });
+
+        return;
+      }
+
+      musicPlayer.play();
+      isMusicPlayingRef.current = true;
     },
-    []
+    [musicPlayer]
   );
 
   const pauseMusic = useCallback(() => {
-    musicPlayerRef.current.pause();
-  }, []);
+    /*
+     * Impede duas chamadas seguidas de pause().
+     * Isso também protege a desmontagem das telas.
+     */
+    if (!isMusicPlayingRef.current) return;
+
+    isMusicPlayingRef.current = false;
+    musicPlayer.pause();
+  }, [musicPlayer]);
 
   const stopMusic = useCallback(() => {
-    const player = musicPlayerRef.current;
+    if (isMusicPlayingRef.current) {
+      isMusicPlayingRef.current = false;
+      musicPlayer.pause();
+    }
 
-    player.pause();
-    void player.seekTo(0);
-  }, []);
+    void musicPlayer.seekTo(0).catch((error) => {
+      console.warn(
+        '[AudioContext] Falha ao retornar música ao início:',
+        error
+      );
+    });
+  }, [musicPlayer]);
 
   const playBeep = useCallback(() => {
-    const players = beepPlayersRef.current;
-    const activePlayer = players[nextBeepRef.current];
+    const activePlayer =
+      beepPlayers[nextBeepRef.current];
 
     nextBeepRef.current =
-      (nextBeepRef.current + 1) % players.length;
+      (nextBeepRef.current + 1) % beepPlayers.length;
 
-    void activePlayer.seekTo(0);
-    activePlayer.play();
-  }, []);
+    void activePlayer
+      .seekTo(0)
+      .then(() => activePlayer.play())
+      .catch((error) => {
+        console.warn(
+          '[AudioContext] Falha ao tocar bipe:',
+          error
+        );
+      });
+  }, [beepPlayers]);
 
   const contextValue = useMemo(
     () => ({
