@@ -2,7 +2,7 @@ import LoadingOverlay from '@/components/LoadingOverlay';
 import { AudioProvider } from '@/context/AudioContext';
 import { CarProvider } from '@/context/CarContext';
 import { useLoadingStore } from '@/src/store/LoadingStore';
-import { useFonts } from 'expo-font'; // Hook oficial para carregar fontes
+import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';

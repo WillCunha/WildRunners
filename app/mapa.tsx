@@ -2,6 +2,7 @@
 import Carro from '@/components/Carro';
 import CenarioBackground from '@/components/Cenarios/CenarioBackground';
 import ChainsEffect from '@/components/Decks/ChainsEffect';
+import DefenseCardVisual, { DefenseVisualEvent, DefenseVisualKind } from '@/components/Decks/DefenseCardVisual';
 import GuidedBulletEffect from '@/components/Decks/GuidedBulletEffect';
 import SwapEffect from '@/components/Decks/SwapEffect';
 import TornadoEffect from '@/components/Decks/TornadoEffect';
@@ -15,7 +16,7 @@ import { useLoadingStore } from '@/src/store/LoadingStore';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { carMaps } from '@/src/utils/carMaps';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 
 type CarKey = keyof typeof carMaps;
@@ -263,7 +264,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
   const [blocks, setBlocks] = useState(blocksRef.current);
   const [isBlindActive, setIsBlindActive] = useState(false);
-  const [isGhostActive, setIsGhostActive] = useState(false);
 
   const [isCameraLocked, setIsCameraLocked] = useState(false);
 
@@ -322,25 +322,42 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const [bubbleCooldown, setBubbleCooldown] = useState(0);
   const [bubblesToRender, setBubblesToRender] = useState(activeBubblesRef.current);
 
-  // ESCUDO DE PROTEÇÃO
+  // PROTEÇÃO E SOBREVIVÊNCIA
   const SHIELD_COOLDOWN = 8000;
-  const [shieldCooldown, setShieldCooldown] = useState(0);
-  
-  // REPARO RAPIDO
   const QUICK_REPAIR_COOLDOWN = 14000;
-  const [quickRepairCooldown, setQuickRepairCooldown] = useState(0);
-  
-  // MODO FANTASMA
   const GHOST_COOLDOWN = 12000;
-  const [ghostCooldown, setGhostCooldown] = useState(0);
-  
-  // RENOVA  A MORTE
   const SECOND_CHANCE_COOLDOWN = 18000;
-  const [secondChanceCooldown, setSecondChanceCooldown] = useState(0);
-  
-  // ESCUDO DE ARMADURA
   const ARMOR_COOLDOWN = 12000;
+  const [shieldCooldown, setShieldCooldown] = useState(0);
+  const [quickRepairCooldown, setQuickRepairCooldown] = useState(0);
+  const [ghostCooldown, setGhostCooldown] = useState(0);
+  const [secondChanceCooldown, setSecondChanceCooldown] = useState(0);
   const [armorCooldown, setArmorCooldown] = useState(0);
+
+  // EVENTOS VISUAIS DAS CARTAS DEFENSIVAS.
+  // Um único evento por corredor é suficiente: o componente executa a animação
+  // quando o ID muda, sem adicionar animações ao game loop.
+  const defenseVisualIdRef = useRef(0);
+  const [defenseVisualEvents, setDefenseVisualEvents] = useState<
+    Record<string, DefenseVisualEvent | undefined>
+  >({});
+
+  const triggerDefenseVisual = (
+    racerId: string,
+    type: DefenseVisualKind,
+    amount?: number
+  ) => {
+    defenseVisualIdRef.current += 1;
+
+    setDefenseVisualEvents(prev => ({
+      ...prev,
+      [racerId]: {
+        id: defenseVisualIdRef.current,
+        type,
+        amount,
+      },
+    }));
+  };
 
   //PEÇAS
   const activePiecesRef = useRef<DroppedPiece[]>([]);
@@ -403,7 +420,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     playerIsDead.current = false;
     playerStatus.current = { ...defaultStatus };
     activeEffectsTimers.current = {};
-    setIsGhostActive(false);
+    setDefenseVisualEvents({});
     playerSpeed.current = MIN_SPEED;
     gameTime.current = 0;
 
@@ -439,7 +456,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   };
 
   
-
   /* ================= USE EFFECT DE PREPARAÇÃO DO INICIO ================= */
   useEffect(() => {
     if (!started && !isCountingRef.current && !gameOver) {
@@ -468,10 +484,10 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   useEffect(() => {
     if (!gameOver || gameOverHandledRef.current) return;
 
-    
     gameOverHandledRef.current = true;
-    pauseMusic();
     setStarted(false);
+    
+    pauseMusic();
 
     const finalRanking = [
       { id: 'player', x: playerXRef.current },
@@ -616,7 +632,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
               case 'invert_controls': playerStatus.current.controlsInverted = false; break;
               case 'blind': playerStatus.current.isBlind = false; setIsBlindActive(false); break;
               case 'panic': playerStatus.current.isPanicking = false; break;
-              case 'ghost': playerStatus.current.isGhost = false; setIsGhostActive(false); break;
+              case 'ghost': playerStatus.current.isGhost = false; break;
               case 'score_boost': playerStatus.current.scoreMultiplier = 1; break;
               case 'slow_slow': playerStatus.current.isSlowed = false; setIsSlowActive(false); break;
               case 'bubble_lift': playerStatus.current.isLevitating = false; break;
@@ -1444,11 +1460,19 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
     if (effect === 'quick_repair') {
       if (targetId === 'player') {
+        const previousLives = playerLivesRef.current;
         playerLivesRef.current = Math.min(INITIAL_LIVES, playerLivesRef.current + 2);
+        const repairedLives = playerLivesRef.current - previousLives;
         setPlayerLives(playerLivesRef.current);
+        if (repairedLives > 0) triggerDefenseVisual('player', 'repair', repairedLives);
       } else {
         const targetBot = botsRef.current.find(b => b.id === targetId);
-        if (targetBot) targetBot.lives = Math.min(targetBot.maxLives, targetBot.lives + 2);
+        if (targetBot) {
+          const previousLives = targetBot.lives;
+          targetBot.lives = Math.min(targetBot.maxLives, targetBot.lives + 2);
+          const repairedLives = targetBot.lives - previousLives;
+          if (repairedLives > 0) triggerDefenseVisual(targetBot.id, 'repair', repairedLives);
+        }
       }
       return;
     }
@@ -1459,6 +1483,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         const targetBot = botsRef.current.find(b => b.id === targetId);
         if (targetBot) targetBot.status.shieldCharges = 1;
       }
+      triggerDefenseVisual(targetId, 'shield_activate');
       return;
     }
 
@@ -1468,6 +1493,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         const targetBot = botsRef.current.find(b => b.id === targetId);
         if (targetBot) targetBot.status.armorCharges = 2;
       }
+      triggerDefenseVisual(targetId, 'armor_activate');
       return;
     }
 
@@ -1477,6 +1503,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         const targetBot = botsRef.current.find(b => b.id === targetId);
         if (targetBot) targetBot.status.secondChanceReady = true;
       }
+      triggerDefenseVisual(targetId, 'second_chance_arm');
       return;
     }
 
@@ -1499,7 +1526,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
           break;
         case 'ghost':
           playerStatus.current.isGhost = true;
-          setIsGhostActive(true);
+          triggerDefenseVisual('player', 'ghost_activate');
           break;
       }
     } else {
@@ -1521,6 +1548,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         if (effect === 'ghost') {
           targetBot.status.isGhost = true;
           targetBot.activeEffectsTimers.ghost = 60 * 3;
+          triggerDefenseVisual(targetBot.id, 'ghost_activate');
         }
       }
     }
@@ -1530,12 +1558,18 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   function applyDamage(racerId: string) {
     if (racerId === 'player') {
       const status = playerStatus.current;
-      if (status.invincibleTimer > 0 || playerIsDead.current || status.isGhost) return false;
+      if (status.invincibleTimer > 0 || playerIsDead.current) return false;
+
+      if (status.isGhost) {
+        triggerDefenseVisual('player', 'ghost_evade');
+        return false;
+      }
 
       // Escudo bloqueia completamente o ataque e também o empurrão.
       if (status.shieldCharges > 0) {
         status.shieldCharges -= 1;
         status.invincibleTimer = 20;
+        triggerDefenseVisual('player', 'shield_break');
         return false;
       }
 
@@ -1543,6 +1577,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       if (status.armorCharges > 0) {
         status.armorCharges -= 1;
         status.invincibleTimer = 90;
+        triggerDefenseVisual('player', 'armor_hit');
         return true;
       }
 
@@ -1560,6 +1595,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         status.secondChanceReady = false;
         playerLivesRef.current = 1;
         status.invincibleTimer = 120;
+        triggerDefenseVisual('player', 'second_chance_revive');
       }
 
       setPlayerLives(playerLivesRef.current);
@@ -1576,17 +1612,24 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     if (!bot) return false;
 
     const status = bot.status;
-    if (status.invincibleTimer > 0 || bot.isDead || status.isGhost) return false;
+    if (status.invincibleTimer > 0 || bot.isDead) return false;
+
+    if (status.isGhost) {
+      triggerDefenseVisual(bot.id, 'ghost_evade');
+      return false;
+    }
 
     if (status.shieldCharges > 0) {
       status.shieldCharges -= 1;
       status.invincibleTimer = 20;
+      triggerDefenseVisual(bot.id, 'shield_break');
       return false;
     }
 
     if (status.armorCharges > 0) {
       status.armorCharges -= 1;
       status.invincibleTimer = 90;
+      triggerDefenseVisual(bot.id, 'armor_hit');
       return true;
     }
 
@@ -1598,6 +1641,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       status.secondChanceReady = false;
       bot.lives = 1;
       status.invincibleTimer = 120;
+      triggerDefenseVisual(bot.id, 'second_chance_revive');
     }
 
     if (bot.lives <= 0) {
@@ -2123,7 +2167,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
               top: bot.y,
               left: bot.x,
               zIndex: 4,
-              opacity: bot.status?.isGhost ? 0.4 : 1,
               transform: [{ rotate: `${bot.angle || 0}deg` }],
               width: PLAYER_SIZE,
               height: PLAYER_SIZE,
@@ -2137,27 +2180,25 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
                 <View style={styles.nameTagArrow} />
               </View>
             )}
-            <View style={{ width: '200%', alignItems: 'center' }}>
-
-              <Carro
-                carType={bot.carType}
-                carColorFront={bot.carColorFront}
-                carColorBack={bot.carColorBack}
-                speed={bot.speed}
-                skin={bot.skin} />
-            </View>
-            {(bot.status?.shieldCharges > 0 || bot.status?.armorCharges > 0) && (
-              <View style={{
-                position: 'absolute', left: -8, top: -8,
-                width: PLAYER_SIZE + 16, height: PLAYER_SIZE + 16, borderRadius: 40,
-                borderWidth: bot.status.shieldCharges > 0 ? 4 : 3,
-                borderColor: bot.status.shieldCharges > 0 ? '#00E5FF' : '#FFD700',
-                backgroundColor: bot.status.shieldCharges > 0 ? 'rgba(0,229,255,0.12)' : 'rgba(255,215,0,0.10)',
-              }} />
-            )}
-            {bot.status?.secondChanceReady && (
-              <Text style={{ position: 'absolute', top: -22, fontSize: 16 }}>↻</Text>
-            )}
+            <DefenseCardVisual
+              size={PLAYER_SIZE}
+              shieldCharges={bot.status?.shieldCharges || 0}
+              armorCharges={bot.status?.armorCharges || 0}
+              isGhost={Boolean(bot.status?.isGhost)}
+              secondChanceReady={Boolean(bot.status?.secondChanceReady)}
+              isInvincible={(bot.status?.invincibleTimer || 0) > 0}
+              event={defenseVisualEvents[bot.id]}
+            >
+              <View style={{ width: '200%', alignItems: 'center' }}>
+                <Carro
+                  carType={bot.carType}
+                  carColorFront={bot.carColorFront}
+                  carColorBack={bot.carColorBack}
+                  speed={bot.speed}
+                  skin={bot.skin}
+                />
+              </View>
+            </DefenseCardVisual>
           </View>
         ))}
 
@@ -2165,7 +2206,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
           style={{
             position: 'absolute',
             zIndex: 5,
-            opacity: isGhostActive ? 0.4 : 1,
             left: playerX,
             top: playerY,
             transform: [{ rotate: `${angle}deg` }],
@@ -2181,26 +2221,25 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
               <View style={styles.nameTagArrow} />
             </View>
           )}
-          <View style={{ width: '200%', alignItems: 'center' }}>
-            <Carro
-              carType={selectedCar}
-              carColorFront={selectedColorFront}
-              carColorBack={selectedColorBack}
-              speed={playerSpeed.current}
-              skin="default" />
-          </View>
-          {(playerStatus.current.shieldCharges > 0 || playerStatus.current.armorCharges > 0) && (
-            <View style={{
-              position: 'absolute', left: -8, top: -8,
-              width: PLAYER_SIZE + 16, height: PLAYER_SIZE + 16, borderRadius: 40,
-              borderWidth: playerStatus.current.shieldCharges > 0 ? 4 : 3,
-              borderColor: playerStatus.current.shieldCharges > 0 ? '#00E5FF' : '#FFD700',
-              backgroundColor: playerStatus.current.shieldCharges > 0 ? 'rgba(0,229,255,0.12)' : 'rgba(255,215,0,0.10)',
-            }} />
-          )}
-          {playerStatus.current.secondChanceReady && (
-            <Text style={{ position: 'absolute', top: -22, fontSize: 16 }}>↻</Text>
-          )}
+          <DefenseCardVisual
+            size={PLAYER_SIZE}
+            shieldCharges={playerStatus.current.shieldCharges}
+            armorCharges={playerStatus.current.armorCharges}
+            isGhost={playerStatus.current.isGhost}
+            secondChanceReady={playerStatus.current.secondChanceReady}
+            isInvincible={playerStatus.current.invincibleTimer > 0}
+            event={defenseVisualEvents.player}
+          >
+            <View style={{ width: '200%', alignItems: 'center' }}>
+              <Carro
+                carType={selectedCar}
+                carColorFront={selectedColorFront}
+                carColorBack={selectedColorBack}
+                speed={playerSpeed.current}
+                skin="default"
+              />
+            </View>
+          </DefenseCardVisual>
         </View>
 
         {activeChainsState && activeChainsState.duration > 0 && (() => {

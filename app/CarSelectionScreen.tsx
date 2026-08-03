@@ -114,7 +114,7 @@ export default function CarSelectionScreen() {
         setSelectedColorBack(previewColorBack);
 
         // 3. Só depois de salvar no contexto, faz a navegação
-        router.push({ pathname: '/LoadingScreen', params: { next: '/OficinaScreen' } });
+        router.push({ pathname: '/LoadingScreen', params: { next: '/CarStore' } });
     };
 
     const handleActionPress = () => {
