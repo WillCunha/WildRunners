@@ -2,23 +2,23 @@ import { useCarSelection } from '@/context/CarContext';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { carMaps } from '@/src/utils/carMaps';
 import {
-    CAR_SHOP_CATALOG,
-    CAR_SHOP_ORDER,
-    ShopCarId,
+  CAR_SHOP_CATALOG,
+  CAR_SHOP_ORDER,
+  ShopCarId,
 } from '@/src/utils/carShopCatalog';
 import { router } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    Alert,
-    Image,
-    ImageSourcePropType,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-    useWindowDimensions,
+  Alert,
+  Image,
+  ImageSourcePropType,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
 } from 'react-native';
 
 type CarKey = keyof typeof carMaps;
@@ -387,8 +387,7 @@ export default function SelectionCar() {
                   />
 
                   <Image
-                    source={itemCar.corpoTransparente as ImageSourcePropType}
-                    resizeMode="contain"
+                    source={itemCar.icone as ImageSourcePropType}
                     style={[
                       styles.railCarImage,
                       isCompactLandscape && styles.railCarImageCompact,
@@ -494,7 +493,16 @@ export default function SelectionCar() {
 
           {/* INFORMAÇÕES E COMPRA */}
           <View style={styles.detailsPane}>
-            <View style={styles.carIdentityRow}>
+            <ScrollView
+              style={styles.detailsScroll}
+              contentContainerStyle={[
+                styles.detailsScrollContent,
+                isCompactLandscape && styles.detailsScrollContentCompact,
+              ]}
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+            >
+              <View style={styles.carIdentityRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.className}>{shopData.className}</Text>
                 <Text
@@ -576,6 +584,7 @@ export default function SelectionCar() {
                 </Text>
               )}
             </View>
+            </ScrollView>
 
             <View style={styles.actionsRow}>
               <TouchableOpacity
@@ -732,7 +741,6 @@ const styles = StyleSheet.create({
   },
   railCarImage: {
     width: '100%',
-    height: 48,
   },
   railCarImageCompact: {
     height: 36,
@@ -898,9 +906,20 @@ const styles = StyleSheet.create({
   detailsPane: {
     flex: 3.5,
     minWidth: 0,
+    minHeight: 0,
     paddingLeft: 14,
     borderLeftWidth: StyleSheet.hairlineWidth,
     borderLeftColor: 'rgba(255,255,255,0.72)',
+  },
+  detailsScroll: {
+    flex: 1,
+    minHeight: 0,
+  },
+  detailsScrollContent: {
+    paddingBottom: 6,
+  },
+  detailsScrollContentCompact: {
+    paddingBottom: 3,
   },
   carIdentityRow: {
     flexDirection: 'row',
@@ -988,8 +1007,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 10,
   },
   performancePanel: {
-    flex: 1,
-    minHeight: 0,
+    flexShrink: 0,
   },
   performanceTitle: {
     color: '#FFFFFF',
@@ -1051,9 +1069,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   actionsRow: {
+    flexShrink: 0,
     flexDirection: 'row',
     gap: 8,
-    marginTop: 7,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.14)',
   },
   secondaryButton: {
     minWidth: 84,

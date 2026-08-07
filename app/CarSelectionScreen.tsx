@@ -2,21 +2,45 @@ import { AudioContext } from '@/context/AudioContext';
 import { useCarSelection } from '@/context/CarContext';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { carMaps } from '@/src/utils/carMaps';
-import { useNavigation } from '@react-navigation/native';
 import { router } from 'expo-router';
-import React, { useContext, useEffect, useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-
+import React, { useContext, useEffect, useMemo, useState } from 'react';
+import {
+    Alert,
+    Image,
+    ImageSourcePropType,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+    useWindowDimensions,
+} from 'react-native';
 
 type CarKey = keyof typeof carMaps;
 
+type CarCanvasProps = {
+    carId: CarKey;
+    width: number;
+    colorFront: string;
+    colorBack: string;
+};
+
 const AVAILABLE_COLORS = [
-    '#FF3B30', '#34C759', '#007AFF', '#FFCC00',
-    '#FF9500', '#AF52DE', '#1C1C1E', '#F2F2F7',
+    '#FF453A',
+    '#32D74B',
+    '#0A84FF',
+    '#FFD60A',
+    '#FF9F0A',
+    '#BF5AF2',
+    '#F2F2F7',
+    '#2C2C2E',
 ];
 
-// Define o nível máximo de upgrade para calcular a porcentagem da barra
 const MAX_UPGRADE_LEVEL = 10;
+const ACCENT = '#FFD60A';
+
+const DASHBOARD_MUSIC = require('@/assets/audio/dashboard/audio_one.mp3');
 
 const getPlayerTier = (trophies: number) => {
     if (trophies >= 600) return 4;
@@ -25,106 +49,166 @@ const getPlayerTier = (trophies: number) => {
     return 1;
 };
 
+const CarCanvas = React.memo(
+    ({ carId, width, colorFront, colorBack }: CarCanvasProps) => {
+        const car = carMaps[carId];
+        const scale = width / car.baseSize.width;
+        const height = car.baseSize.height * scale;
 
-const DASHBOARD_MUSIC = require(
-    '@/assets/audio/dashboard/audio_one.mp3'
+        return (
+            <View style={{ width, height }}>
+                <Image
+                    source={car.corpoBrancoFrente as ImageSourcePropType}
+                    resizeMode="contain"
+                    style={[styles.carLayer, { width, height, tintColor: colorBack }]}
+                />
+                <Image
+                    source={car.corpoBrancoTras as ImageSourcePropType}
+                    resizeMode="contain"
+                    style={[styles.carLayer, { width, height, tintColor: colorFront }]}
+                />
+                <Image
+                    source={car.corpoTransparente as ImageSourcePropType}
+                    resizeMode="contain"
+                    style={[styles.carLayer, { width, height }]}
+                />
+                <Image
+                    source={car.wheelImage as ImageSourcePropType}
+                    resizeMode="contain"
+                    style={[
+                        styles.wheel,
+                        {
+                            width: car.size.width * scale,
+                            height: car.size.height * scale,
+                            left: car.rodaTras.x * scale,
+                            bottom: car.rodaTras.y * scale,
+                        },
+                    ]}
+                />
+                <Image
+                    source={car.wheelImage as ImageSourcePropType}
+                    resizeMode="contain"
+                    style={[
+                        styles.wheel,
+                        {
+                            width: car.size.width * scale,
+                            height: car.size.height * scale,
+                            left: car.rodaFrente.x * scale,
+                            bottom: car.rodaFrente.y * scale,
+                        },
+                    ]}
+                />
+            </View>
+        );
+    },
 );
 
-// Componente visual da barra de progresso
-const StatBar = ({ label, progress }: { label: string, progress: number }) => (
-    <View style={styles.statRow}>
-        <Text style={styles.statLabel}>{label}</Text>
-        <View style={styles.barContainer}>
-            <View style={[styles.barFill, { width: `${progress}%` }]} />
+const StatBar = ({
+    label,
+    progress,
+    value,
+}: {
+    label: string;
+    progress: number;
+    value: number;
+}) => (
+    <View style={styles.statBlock}>
+        <View style={styles.statHeader}>
+            <Text style={styles.statLabel}>{label}</Text>
+            <Text style={styles.statValue}>NÍVEL {value}</Text>
+        </View>
+        <View style={styles.statTrack}>
+            <View style={[styles.statFill, { width: `${Math.max(4, progress)}%` }]} />
+            <View style={styles.statMarkerOne} />
+            <View style={styles.statMarkerTwo} />
         </View>
     </View>
 );
 
 export default function CarSelectionScreen() {
-    const navigation = useNavigation();
+    const { width, height } = useWindowDimensions();
+    const isCompactLandscape = height < 430;
     const { playMusic } = useContext(AudioContext);
-    const { setSelectedCar, setSelectedColorFront, setSelectedColorBack } = useCarSelection();
+    const {
+        selectedCar,
+        selectedColorFront,
+        selectedColorBack,
+        setSelectedCar,
+        setSelectedColorFront,
+        setSelectedColorBack,
+    } = useCarSelection();
 
-    const profile = usePlayerStore((state) => state.profile);
-    const buyCar = usePlayerStore((state) => state.buyCar);
+    const profile = usePlayerStore(state => state.profile);
 
-    // Começa sem carro para não exibir um veículo que ainda não foi carregado da garagem.
-    const [previewCar, setPreviewCar] = useState<CarKey | null>(null);
-    const [previewColorFront, setPreviewColorFront] = useState<string>(AVAILABLE_COLORS[0]);
-    const [previewColorBack, setPreviewColorBack] = useState<string>(AVAILABLE_COLORS[0]);
-
-    // A lista contém somente veículos realmente comprados pelo jogador.
-    const carKeys = (Object.keys(carMaps) as CarKey[]).filter(
-        (carKey) => profile?.garage[carKey] !== undefined
+    const carKeys = useMemo(
+        () =>
+            (Object.keys(carMaps) as CarKey[]).filter(
+                carKey => profile?.garage?.[carKey] !== undefined,
+            ),
+        [profile],
     );
-    const firstOwnedCar = carKeys[0] ?? null;
 
-    const playerTier = getPlayerTier(profile?.trophies || 0);
-    const currentCarData = previewCar ? carMaps[previewCar] : null;
+    const selectedOwnedCar = carKeys.includes(selectedCar as CarKey)
+        ? (selectedCar as CarKey)
+        : null;
 
-    // Dados do carro atualmente selecionado na lista.
-    const ownedCarData = previewCar ? profile?.garage[previewCar] : undefined;
-    const isOwned = ownedCarData !== undefined;
-    const isLockedByTier = currentCarData
-        ? currentCarData.tier > playerTier
-        : false;
-
-    const carCost = currentCarData ? currentCarData.tier * 100 : 0;
+    const [previewCar, setPreviewCar] = useState<CarKey | null>(selectedOwnedCar);
+    const [previewColorFront, setPreviewColorFront] = useState(
+        selectedColorFront || AVAILABLE_COLORS[0],
+    );
+    const [previewColorBack, setPreviewColorBack] = useState(
+        selectedColorBack || AVAILABLE_COLORS[2],
+    );
 
     useEffect(() => {
-        playMusic(DASHBOARD_MUSIC, {
-            volume: 0.15,
-            loop: true,
-        });
+        playMusic(DASHBOARD_MUSIC, { volume: 0.15, loop: true });
     }, [playMusic]);
 
-   
     useEffect(() => {
         if (!profile) return;
 
-        setPreviewCar((currentPreview) => {
-            const currentStillOwned = currentPreview
-                ? profile.garage[currentPreview] !== undefined
-                : false;
-
-            return currentStillOwned ? currentPreview : firstOwnedCar;
+        setPreviewCar(current => {
+            if (current && profile.garage?.[current] !== undefined) return current;
+            return carKeys[0] ?? null;
         });
-    }, [profile, firstOwnedCar]);
+    }, [carKeys, profile]);
 
-    // Lógica das barras de progresso (0% a 100%)
-    const calculateProgress = (level?: number) => {
-        if (!isOwned || !level) return 0;
-        // Subtraímos 1 porque o nível inicial (1) equivale a 0% de upgrade
-        return Math.min(100, Math.max(0, ((level - 1) / (MAX_UPGRADE_LEVEL - 1)) * 100));
-    };
+    const playerTier = getPlayerTier(profile?.trophies ?? 0);
+    const currentCarData = previewCar ? carMaps[previewCar] : null;
+    const ownedCarData = previewCar ? profile?.garage?.[previewCar] : undefined;
 
-    const speedProgress = calculateProgress(ownedCarData?.motor?.speedLevel);
-    const accelProgress = calculateProgress(ownedCarData?.motor?.accelerationLevel);
-    const jumpProgress = calculateProgress(ownedCarData?.motor?.jumpPowerLevel);
-    const defProgress = calculateProgress(ownedCarData?.engrenagem?.defenseLevel);
+    const previewWidth = Math.min(
+        isCompactLandscape ? width * 0.42 : width * 0.46,
+        isCompactLandscape ? 370 : 450,
+    );
 
-    const handleOpenOficina = () => {
-        if (!previewCar || !currentCarData || !isOwned) {
-            Alert.alert("Bloqueado", "Você precisa comprar o carro antes de melhorá-lo.");
-            return;
+    const calculateProgress = (level = 1) =>
+        Math.min(
+            100,
+            Math.max(0, ((level - 1) / (MAX_UPGRADE_LEVEL - 1)) * 100),
+        );
+
+    const speedLevel = ownedCarData?.motor?.speedLevel ?? 1;
+    const accelerationLevel = ownedCarData?.motor?.accelerationLevel ?? 1;
+    const jumpLevel = ownedCarData?.motor?.jumpPowerLevel ?? 1;
+    const defenseLevel = ownedCarData?.engrenagem?.defenseLevel ?? 1;
+
+    const handleOpenStore = () => {
+        if (previewCar) {
+            setSelectedCar(previewCar);
+            setSelectedColorFront(previewColorFront);
+            setSelectedColorBack(previewColorBack);
         }
 
-        setSelectedCar(previewCar);
-        setSelectedColorFront(previewColorFront);
-        setSelectedColorBack(previewColorBack);
-
-        // 3. Só depois de salvar no contexto, faz a navegação
         router.push({ pathname: '/LoadingScreen', params: { next: '/CarStore' } });
     };
 
-    const handleActionPress = () => {
-        if (!previewCar || !currentCarData || isLockedByTier) return;
-
-        if (!isOwned) {
-            const success = buyCar(previewCar, 0, carCost);
-            if (!success) {
-                Alert.alert("Saldo Insuficiente", `Você precisa de ${carCost} engrenagens para comprar este veículo.`);
-            }
+    const handleContinue = () => {
+        if (!previewCar || !currentCarData || !ownedCarData) {
+            Alert.alert(
+                'Garagem vazia',
+                'Compre um veículo na loja antes de continuar para a corrida.',
+            );
             return;
         }
 
@@ -134,255 +218,603 @@ export default function CarSelectionScreen() {
         router.navigate('/deckselection' as any);
     };
 
-    let buttonText = 'CONTINUAR';
-    let dynamicButtonStyle = styles.playButton;
-
-    if (!currentCarData) {
-        buttonText = 'NENHUM VEÍCULO DISPONÍVEL';
-        dynamicButtonStyle = [styles.playButton, { backgroundColor: '#555555', borderColor: '#333333' }];
-    } else if (isLockedByTier) {
-        buttonText = `BLOQUEADO (REQUER NÍVEL ${currentCarData.tier})`;
-        dynamicButtonStyle = [styles.playButton, { textAlign: 'center', backgroundColor: '#555555', borderColor: '#333333' }];
-    } else if (!isOwned) {
-        buttonText = `COMPRAR (${carCost} ENGRENAGENS)`;
-        dynamicButtonStyle = [styles.playButton, { backgroundColor: '#FF3B30', borderColor: '#8B0000' }];
-    }
-
-
-
     return (
-        <View style={styles.container}>
-            <View style={styles.headerLeftInfoContainer}>
-                <View style={styles.infoBadge}>
-                    <Text style={styles.infoUsernameText}>@{profile?.username}</Text>
-                </View>
-                <View style={styles.infoBadge}>
-                    <Text style={styles.infoBadgeText}>NÍVEL {playerTier}</Text>
-                </View>
-                <View style={[styles.infoBadge, { backgroundColor: '#FFCC00' }]}>
-                    <Text style={styles.iconText}>🏆</Text>
-                    <Text style={styles.infoBadgeText}>{profile?.trophies || 0}</Text>
-                </View>
-            </View>
-            <View style={styles.headerInfoContainer}>
-                <View style={styles.infoBadge}>
-                    <Text style={styles.iconText}>⚙️</Text>
-                    <Text style={styles.infoBadgeText}>{profile?.parts?.motor || 0}</Text>
-                </View>
-                <View style={styles.infoBadge}>
-                    <Text style={styles.iconText}>🎨</Text>
-                    <Text style={styles.infoBadgeText}>{profile?.parts?.spray || 0}</Text>
-                </View>
-                <View style={styles.infoBadge}>
-                    <Text style={styles.iconText}>🔧</Text>
-                    <Text style={styles.infoBadgeText}>{profile?.parts?.engrenagem || 0}</Text>
-                </View>
-            </View>
-            <Text style={styles.title}>GARAGEM</Text>
-            <Text style={styles.subtitle}>Selecione o veículo para sua próxima corrida.</Text>
+        <SafeAreaView style={styles.safeArea}>
+            <View style={[styles.container, isCompactLandscape && styles.containerCompact]}>
+                <View style={styles.header}>
+                    <View>
+                        <Text style={[styles.title, isCompactLandscape && styles.titleCompact]}>
+                            RACE GARAGE
+                        </Text>
+                        <Text style={styles.subtitle}>ESCOLHA E PREPARE SUA MÁQUINA</Text>
+                    </View>
 
-            <View style={styles.controlsContainer}>
-                <ScrollView showsVerticalScrollIndicator={false} style={styles.colorScroll}>
-                    {AVAILABLE_COLORS.map((color) => (
-                        <TouchableOpacity
-                            key={`front-${color}`}
-                            style={[styles.colorOption, { backgroundColor: color }, previewColorFront === color && styles.colorOptionSelected]}
-                            onPress={() => setPreviewColorFront(color)}
-                            activeOpacity={0.8}
-                        />
-                    ))}
-                </ScrollView>
-
-                <ScrollView showsVerticalScrollIndicator={false} style={[styles.colorScroll, { marginLeft: '-15%' }]}>
-                    {AVAILABLE_COLORS.map((color) => (
-                        <TouchableOpacity
-                            key={`back-${color}`}
-                            style={[styles.colorOption, { backgroundColor: color }, previewColorBack === color && styles.colorOptionSelected]}
-                            onPress={() => setPreviewColorBack(color)}
-                            activeOpacity={0.8}
-                        />
-                    ))}
-                </ScrollView>
-
-                <View style={[styles.carWrapper, isLockedByTier && { opacity: 0.3 }]}>
-                    {currentCarData && isOwned ? (
-                        <>
-                            <Image source={currentCarData.corpoBrancoFrente} style={[styles.carBase, { tintColor: previewColorBack }]} resizeMode="contain" />
-                            <Image source={currentCarData.corpoBrancoTras} style={[styles.carBase, { tintColor: previewColorFront }]} resizeMode="contain" />
-                            <Image source={currentCarData.corpoTransparente} style={styles.carOverlay} resizeMode="contain" />
-                            <Image source={currentCarData.wheelImage} style={[styles.wheel, { width: currentCarData.size.width, height: currentCarData.size.height, left: currentCarData.rodaTras.x, bottom: currentCarData.rodaTras.y }]} />
-                            <Image source={currentCarData.wheelImage} style={[styles.wheel, { width: currentCarData.size.width, height: currentCarData.size.height, left: currentCarData.rodaFrente.x, bottom: currentCarData.rodaFrente.y }]} />
-                        </>
-                    ) : (
-                        <Text style={styles.noCarText}>NENHUM VEÍCULO COMPRADO</Text>
-                    )}
+                    <View style={styles.accountRow}>
+                        <View style={styles.accountBadge}>
+                            <Text style={styles.accountLabel}>PILOTO</Text>
+                            <Text style={styles.accountValue} numberOfLines={1}>
+                                @{profile?.username ?? 'PLAYER'}
+                            </Text>
+                        </View>
+                        <View style={styles.accountBadge}>
+                            <Text style={styles.accountLabel}>NÍVEL</Text>
+                            <Text style={styles.accountValue}>{playerTier}</Text>
+                        </View>
+                        <View style={[styles.accountBadge, styles.trophyBadge]}>
+                            <Text style={styles.accountLabel}>TROFÉUS</Text>
+                            <Text style={styles.accountValue}>🏆 {profile?.trophies ?? 0}</Text>
+                        </View>
+                    </View>
                 </View>
 
+                <View style={styles.mainRow}>
+                    <View style={styles.carSidebar}>
+                        <View style={styles.sidebarHeader}>
+                            <Text style={styles.sidebarEyebrow}>SUA GARAGEM</Text>
+                            <Text style={styles.sidebarCount}>{carKeys.length} CARROS</Text>
+                        </View>
 
+                        <ScrollView
+                            showsVerticalScrollIndicator={false}
+                            contentContainerStyle={styles.sidebarContent}
+                            bounces={false}
+                        >
+                            {carKeys.map(carKey => {
+                                const selected = previewCar === carKey;
+                                const item = carMaps[carKey];
 
-                <ScrollView showsVerticalScrollIndicator={false} style={styles.modelScroll}>
-                    <Text style={styles.modelTitle}>LISTA DE VEÍCULOS</Text>
+                                return (
+                                    <TouchableOpacity
+                                        key={carKey}
+                                        activeOpacity={0.84}
+                                        onPress={() => setPreviewCar(carKey)}
+                                        style={[
+                                            styles.sidebarCarItem,
+                                            selected && styles.sidebarCarItemSelected,
+                                        ]}
+                                    >
+                                        <View
+                                            style={[
+                                                styles.sidebarAccent,
+                                                !selected && styles.sidebarAccentInactive,
+                                            ]}
+                                        />
 
-                    {carKeys.map((carKey) => {
-                        const carTier = carMaps[carKey].tier;
-                        const isCarOwned = profile?.garage[carKey] !== undefined;
-                        const isCarLocked = carTier > playerTier;
+                                        <Image
+                                            source={item.icone as ImageSourcePropType}
+                                            resizeMode="contain"
+                                            style={styles.sidebarCarImage}
+                                        />
 
-                        return (
+                                        <View style={styles.sidebarCarInfo}>
+                                            <Text
+                                                style={[
+                                                    styles.sidebarCarName,
+                                                    selected && styles.sidebarCarNameSelected,
+                                                ]}
+                                                numberOfLines={1}
+                                            >
+                                                {carKey.toUpperCase()}
+                                            </Text>
+                                            <Text style={styles.sidebarCarMeta}>
+                                                NÍVEL {item.tier} • PRONTO
+                                            </Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                );
+                            })}
+
                             <TouchableOpacity
-                                key={carKey}
-                                style={[
-                                    styles.modelOption,
-                                    previewCar === carKey && styles.modelOptionSelected,
-                                    isCarLocked && { borderColor: '#FF3B30' }
-                                ]}
-                                onPress={() => setPreviewCar(carKey)}
-                                activeOpacity={0.8}
+                                activeOpacity={0.84}
+                                onPress={handleOpenStore}
+                                style={[styles.sidebarCarItem, styles.sidebarStoreItem]}
                             >
-                                <Text style={[styles.modelText, previewCar === carKey && styles.modelTextSelected]}>
-                                    {carKey.toUpperCase()} {isCarOwned ? '✓' : (isCarLocked ? '🔒' : '💰')}
+                                <Text style={styles.sidebarStoreIcon}>＋</Text>
+                                <View style={styles.sidebarCarInfo}>
+                                    <Text style={styles.sidebarStoreTitle}>NOVO CARRO</Text>
+                                    <Text style={styles.sidebarCarMeta}>ABRIR LOJA</Text>
+                                </View>
+                            </TouchableOpacity>
+                        </ScrollView>
+                    </View>
+
+                    <View style={styles.showroomPane}>
+                        <View style={styles.showroomBackdrop}>
+                            <View style={styles.diagonalLineOne} />
+                            <View style={styles.diagonalLineTwo} />
+                            <View style={styles.roadLine} />
+
+                            <View style={styles.previewArea}>
+                                {previewCar && currentCarData ? (
+                                    <CarCanvas
+                                        carId={previewCar}
+                                        width={previewWidth}
+                                        colorFront={previewColorFront}
+                                        colorBack={previewColorBack}
+                                    />
+                                ) : (
+                                    <View style={styles.emptyGarage}>
+                                        <Text style={styles.emptyGarageIcon}>🏁</Text>
+                                        <Text style={styles.emptyGarageTitle}>GARAGEM VAZIA</Text>
+                                        <Text style={styles.emptyGarageText}>
+                                            VISITE A LOJA PARA COMPRAR SEU PRIMEIRO CARRO
+                                        </Text>
+                                    </View>
+                                )}
+                            </View>
+
+                            <View style={styles.paintPanel}>
+                                <View style={styles.paintColumn}>
+                                    <Text style={styles.paintLabel}>COR PRINCIPAL</Text>
+                                    <View style={styles.colorRow}>
+                                        {AVAILABLE_COLORS.map(color => (
+                                            <TouchableOpacity
+                                                key={`front-${color}`}
+                                                activeOpacity={0.8}
+                                                onPress={() => setPreviewColorFront(color)}
+                                                style={[
+                                                    styles.colorOption,
+                                                    { backgroundColor: color },
+                                                    previewColorFront === color && styles.colorOptionSelected,
+                                                ]}
+                                            />
+                                        ))}
+                                    </View>
+                                </View>
+
+                                <View style={styles.paintColumn}>
+                                    <Text style={styles.paintLabel}>COR SECUNDÁRIA</Text>
+                                    <View style={styles.colorRow}>
+                                        {AVAILABLE_COLORS.map(color => (
+                                            <TouchableOpacity
+                                                key={`back-${color}`}
+                                                activeOpacity={0.8}
+                                                onPress={() => setPreviewColorBack(color)}
+                                                style={[
+                                                    styles.colorOption,
+                                                    { backgroundColor: color },
+                                                    previewColorBack === color && styles.colorOptionSelected,
+                                                ]}
+                                            />
+                                        ))}
+                                    </View>
+                                </View>
+                            </View>
+                        </View>
+                    </View>
+
+                    <View style={styles.detailsPane}>
+                        <ScrollView
+                            style={styles.detailsScroll}
+                            contentContainerStyle={styles.detailsScrollContent}
+                            showsVerticalScrollIndicator={false}
+                            bounces={false}
+                        >
+                            <Text style={styles.className}>VEÍCULO EQUIPADO</Text>
+                            <Text
+                                style={[styles.selectedCarName, isCompactLandscape && styles.selectedCarNameCompact]}
+                                numberOfLines={1}
+                            >
+                                {previewCar?.toUpperCase() ?? 'SEM VEÍCULO'}
+                            </Text>
+
+                            <View style={styles.vehicleMetaRow}>
+                                <View style={styles.infoCell}>
+                                    <Text style={styles.infoCellLabel}>CATEGORIA</Text>
+                                    <Text style={styles.infoCellValue}>
+                                        NÍVEL {currentCarData?.tier ?? '-'}
+                                    </Text>
+                                </View>
+                                <View style={styles.infoDivider} />
+                                <View style={styles.infoCell}>
+                                    <Text style={styles.infoCellLabel}>ESTADO</Text>
+                                    <Text style={[styles.infoCellValue, styles.readyText]}>
+                                        {previewCar ? 'PRONTO' : 'INDISPONÍVEL'}
+                                    </Text>
+                                </View>
+                            </View>
+
+                            <View style={styles.performancePanel}>
+                                <Text style={styles.performanceTitle}>UPGRADES INSTALADOS</Text>
+                                <StatBar
+                                    label="VELOCIDADE"
+                                    value={speedLevel}
+                                    progress={calculateProgress(speedLevel)}
+                                />
+                                <StatBar
+                                    label="ACELERAÇÃO"
+                                    value={accelerationLevel}
+                                    progress={calculateProgress(accelerationLevel)}
+                                />
+                                <StatBar
+                                    label="FORÇA DO PULO"
+                                    value={jumpLevel}
+                                    progress={calculateProgress(jumpLevel)}
+                                />
+                                <StatBar
+                                    label="DEFESA"
+                                    value={defenseLevel}
+                                    progress={calculateProgress(defenseLevel)}
+                                />
+                            </View>
+
+                            <View style={styles.partsPanel}>
+                                <Text style={styles.partsTitle}>ESTOQUE DA GARAGEM</Text>
+                                <View style={styles.partsRow}>
+                                    <View style={styles.partBadge}>
+                                        <Text style={styles.partIcon}>⚙️</Text>
+                                        <Text style={styles.partValue}>{profile?.parts?.motor ?? 0}</Text>
+                                        <Text style={styles.partLabel}>MOTOR</Text>
+                                    </View>
+                                    <View style={styles.partBadge}>
+                                        <Text style={styles.partIcon}>🎨</Text>
+                                        <Text style={styles.partValue}>{profile?.parts?.spray ?? 0}</Text>
+                                        <Text style={styles.partLabel}>SPRAY</Text>
+                                    </View>
+                                    <View style={styles.partBadge}>
+                                        <Text style={styles.partIcon}>🔧</Text>
+                                        <Text style={styles.partValue}>{profile?.parts?.engrenagem ?? 0}</Text>
+                                        <Text style={styles.partLabel}>PEÇAS</Text>
+                                    </View>
+                                </View>
+                            </View>
+                        </ScrollView>
+
+                        <View style={styles.actionsRow}>
+                            <TouchableOpacity
+                                activeOpacity={0.84}
+                                onPress={handleOpenStore}
+                                style={styles.secondaryButton}
+                            >
+                                <Text style={styles.secondaryButtonText}>LOJA / OFICINA</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                activeOpacity={0.86}
+                                onPress={handleContinue}
+                                style={[styles.mainButton, !previewCar && styles.mainButtonDisabled]}
+                            >
+                                <Text style={styles.mainButtonText}>
+                                    {previewCar ? 'EQUIPAR E CONTINUAR' : 'COMPRAR UM CARRO'}
                                 </Text>
                             </TouchableOpacity>
-                        );
-                    })}
-                </ScrollView>
-
+                        </View>
+                    </View>
+                </View>
             </View>
-
-            {/* CAIXA DE STATUS (UPGRADES) */}
-            <View style={styles.statsContainer}>
-                <Text style={styles.statsTitle}>STATUS DO VEÍCULO</Text>
-                <StatBar label="Velocidade" progress={speedProgress} />
-                <StatBar label="Aceleração" progress={accelProgress} />
-                <StatBar label="Força do Pulo" progress={jumpProgress} />
-                <StatBar label="Defesa" progress={defProgress} />
-            </View>
-
-            <View style={styles.btnContainer}>
-                <TouchableOpacity style={styles.btnOficina} onPress={handleOpenOficina}>
-                    <Text style={styles.openOficinaText}>OFICINA</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={dynamicButtonStyle} activeOpacity={isLockedByTier ? 1 : 0.9} onPress={handleActionPress}>
-                    <Text style={styles.playButtonText}>{buttonText}</Text>
-                </TouchableOpacity>
-
-            </View>
-        </View>
+        </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#F8F9FA', padding: 20 },
-    headerLeftInfoContainer: {
-        position: 'absolute',
-        top: 40,
-        left: 20,
-        display: 'flex',
-        flexDirection: 'row',
-        alignItems: 'flex-start', // Alinha os itens à esquerda
-        gap: 8,
-        zIndex: 100,
+    safeArea: { flex: 1, backgroundColor: '#101012' },
+    container: {
+        flex: 1,
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        backgroundColor: '#171719',
     },
-    headerInfoContainer: {
-        position: 'absolute',
-        top: 40,
-        right: 20,
-        display: 'flex',
-        flexDirection: 'row',
-        alignItems: 'flex-end',
-        gap: 8,
-        zIndex: 100,
-    },
-    infoBadge: {
+    containerCompact: { paddingVertical: 7 },
+    header: {
+        minHeight: 54,
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 8,
+    },
+    title: {
+        color: '#FFFFFF',
+        fontSize: 29,
+        fontWeight: '900',
+        fontStyle: 'italic',
+        letterSpacing: 1.8,
+    },
+    titleCompact: { fontSize: 23 },
+    subtitle: {
+        color: '#8D8D94',
+        fontSize: 10,
+        fontWeight: '800',
+        letterSpacing: 1.5,
+        marginTop: 1,
+    },
+    accountRow: { flexDirection: 'row', gap: 8 },
+    accountBadge: {
+        minWidth: 68,
+        maxWidth: 145,
+        minHeight: 39,
+        paddingHorizontal: 11,
+        paddingVertical: 5,
+        borderRadius: 11,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: 'rgba(255,255,255,0.45)',
+        backgroundColor: '#242427',
         justifyContent: 'center',
-        backgroundColor: '#FFFFFF',
-        paddingVertical: 6,
-        paddingHorizontal: 14,
-        borderRadius: 16,
-        borderWidth: 3,
-        borderColor: '#1C1C1E',
-        shadowColor: '#1C1C1E',
-        shadowOffset: { width: 2, height: 2 },
-        shadowOpacity: 1,
-        shadowRadius: 0,
-        elevation: 4,
-        gap: 6,
     },
-    infoUsernameText: {
+    trophyBadge: { minWidth: 96 },
+    accountLabel: {
+        color: '#85858C',
+        fontSize: 8,
+        fontWeight: '900',
+        letterSpacing: 0.8,
+    },
+    accountValue: {
+        color: '#FFFFFF',
         fontSize: 14,
         fontWeight: '900',
-        color: '#1C1C1E',
-        letterSpacing: 1,
+        marginTop: 1,
     },
-    infoBadgeText: {
-        fontSize: 14,
-        fontWeight: '900',
-        color: '#1C1C1E',
-        letterSpacing: 1,
-    },
-    iconText: {
-        fontSize: 14,
-    },
-    title: { fontSize: 32, fontWeight: '900', color: '#1C1C1E', textAlign: 'center', marginTop: 20, textTransform: 'uppercase', letterSpacing: 2 },
-    subtitle: { fontSize: 16, fontWeight: 'bold', color: '#8E8E93', textAlign: 'center', marginBottom: 30 },
-
-    statsContainer: {
-        position: 'absolute',
-        bottom: 80,
-        left: 20,
-        backgroundColor: '#FFFFFF',
-        padding: 12,
+    carSidebar: {
+        maxWidth: '25%',
+        minWidth: '25%',
+        marginRight: 12,
         borderRadius: 16,
-        borderWidth: 3,
-        borderColor: '#1C1C1E',
-        width: 160,
-        zIndex: 10,
-        elevation: 5,
-        shadowColor: '#1C1C1E',
-        shadowOffset: { width: 3, height: 3 },
-        shadowOpacity: 1,
-        shadowRadius: 0,
-    },
-    statsTitle: { fontSize: 12, fontWeight: '900', color: '#1C1C1E', marginBottom: 10, textAlign: 'center' },
-    statRow: { marginBottom: 8 },
-    statLabel: { fontSize: 10, fontWeight: 'bold', color: '#1C1C1E', marginBottom: 3, textTransform: 'uppercase' },
-    barContainer: {
-        height: 14,
-        backgroundColor: '#FFFFFF', // Fundo branco quando não tem upgrade
-        borderWidth: 2,
-        borderColor: '#1C1C1E',
-        borderRadius: 8,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: 'rgba(255,255,255,0.34)',
+        backgroundColor: '#1E1E21',
         overflow: 'hidden',
     },
-    barFill: {
-        height: '100%',
-        backgroundColor: '#34C759', // Verde do progresso
+    sidebarHeader: {
+        minHeight: 43,
+        paddingHorizontal: 11,
+        paddingVertical: 8,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: 'rgba(255,255,255,0.14)',
+        backgroundColor: '#242427',
     },
+    sidebarEyebrow: {
+        color: '#FFFFFF',
+        fontSize: 10,
+        fontWeight: '900',
+        fontStyle: 'italic',
+        letterSpacing: 0.8,
+    },
+    sidebarCount: {
+        color: '#85858C',
+        fontSize: 7,
+        fontWeight: '900',
+        letterSpacing: 0.8,
+        marginTop: 2,
+    },
+    sidebarContent: {
+        padding: 7,
+        gap: 7,
 
-    previewContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 30, },
-    selectorColumn: { alignItems: 'center', justifyContent: 'center', display: 'flex', flexDirection: 'row', width: '18%' },
-    carWrapper: { width: '30%', height: 100, justifyContent: 'center', alignItems: 'center', zIndex: 999 },
-    noCarText: { fontSize: 12, fontWeight: '900', color: '#8E8E93', textAlign: 'center' },
-    carBase: { width: '100%', height: '100%', zIndex: 999, position: 'absolute', top: 0, left: 0 },
-    carOverlay: { width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, zIndex: 999 },
-    wheel: { width: 55, height: 55, position: 'absolute', zIndex: 999 },
-    controlsContainer: { marginBottom: 20, display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' },
-    sectionLabel: { fontSize: 18, fontWeight: '800', color: '#1C1C1E', marginBottom: 10, marginLeft: 5 },
-    colorScroll: { marginBottom: 30, maxWidth: '5%', maxHeight: 150, minHeight: 150, overflow: 'hidden', marginLeft: 20, paddingLeft: 10, paddingTop: 5 },
-    colorOption: { width: 30, height: 30, borderRadius: 24, borderWidth: 1, borderColor: 'rgba(0,0,0,0.1)', marginBottom: 4 },
-    colorOptionSelected: { borderColor: '#1C1C1E', borderWidth: 3, transform: [{ scale: 1.1 }] },
-    modelScroll: { padding: 12, marginTop: -18, backgroundColor: '#fff', marginBottom: 2, maxWidth: 160, textAlign: 'center', maxHeight: 200, minHeight: 200, overflow: 'hidden', paddingTop: 5, paddingBottom: 10, borderRadius: 16, borderWidth: 3, borderColor: '#1C1C1E', elevation: 5, shadowColor: '#1C1C1E', shadowOffset: { width: 3, height: 3 }, shadowOpacity: 1, shadowRadius: 0, },
-    modelTitle: { fontSize: 12, fontWeight: '900', color: '#1C1C1E', marginBottom: 10, textAlign: 'center' },
-    modelOption: { backgroundColor: '#FFFFFF', paddingVertical: 5, borderRadius: 16, borderWidth: 3, borderColor: '#000', marginBottom: 4 },
-    modelOptionSelected: { borderColor: '#1C1C1E', backgroundColor: '#1C1C1E' },
-    modelText: { fontSize: 10, fontWeight: 'bold', color: '#8E8E93', textAlign: 'center' },
-    modelTextSelected: { color: '#FFFFFF' },
-    scrollCars: { display: 'flex', flexDirection: 'column' },
-    btnContainer: { display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, gap: 10 },
-    openOficinaText: { fontSize: 18, fontWeight: '900', color: '#FFF', letterSpacing: 2 },
-    btnOficina: { backgroundColor: '#007AFF', paddingVertical: 10, borderRadius: 20, textTransform: 'uppercase', width: '33%', borderWidth: 4, borderColor: '#1C1C1E', alignItems: 'center', shadowColor: '#1C1C1E', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 5 },
-    playButton: { backgroundColor: '#FFCC00', paddingVertical: 10, borderRadius: 20, textTransform: 'uppercase', width: '33%', borderWidth: 4, borderColor: '#1C1C1E', alignItems: 'center', shadowColor: '#1C1C1E', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 5 },
-    playButtonText: { fontSize: 18, fontWeight: '900', color: '#FFF', letterSpacing: 2, textAlign: 'center' },
+    },
+    sidebarCarItem: {
+        minHeight: 68,
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderRadius: 11,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.10)',
+        backgroundColor: '#29292D',
+        paddingHorizontal: 8,
+        paddingVertical: 6,
+        overflow: 'hidden',
+    },
+    sidebarCarItemSelected: {
+        borderColor: ACCENT,
+        backgroundColor: 'rgba(255,214,10,0.09)',
+    },
+    sidebarAccent: {
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: 4,
+        backgroundColor: ACCENT,
+    },
+    sidebarAccentInactive: {
+        opacity: 0.18,
+    },
+    sidebarCarImage: {
+        width: 100,
+        height: 100,
+        marginRight: 7,
+    },
+    sidebarCarInfo: {
+        flex: 1,
+        minWidth: 0,
+    },
+    sidebarCarName: {
+        color: '#F4F4F5',
+        fontSize: 10,
+        fontWeight: '900',
+        fontStyle: 'italic',
+    },
+    sidebarCarNameSelected: {
+        color: ACCENT,
+    },
+    sidebarCarMeta: {
+        color: '#85858C',
+        fontSize: 7,
+        fontWeight: '900',
+        marginTop: 3,
+    },
+    sidebarStoreItem: {
+        borderStyle: 'dashed',
+        borderColor: 'rgba(255,214,10,0.45)',
+    },
+    sidebarStoreIcon: {
+        width: 72,
+        textAlign: 'center',
+        color: ACCENT,
+        fontSize: 27,
+        fontWeight: '300',
+        marginRight: 7,
+    },
+    sidebarStoreTitle: {
+        color: '#FFFFFF',
+        fontSize: 9,
+        fontWeight: '900',
+    },
+    mainRow: { flex: 1, minHeight: 0, flexDirection: 'row' },
+    showroomPane: { flex: 1, paddingRight: 14, maxWidth: '50%', minWidth: '50%' },
+    showroomBackdrop: {
+        flex: 1,
+        borderRadius: 16,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: 'rgba(255,255,255,0.18)',
+        backgroundColor: '#202024',
+        overflow: 'hidden',
+    },
+    diagonalLineOne: {
+        position: 'absolute',
+        width: '90%',
+        height: 1,
+        backgroundColor: 'rgba(255,255,255,0.07)',
+        transform: [{ rotate: '-12deg' }],
+        top: '32%',
+        left: '-5%',
+    },
+    diagonalLineTwo: {
+        position: 'absolute',
+        width: '100%',
+        height: 1,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        transform: [{ rotate: '9deg' }],
+        top: '54%',
+        left: '5%',
+    },
+    roadLine: {
+        position: 'absolute',
+        left: '8%',
+        right: '8%',
+        bottom: 66,
+        height: 2,
+        backgroundColor: 'rgba(255,255,255,0.25)',
+    },
+    previewArea: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 4 },
+    carLayer: { position: 'absolute', left: 0, top: 0 },
+    wheel: { position: 'absolute' },
+    emptyGarage: { alignItems: 'center', maxWidth: 290 },
+    emptyGarageIcon: { fontSize: 30 },
+    emptyGarageTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '900', marginTop: 6 },
+    emptyGarageText: {
+        color: '#85858C',
+        fontSize: 9,
+        fontWeight: '900',
+        textAlign: 'center',
+        letterSpacing: 0.7,
+        marginTop: 5,
+    },
+    paintPanel: {
+        minHeight: 60,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 7,
+        gap: 18,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: 'rgba(255,255,255,0.16)',
+        backgroundColor: 'rgba(15,15,17,0.74)',
+    },
+    paintColumn: { flex: 1, minWidth: 0 },
+    paintLabel: { color: '#85858C', fontSize: 8, fontWeight: '900', letterSpacing: 0.7, marginBottom: 5 },
+    colorRow: { flexDirection: 'row', gap: 5 },
+    colorOption: {
+        width: 18,
+        height: 18,
+        borderRadius: 9,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.22)',
+    },
+    colorOptionSelected: { borderWidth: 3, borderColor: '#FFFFFF', transform: [{ scale: 1.08 }] },
+    detailsPane: {
+        flex: 3.5,
+        maxWidth: '25%',
+        minWidth: '25%',
+        minHeight: 0,
+        paddingLeft: 14,
+        borderLeftWidth: StyleSheet.hairlineWidth,
+        borderLeftColor: 'rgba(255,255,255,0.72)',
+    },
+    detailsScroll: { flex: 1, minHeight: 0 },
+    detailsScrollContent: { paddingBottom: 6 },
+    className: { color: '#8A8A91', fontSize: 9, fontWeight: '900', letterSpacing: 1.7 },
+    selectedCarName: {
+        color: ACCENT,
+        fontSize: 28,
+        fontWeight: '900',
+        fontStyle: 'italic',
+        letterSpacing: 0.6,
+        marginTop: -2,
+    },
+    selectedCarNameCompact: { fontSize: 22 },
+    vehicleMetaRow: {
+        minHeight: 45,
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderRadius: 11,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.12)',
+        backgroundColor: '#242428',
+        paddingHorizontal: 10,
+        marginTop: 7,
+        marginBottom: 9,
+    },
+    infoCell: { flex: 1 },
+    infoCellLabel: { color: '#83838A', fontSize: 8, fontWeight: '900' },
+    infoCellValue: { color: '#FFFFFF', fontSize: 12, fontWeight: '900', marginTop: 1 },
+    readyText: { color: '#32D74B' },
+    infoDivider: { width: StyleSheet.hairlineWidth, height: 25, backgroundColor: 'rgba(255,255,255,0.22)', marginHorizontal: 10 },
+    performancePanel: { flexShrink: 0 },
+    performanceTitle: { color: '#FFFFFF', fontSize: 10, fontWeight: '900', letterSpacing: 0.8, marginBottom: 6 },
+    statBlock: { marginBottom: 7 },
+    statHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 },
+    statLabel: { color: '#A0A0A7', fontSize: 8, fontWeight: '900' },
+    statValue: { color: '#FFFFFF', fontSize: 8, fontWeight: '900' },
+    statTrack: { height: 7, borderRadius: 2, backgroundColor: '#303035', overflow: 'hidden' },
+    statFill: { height: '100%', borderRadius: 2, backgroundColor: ACCENT },
+    statMarkerOne: { position: 'absolute', left: '33%', top: 0, bottom: 0, width: 1, backgroundColor: 'rgba(15,15,16,0.7)' },
+    statMarkerTwo: { position: 'absolute', left: '66%', top: 0, bottom: 0, width: 1, backgroundColor: 'rgba(15,15,16,0.7)' },
+    partsPanel: { marginTop: 3 },
+    partsTitle: { color: '#FFFFFF', fontSize: 10, fontWeight: '900', letterSpacing: 0.8, marginBottom: 6 },
+    partsRow: { flexDirection: 'row', gap: 6 },
+    partBadge: {
+        flex: 1,
+        minWidth: 0,
+        paddingVertical: 7,
+        borderRadius: 9,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.12)',
+        backgroundColor: '#242428',
+        alignItems: 'center',
+    },
+    partIcon: { fontSize: 12 },
+    partValue: { color: '#FFFFFF', fontSize: 12, fontWeight: '900', marginTop: 1 },
+    partLabel: { color: '#85858C', fontSize: 7, fontWeight: '900', marginTop: 1 },
+    actionsRow: {
+        flexShrink: 0,
+        flexDirection: 'row',
+        gap: 8,
+        paddingTop: 8,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: 'rgba(255,255,255,0.14)',
+    },
+    secondaryButton: {
+        minWidth: 100,
+        minHeight: 42,
+        paddingHorizontal: 11,
+        borderRadius: 11,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.52)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#27272B',
+    },
+    secondaryButtonText: { color: '#FFFFFF', fontSize: 9, fontWeight: '900', fontStyle: 'italic' },
+    mainButton: {
+        flex: 1,
+        minHeight: 42,
+        paddingHorizontal: 10,
+        borderRadius: 11,
+        borderWidth: 2,
+        borderColor: ACCENT,
+        backgroundColor: ACCENT,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    mainButtonDisabled: { backgroundColor: '#35353A', borderColor: '#55555D' },
+    mainButtonText: { color: '#111113', fontSize: 10, fontWeight: '900', fontStyle: 'italic', letterSpacing: 0.3, textAlign: 'center' },
 });
