@@ -54,7 +54,7 @@ export default function Carro({
   // === ESCALA ===
   const BASE_WIDTH = car.baseSize.width;
   const BASE_HEIGHT = car.baseSize.height;
-  const WHEEL_DIAMETER = 70;
+  const WHEEL_DIAMETER = car.wheels.mapa.size.width; // Assuming the wheel is circular, we can use width as diameter
 
   const RENDER_WIDTH = 180;
   const RENDER_HEIGHT = RENDER_WIDTH * (BASE_HEIGHT / BASE_WIDTH);
@@ -62,11 +62,11 @@ export default function Carro({
   const scaleX = RENDER_WIDTH / BASE_WIDTH;
   const scaleY = RENDER_HEIGHT / BASE_HEIGHT;
 
-  const frontOffsetX = (car.offset?.frente?.x || 0) * scaleX;
-  const frontOffsetY = (car.offset?.frente?.y || 0) * scaleX;
+  const frontOffsetX = (car.wheels.mapa.rodaFrente.x || 0) * scaleX;
+  const frontOffsetY = (car.wheels.mapa.rodaFrente.y || 0) * scaleY;
 
-  const rearOffsetX = (car.offset?.tras?.x || 0) * scaleX;
-  const rearOffsetY = (car.offset?.tras?.y || 0) * scaleX;
+  const rearOffsetX = (car.wheels.mapa.rodaTras.x || 0) * scaleX;
+  const rearOffsetY = (car.wheels.mapa.rodaTras.y || 0) * scaleY;
 
   return (
     <View style={[styles.carWrapper, { width: RENDER_WIDTH, height: RENDER_HEIGHT }]}>
@@ -98,8 +98,8 @@ export default function Carro({
           {
             width: WHEEL_DIAMETER * scaleX,
             height: WHEEL_DIAMETER * scaleY,
-            left: (car.rodaTras.x * scaleX) + rearOffsetX - ((WHEEL_DIAMETER * scaleX) / 2),
-            bottom: (car.rodaTras.y * scaleY) + rearOffsetY - ((WHEEL_DIAMETER * scaleY) / 2),
+            left: (car.wheels.mapa.rodaTras.x * scaleX) + rearOffsetX - ((WHEEL_DIAMETER * scaleX) / 2),
+            bottom: (car.wheels.mapa.rodaTras.y * scaleY) + rearOffsetY - ((WHEEL_DIAMETER * scaleY) / 2),
             transform: [{ rotate: spin }]
           }
         ]}
@@ -114,8 +114,8 @@ export default function Carro({
           {
             width: WHEEL_DIAMETER * scaleX,
             height: WHEEL_DIAMETER * scaleY,
-            left: (car.rodaFrente.x * scaleX) + frontOffsetX - ((WHEEL_DIAMETER * scaleX) / 2),
-            bottom: (car.rodaFrente.y * scaleY) + frontOffsetY - ((WHEEL_DIAMETER * scaleY) / 2),
+            left: (car.wheels.mapa.rodaFrente.x * scaleX) + frontOffsetX - ((WHEEL_DIAMETER * scaleX) / 2),
+            bottom: (car.wheels.mapa.rodaFrente.y * scaleY) + frontOffsetY - ((WHEEL_DIAMETER * scaleY) / 2),
             transform: [{ rotate: spin }]
           }
         ]}

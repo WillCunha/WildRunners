@@ -78,10 +78,10 @@ const CarCanvas = React.memo(
                     style={[
                         styles.wheel,
                         {
-                            width: car.size.width * scale,
-                            height: car.size.height * scale,
-                            left: car.rodaTras.x * scale,
-                            bottom: car.rodaTras.y * scale,
+                            width: car.wheels.loja.size.width * scale,
+                            height: car.wheels.loja.size.height * scale,
+                            left: car.wheels.loja.rodaTras.x * scale,
+                            bottom: car.wheels.loja.rodaTras.y * scale,
                         },
                     ]}
                 />
@@ -91,10 +91,10 @@ const CarCanvas = React.memo(
                     style={[
                         styles.wheel,
                         {
-                            width: car.size.width * scale,
-                            height: car.size.height * scale,
-                            left: car.rodaFrente.x * scale,
-                            bottom: car.rodaFrente.y * scale,
+                            width: car.wheels.loja.size.width * scale,
+                            height: car.wheels.loja.size.height * scale,
+                            left: car.wheels.loja.rodaFrente.x * scale,
+                            bottom: car.wheels.loja.rodaFrente.y * scale,
                         },
                     ]}
                 />
@@ -201,6 +201,16 @@ export default function CarSelectionScreen() {
         }
 
         router.push({ pathname: '/LoadingScreen', params: { next: '/CarStore' } });
+    };
+    
+    const handleOpenOficina = () => {
+        if (previewCar) {
+            setSelectedCar(previewCar);
+            setSelectedColorFront(previewColorFront);
+            setSelectedColorBack(previewColorBack);
+        }
+
+        router.push({ pathname: '/LoadingScreen', params: { next: '/OficinaScreen' } });
     };
 
     const handleContinue = () => {
@@ -463,10 +473,10 @@ export default function CarSelectionScreen() {
                         <View style={styles.actionsRow}>
                             <TouchableOpacity
                                 activeOpacity={0.84}
-                                onPress={handleOpenStore}
+                                onPress={handleOpenOficina}
                                 style={styles.secondaryButton}
                             >
-                                <Text style={styles.secondaryButtonText}>LOJA / OFICINA</Text>
+                                <Text style={styles.secondaryButtonText}>OFICINA</Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity
@@ -685,8 +695,8 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255,255,255,0.25)',
     },
     previewArea: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 4 },
-    carLayer: { position: 'absolute', left: 0, top: 0 },
-    wheel: { position: 'absolute' },
+    carLayer: { position: 'absolute', left: 0, top: 0 , zIndex: 2},
+    wheel: { position: 'absolute', zIndex: 1 },
     emptyGarage: { alignItems: 'center', maxWidth: 290 },
     emptyGarageIcon: { fontSize: 30 },
     emptyGarageTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '900', marginTop: 6 },

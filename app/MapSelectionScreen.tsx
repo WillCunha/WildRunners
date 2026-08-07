@@ -347,7 +347,7 @@ const styles = StyleSheet.create({
   cardAccent: { height: 4, backgroundColor: ACCENT },
   imageWrapper: {
     width: '100%',
-    height: 185,
+    height: 150,
     overflow: 'hidden',
     backgroundColor: '#151517',
   },

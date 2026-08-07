@@ -99,10 +99,10 @@ const CarCanvas = React.memo(
           style={[
             styles.wheel,
             {
-              width: car.size.width * scale,
-              height: car.size.height * scale,
-              left: car.rodaTras.x * scale,
-              bottom: car.rodaTras.y * scale,
+              width: car.wheels.loja.size.width * scale,
+              height: car.wheels.loja.size.height * scale,
+              left: car.wheels.loja.rodaTras.x * scale,
+              bottom: car.wheels.loja.rodaTras.y * scale,
             },
           ]}
         />
@@ -112,10 +112,10 @@ const CarCanvas = React.memo(
           style={[
             styles.wheel,
             {
-              width: car.size.width * scale,
-              height: car.size.height * scale,
-              left: car.rodaFrente.x * scale,
-              bottom: car.rodaFrente.y * scale,
+              width: car.wheels.loja.size.width * scale,
+              height: car.wheels.loja.size.height * scale,
+              left: car.wheels.loja.rodaFrente.x * scale,
+              bottom: car.wheels.loja.rodaFrente.y * scale,
             },
           ]}
         />
@@ -833,9 +833,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     top: 0,
+    zIndex: 2,
   },
   wheel: {
     position: 'absolute',
+    zIndex: 1,
   },
   previewLock: {
     position: 'absolute',
