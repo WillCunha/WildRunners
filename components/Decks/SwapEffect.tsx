@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { AudioContext } from '@/context/AudioContext';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Vibration, View } from 'react-native';
 
 interface SwapEffectProps {
@@ -10,132 +11,213 @@ interface SwapEffectProps {
     }[];
 
     callerId: string;
+    scaleAnim: Animated.Value;
     onTargetChange?: (targetId: string) => void;
+
+    // Executa a troca real das coordenadas no ponto em que os carros já encolheram.
     onSwapExecute: (targetId: string) => void;
+
+    // Só limpa activeSwap depois que a animação inversa terminou.
+    onComplete?: () => void;
+
+    // Garante limpeza caso o alvo/caller desapareça.
+    onCancel?: () => void;
 }
 
-export default function SwapEffect({ allRacers, callerId, onTargetChange, onSwapExecute }: SwapEffectProps) {
+export default function SwapEffect({
+    allRacers,
+    callerId,
+    scaleAnim,
+    onTargetChange,
+    onSwapExecute,
+    onComplete,
+    onCancel,
+}: SwapEffectProps) {
+    const { playCardSfx } = useContext(AudioContext);
+
     const [currentTarget, setCurrentTarget] = useState<string | null>(null);
     const [phase, setPhase] = useState<'aiming' | 'animating' | 'done'>('aiming');
 
-    // Valores para a animação do texto "SWAP" e dos personagens
-    const scaleAnim = useRef(new Animated.Value(1)).current;
-    const textOpacity = useRef(new Animated.Value(0)).current;
+    // Mantém posições e callbacks sempre atuais sem reiniciar os timers a cada frame.
+    const racersRef = useRef(allRacers);
+    const currentTargetRef = useRef<string | null>(null);
+    const initialTargetIdsRef = useRef<string[]>([]);
+
+    const onTargetChangeRef = useRef(onTargetChange);
+    const onSwapExecuteRef = useRef(onSwapExecute);
+    const onCompleteRef = useRef(onComplete);
+    const onCancelRef = useRef(onCancel);
+    const playCardSfxRef = useRef(playCardSfx);
 
     useEffect(() => {
-        // FASE 1: A Mira Maluca (Dura 5 segundos, troca a cada 0.8s)
-        let aimInterval: NodeJS.Timeout;
-        let finishTimer: NodeJS.Timeout;
+        racersRef.current = allRacers;
+    }, [allRacers]);
 
-        if (phase === 'aiming') {
-            aimInterval = setInterval(() => {
+    useEffect(() => {
+        onTargetChangeRef.current = onTargetChange;
+        onSwapExecuteRef.current = onSwapExecute;
+        onCompleteRef.current = onComplete;
+        onCancelRef.current = onCancel;
+        playCardSfxRef.current = playCardSfx;
+    }, [
+        onTargetChange,
+        onSwapExecute,
+        onComplete,
+        onCancel,
+        playCardSfx,
+    ]);
 
-                const caller = allRacers.find(r => r.id === callerId);
+    const publishTarget = (targetId: string) => {
+        currentTargetRef.current = targetId;
+        setCurrentTarget(targetId);
+        onTargetChangeRef.current?.(targetId);
+    };
 
-                if (!caller) return;
+    const chooseTarget = () => {
+        const racers = racersRef.current;
+        const caller = racers.find(r => r.id === callerId);
 
-                const possibleTargets = allRacers.filter(r => {
-                    if (r.id === callerId) return false;
+        if (!caller) return null;
 
-                    return r.x > caller.x;
-                });
+        // Opção normal: qualquer corredor que esteja à frente neste momento.
+        const aheadNow = racers.filter(
+            r => r.id !== callerId && r.x > caller.x
+        );
 
-                if (possibleTargets.length === 0) return;
-
-                const randomTarget =
-                    possibleTargets[
-                    Math.floor(Math.random() * possibleTargets.length)
-                    ];
-
-                setCurrentTarget(randomTarget.id);
-                onTargetChange?.(randomTarget.id);
-
-
-            }, 500);
-
-            // TEMPO DE SELEÇÃO
-            finishTimer = setTimeout(() => {
-                setPhase('animating');
-            }, 3000); // 3 segundos escolhendo alvo
+        if (aheadNow.length > 0) {
+            return aheadNow[Math.floor(Math.random() * aheadNow.length)].id;
         }
+
+        // Se a ordem mudou durante os 3 segundos da roleta, não anulamos a carta.
+        const initialStillAlive = racers.filter(
+            r =>
+                r.id !== callerId &&
+                initialTargetIdsRef.current.includes(r.id)
+        );
+
+        if (initialStillAlive.length === 0) return null;
+
+        return initialStillAlive[
+            Math.floor(Math.random() * initialStillAlive.length)
+        ].id;
+    };
+
+    useEffect(() => {
+        if (phase !== 'aiming') return;
+
+        const racers = racersRef.current;
+        const caller = racers.find(r => r.id === callerId);
+
+        if (!caller) {
+            setPhase('done');
+            onCancelRef.current?.();
+            return;
+        }
+
+        const initialTargets = racers.filter(
+            r => r.id !== callerId && r.x > caller.x
+        );
+
+        initialTargetIdsRef.current = initialTargets.map(r => r.id);
+
+        // Seleciona imediatamente. Isso mantém o Swap funcionando com somente um adversário.
+        const firstTarget = chooseTarget();
+
+        if (!firstTarget) {
+            setPhase('done');
+            onCancelRef.current?.();
+            return;
+        }
+
+        publishTarget(firstTarget);
+
+        const aimInterval = setInterval(() => {
+            const nextTarget = chooseTarget();
+
+            if (nextTarget) publishTarget(nextTarget);
+        }, 500);
+
+        const finishTimer = setTimeout(() => {
+            setPhase('animating');
+        }, 3000);
 
         return () => {
             clearInterval(aimInterval);
             clearTimeout(finishTimer);
         };
-    }, [phase]);
+    }, [phase, callerId]);
 
     useEffect(() => {
-        // FASE 2: A Animação e Execução
-        if (phase === 'animating' && currentTarget) {
-            Animated.sequence([
-                // Aparece o texto SWAP e encolhe os personagens (1 para 0)
-                Animated.parallel([
-                    Animated.timing(textOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-                    Animated.timing(scaleAnim, { toValue: 0, duration: 400, useNativeDriver: true })
-                ]),
+        if (phase !== 'animating') return;
 
-                // Dispara a função no mapa.tsx para inverter as coordenadas REAIS
-                // Usamos um delay tático usando o hook, ou chamamos a prop aqui
-            ]).start(() => {
-                const caller = allRacers.find(r => r.id === callerId);
-                const target = allRacers.find(r => r.id === currentTarget);
+        let targetId = currentTargetRef.current;
+        const racers = racersRef.current;
 
-                if (!caller || !target) return;
-                if (target.x <= caller.x) return;
+        if (!targetId || !racers.some(r => r.id === targetId)) {
+            targetId = chooseTarget();
 
-                onSwapExecute(currentTarget);
-
-                Vibration.vibrate(100);
-
-                // Cresce os personagens de volta (0 para 1) e some o texto
-                Animated.parallel([
-                    Animated.timing(scaleAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
-                    Animated.timing(textOpacity, { toValue: 0, duration: 300, useNativeDriver: true })
-                ]).start(() => {
-                    setPhase('done');
-                });
-            });
+            if (targetId) {
+                publishTarget(targetId);
+            }
         }
-    }, [phase]);
+
+        if (!targetId) {
+            scaleAnim.setValue(1);
+            setPhase('done');
+            onCancelRef.current?.();
+            return;
+        }
+
+        const finalTargetId = targetId;
+
+        /*
+         * O SFX começa junto com a sucção.
+         *
+         * O prompt do ElevenLabs tem o "pop" aproximadamente no meio
+         * do efeito. Por isso o encolhimento dura ~500 ms e a troca real
+         * acontece exatamente quando scale chega quase a zero.
+         */
+        playCardSfxRef.current('swap');
+
+        // 1) Caller + alvo são "sugados" para o próprio centro.
+        Animated.timing(scaleAnim, {
+            toValue: 0.03,
+            duration: 500,
+            useNativeDriver: true,
+        }).start(({ finished }) => {
+            if (!finished) return;
+
+            // 2) O "POP" do áudio coincide aproximadamente com esta troca.
+            onSwapExecuteRef.current(finalTargetId);
+            Vibration.vibrate(100);
+
+            // 3) Na nova posição, os dois se materializam novamente.
+            Animated.spring(scaleAnim, {
+                toValue: 1,
+                speed: 14,
+                bounciness: 4,
+                useNativeDriver: true,
+            }).start(({ finished: growFinished }) => {
+                if (!growFinished) return;
+
+                setPhase('done');
+                onCompleteRef.current?.();
+            });
+        });
+
+        return () => {
+            scaleAnim.stopAnimation();
+        };
+    }, [phase, scaleAnim]);
+
+    useEffect(() => {
+        return () => {
+            scaleAnim.stopAnimation();
+            scaleAnim.setValue(1);
+        };
+    }, [scaleAnim]);
 
     if (phase === 'done') return null;
 
-    const minX = Math.min(...allRacers.map(r => r.x));
-    const maxX = Math.max(...allRacers.map(r => r.x));
-    const mapSpan = Math.max(2000, maxX - minX);
-
-    const target = allRacers.find(r => r.id === currentTarget);
-
-    const targetProgress = target
-        ? (target.x - minX) / mapSpan
-        : 0;
-
-    return (
-        <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            {currentTarget && (
-                <View/>
-            )}
-            <Animated.View style={[styles.textContainer, { opacity: textOpacity }]}>
-            </Animated.View>
-        </View>
-    );
+    return <View style={StyleSheet.absoluteFill} pointerEvents="none" />;
 }
-
-const styles = StyleSheet.create({
-    textContainer: {
-        ...StyleSheet.absoluteFillObject,
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 999,
-    },
-    swapText: {
-        fontSize: 64,
-        fontWeight: '900',
-        color: '#AF52DE',
-        textShadowColor: '#FFF',
-        textShadowOffset: { width: 2, height: 2 },
-        textShadowRadius: 10,
-        fontStyle: 'italic',
-    }
-});

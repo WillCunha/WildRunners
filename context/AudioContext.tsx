@@ -1,3 +1,4 @@
+import { CardSfx, CardSfxOptions, useCardSfx } from '@/src/utils/cardSfx';
 import { useAudioPlayer } from 'expo-audio';
 import React, {
   createContext,
@@ -6,10 +7,6 @@ import React, {
   useMemo,
   useRef,
 } from 'react';
-
-const DASHBOARD_MUSIC = require(
-  '@/assets/audio/dashboard/audio_one.mp3'
-);
 
 type MusicOptions = {
   volume?: number;
@@ -22,13 +19,26 @@ interface AudioContextProps {
   pauseMusic: () => void;
   stopMusic: () => void;
   playBeep: () => void;
+  playCardSfx: (
+    sfx: CardSfx,
+    options?: CardSfxOptions
+  ) => void;
+
+  stopCardSfx: (
+    sfx: CardSfx
+  ) => void;
+
+  stopAllCardSfx: () => void;
 }
 
 export const AudioContext = createContext<AudioContextProps>({
-  playMusic: () => {},
-  pauseMusic: () => {},
-  stopMusic: () => {},
-  playBeep: () => {},
+  playMusic: () => { },
+  pauseMusic: () => { },
+  stopMusic: () => { },
+  playBeep: () => { },
+  playCardSfx: () => { },
+  stopCardSfx: () => { },
+  stopAllCardSfx: () => { },
 });
 
 export const AudioProvider = ({
@@ -37,119 +47,126 @@ export const AudioProvider = ({
   children: ReactNode;
 }) => {
   /*
-   * A fonte passada ao hook nunca muda.
-   * As outras músicas são carregadas com replace().
+   * Existe apenas um player para todas as músicas:
+   * dashboard, corrida, menus etc.
    */
-  const musicPlayer = useAudioPlayer(DASHBOARD_MUSIC);
+  const musicPlayer = useAudioPlayer(null);
 
-  const currentMusicSourceRef = useRef<any>(DASHBOARD_MUSIC);
-  const isMusicPlayingRef = useRef(false);
+  const musicPlayerRef = useRef(musicPlayer);
+  musicPlayerRef.current = musicPlayer;
 
+  const currentMusicSourceRef = useRef<any>(null);
+
+  const {
+    playCardSfx,
+    stopCardSfx,
+    stopAllCardSfx,
+  } = useCardSfx();
+
+  // Bipes da largada.
   const beepPlayer1 = useAudioPlayer(
     require('@/assets/audio/beep.mp3')
   );
+
   const beepPlayer2 = useAudioPlayer(
     require('@/assets/audio/beep.mp3')
   );
+
   const beepPlayer3 = useAudioPlayer(
     require('@/assets/audio/beep.mp3')
   );
 
-  const beepPlayers = useMemo(
-    () => [beepPlayer1, beepPlayer2, beepPlayer3],
-    [beepPlayer1, beepPlayer2, beepPlayer3]
-  );
+  const beepPlayersRef = useRef([
+    beepPlayer1,
+    beepPlayer2,
+    beepPlayer3,
+  ]);
+
+  beepPlayersRef.current = [
+    beepPlayer1,
+    beepPlayer2,
+    beepPlayer3,
+  ];
 
   const nextBeepRef = useRef(0);
 
+  const swapPlayer = useAudioPlayer(
+    require('@/assets/audio/cards/swap.mp3')
+  );
+
+  const swapPlayerRef = useRef(swapPlayer);
+  swapPlayerRef.current = swapPlayer;
+
   const playMusic = useCallback(
     (source: any, options: MusicOptions = {}) => {
+      const player = musicPlayerRef.current;
+
       const {
         volume = 0.15,
         loop = true,
         restart = false,
       } = options;
 
-      const sourceChanged =
+      const isNewSource =
         currentMusicSourceRef.current !== source;
 
-      /*
-       * replace() já interrompe a fonte anterior.
-       * Não chamamos pause() antes da troca.
-       */
-      if (sourceChanged) {
-        musicPlayer.replace(source);
+      if (isNewSource) {
+        player.pause();
+        player.replace(source);
+
         currentMusicSourceRef.current = source;
+      } else if (restart) {
+        void player.seekTo(0);
       }
 
-      musicPlayer.volume = volume;
-      musicPlayer.loop = loop;
-
-      if (restart && !sourceChanged) {
-        void musicPlayer
-          .seekTo(0)
-          .then(() => {
-            musicPlayer.play();
-            isMusicPlayingRef.current = true;
-          })
-          .catch((error) => {
-            console.warn(
-              '[AudioContext] Falha ao reiniciar música:',
-              error
-            );
-          });
-
-        return;
-      }
-
-      musicPlayer.play();
-      isMusicPlayingRef.current = true;
+      player.loop = loop;
+      player.volume = volume;
+      player.play();
     },
-    [musicPlayer]
+    []
   );
 
   const pauseMusic = useCallback(() => {
-    /*
-     * Impede duas chamadas seguidas de pause().
-     * Isso também protege a desmontagem das telas.
-     */
-    if (!isMusicPlayingRef.current) return;
-
-    isMusicPlayingRef.current = false;
-    musicPlayer.pause();
-  }, [musicPlayer]);
+    musicPlayerRef.current.pause();
+  }, []);
 
   const stopMusic = useCallback(() => {
-    if (isMusicPlayingRef.current) {
-      isMusicPlayingRef.current = false;
-      musicPlayer.pause();
-    }
+    const player = musicPlayerRef.current;
 
-    void musicPlayer.seekTo(0).catch((error) => {
-      console.warn(
-        '[AudioContext] Falha ao retornar música ao início:',
-        error
-      );
-    });
-  }, [musicPlayer]);
+    player.pause();
+    void player.seekTo(0);
+  }, []);
 
   const playBeep = useCallback(() => {
-    const activePlayer =
-      beepPlayers[nextBeepRef.current];
+    const players = beepPlayersRef.current;
+    const activePlayer = players[nextBeepRef.current];
 
     nextBeepRef.current =
-      (nextBeepRef.current + 1) % beepPlayers.length;
+      (nextBeepRef.current + 1) % players.length;
 
-    void activePlayer
-      .seekTo(0)
-      .then(() => activePlayer.play())
+    void activePlayer.seekTo(0);
+    activePlayer.play();
+  }, []);
+
+  const playSwap = useCallback(() => {
+    const player = swapPlayerRef.current;
+
+    /*
+     * Sempre reinicia no começo para que cada uso da carta
+     * tenha o "suction whoosh" completo.
+     */
+    void player.seekTo(0)
+      .then(() => {
+        player.volume = 0.8;
+        player.play();
+      })
       .catch((error) => {
         console.warn(
-          '[AudioContext] Falha ao tocar bipe:',
+          '[AudioContext] Falha ao tocar SFX do Swap:',
           error
         );
       });
-  }, [beepPlayers]);
+  }, []);
 
   const contextValue = useMemo(
     () => ({
@@ -157,8 +174,21 @@ export const AudioProvider = ({
       pauseMusic,
       stopMusic,
       playBeep,
+
+      playCardSfx,
+      stopCardSfx,
+      stopAllCardSfx,
     }),
-    [playMusic, pauseMusic, stopMusic, playBeep]
+    [
+      playMusic,
+      pauseMusic,
+      stopMusic,
+      playBeep,
+
+      playCardSfx,
+      stopCardSfx,
+      stopAllCardSfx,
+    ]
   );
 
   return (

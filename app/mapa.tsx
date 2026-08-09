@@ -39,6 +39,10 @@ const MAP_MUSIC = require(
   '@/assets/audio/maps/level_one.mp3'
 );
 
+// O cenário não precisa renderizar novamente a cada snapshot da física.
+// Ele só atualiza quando isMoving ou mapImage realmente mudam.
+const MemoCenarioBackground = React.memo(CenarioBackground);
+
 
 /* ================= CONFIGURAÇÕES DA FÍSICA E VELOCIDADE ================= */
 const GRAVITY = 0.8;
@@ -62,6 +66,7 @@ const AVAILABLE_BOT_COLORS = [
 export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: MapaProps) {
 
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
+  const GROUND_Y = SCREEN_HEIGHT - 100;
   const router = useRouter();
 
   const showLoading = useLoadingStore((state) => state.showLoading);
@@ -114,16 +119,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   };
 
 
-  type Block = {
-    id: any;
-    type: 'flat' | 'ramp';
-    x: number;
-    width: number;
-    y?: number;
-    startY?: number;
-    endY?: number;
-  };
-
   const BOT_NAMES = [
     'Relâmpago', 'Marquinhos', 'Trovão', 'Faísca', 'Brisa',
     'Ventania', 'Cometa', 'Nitro', 'Sombra', 'Turbina', 'Rex'
@@ -167,10 +162,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
   const isCountingRef = useRef(false);
   const { playBeep, playMusic, pauseMusic } = useContext(AudioContext);
-
-  const blocksRef = useRef<Block[]>([
-    { id: 1, type: 'flat', x: 0, y: SCREEN_HEIGHT - 100, width: SCREEN_WIDTH * 1.5 }
-  ]);
 
   const getRandomColor = () => AVAILABLE_BOT_COLORS[Math.floor(Math.random() * AVAILABLE_BOT_COLORS.length)];
   const getRandomCarType = (): CarKey => {
@@ -262,7 +253,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const [leaderboard, setLeaderboard] = useState<{ id: string, name: string }[]>([]);
   const lastOrderRef = useRef('');
 
-  const [blocks, setBlocks] = useState(blocksRef.current);
   const [isBlindActive, setIsBlindActive] = useState(false);
 
   const [isCameraLocked, setIsCameraLocked] = useState(false);
@@ -271,6 +261,8 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   // SWAP
   const SWAP_COOLDOWN = 8000;
   const [activeSwap, setActiveSwap] = useState<{ callerId: string; targetId?: string; } | null>(null);
+  // Ref usada pelo game loop para não depender de closures antigas do React.
+  const activeSwapRef = useRef<{ callerId: string; targetId?: string; } | null>(null);
   const [currentSwapTarget, setCurrentSwapTarget] = useState<string | null>(null);
   const [swapCooldown, setSwapCooldown] = useState(0);
   const swapScaleAnim = useRef(new Animated.Value(1)).current;
@@ -424,8 +416,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     playerSpeed.current = MIN_SPEED;
     gameTime.current = 0;
 
-    const groundY = SCREEN_HEIGHT - 100;
-    const startY = groundY - PLAYER_SIZE;
+    const startY = GROUND_Y - PLAYER_SIZE;
 
     const newBots = [...botsRef.current];
     for (let i = 0; i < 5; i++) {
@@ -462,14 +453,10 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       sessionPartsRef.current = { motor: 0, spray: 0, engrenagem: 0 };
       gameOverHandledRef.current = false;
 
-      const groundY = SCREEN_HEIGHT - 100;
-      const startY = groundY - PLAYER_SIZE;
+      const startY = GROUND_Y - PLAYER_SIZE;
 
       y.current = startY;
       setPlayerY(y.current);
-
-      blocksRef.current = [{ id: 1, type: 'flat', x: -2000, y: groundY, width: SCREEN_WIDTH * 5 + 2000 }];
-      setBlocks(blocksRef.current);
 
       setupPositions();
 
@@ -651,55 +638,10 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         y.current += velocity.current;
       }
 
-      // --- 2. GERAÇÃO E MOVIMENTO DOS BLOCOS (AGORA COM LIMITES DINÂMICOS) ---
-      const updatedBlocks = blocksRef.current;
-      for (const block of updatedBlocks) block.x -= dynamicSpeed;
-      const lastBlock = updatedBlocks[updatedBlocks.length - 1];
-
-      const maxRacerX = Math.max(playerXRef.current, ...botsRef.current.map(b => b.x));
-      const minRacerX = Math.min(playerXRef.current, ...botsRef.current.map(b => b.x));
-
-      if (lastBlock && lastBlock.x + lastBlock.width < maxRacerX + SCREEN_WIDTH + 1500) {
-        const minWidth = 200;
-        const maxWidth = 400;
-        const newWidth = Math.random() * (maxWidth - minWidth) + minWidth;
-        let direction = Math.floor(Math.random() * 3) - 1;
-        const currentY = lastBlock.type === 'ramp' ? lastBlock.endY! : lastBlock.y!;
-
-        // Aumentamos a variação de altura para descidas e subidas mais radicais
-        let nextY = currentY + (direction * (100 + Math.random() * 80));
-
-        if (nextY < 180) nextY = 180;
-        if (nextY > SCREEN_HEIGHT - 120) nextY = SCREEN_HEIGHT - 120;
-
-        const heightDiff = nextY - currentY;
-        const newId = Math.random().toString(36).substr(2, 9);
-
-        if (Math.abs(heightDiff) > 20) {
-          // Rampas/Curvas um pouco mais largas (ex: 320px) para suavizar a descida em alta velocidade
-          updatedBlocks.push({
-            id: newId,
-            type: 'ramp',
-            x: lastBlock.x + lastBlock.width,
-            startY: currentY,
-            endY: nextY,
-            width: 320,
-          });
-        } else {
-          updatedBlocks.push({
-            id: newId,
-            type: 'flat',
-            x: lastBlock.x + lastBlock.width,
-            y: currentY,
-            width: newWidth,
-          });
-        }
-      }
-
-      while (updatedBlocks.length > 1 && updatedBlocks[0].x + updatedBlocks[0].width <= minRacerX - 500) {
-        updatedBlocks.shift();
-      }
-      blocksRef.current = updatedBlocks;
+      // --- 2. PISTA RETA ---
+      // Não existem mais blocos/rampas. O chão inteiro usa GROUND_Y.
+      // Isso remove geração procedural, deslocamento de blocos e cálculos de curva
+      // do caminho crítico de 60 FPS.
 
       // --- 3. INTELIGÊNCIA DE CORRIDA DOS BOTS  ---
       botsRef.current.forEach(bot => {
@@ -718,10 +660,17 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
           return; // ESSE RETURN IMPEDE A IA DO BOT DO LOOP SER EXECUTADA
         }
 
-        let targetSpeed = bot.stats.maxSpeed * (0.85 + Math.random() * 0.2);
-        if (bot.x < playerXRef.current - 100) {
-          targetSpeed = bot.stats.maxSpeed * 1.35;
+        // O alvo de velocidade não precisa ser sorteado 60 vezes por segundo por bot.
+        // Atualizamos 4x/s: menos Math.random/GC e comportamento menos "nervoso".
+        if (gameTime.current % 15 === 0) {
+          bot.targetSpeed = bot.stats.maxSpeed * (0.85 + Math.random() * 0.2);
+
+          if (bot.x < playerXRef.current - 100) {
+            bot.targetSpeed = bot.stats.maxSpeed * 1.35;
+          }
         }
+
+        let targetSpeed = bot.targetSpeed;
 
         if (bot.speed < targetSpeed) bot.speed += (ACCELERATION * (1 + (bot.stats.impulse - IMPULSE_FORCE)));
         if (bot.speed > targetSpeed) bot.speed -= FRICTION;
@@ -763,42 +712,19 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         }
 
         const botFootY = bot.y + PLAYER_SIZE;
-        const botCenterX = bot.x + (PLAYER_SIZE / 2);
-
         let targetBotAngle = 0;
 
-        // Novo cálculo de colisão do Bot baseado no "find" em vez de um for loop falho
-        const currentBotBlock = blocksRef.current.find(
-          block => botCenterX >= block.x && block.x + block.width >= botCenterX
-        );
-
-        if (currentBotBlock) {
-          let groundYAtX = currentBotBlock.y || 0;
-
-          if (currentBotBlock.type === 'flat') {
-            groundYAtX = currentBotBlock.y!;
-            targetBotAngle = 0;
-          } else if (currentBotBlock.type === 'ramp') {
-            const progress = Math.max(0, Math.min(1, (botCenterX - currentBotBlock.x) / currentBotBlock.width));
-
-            const smoothProgress = (1 - Math.cos(progress * Math.PI)) / 2;
-            groundYAtX = currentBotBlock.startY! + ((currentBotBlock.endY! - currentBotBlock.startY!) * smoothProgress);
-
-            const slope = ((currentBotBlock.endY! - currentBotBlock.startY!) * Math.sin(progress * Math.PI) * Math.PI) / (2 * currentBotBlock.width);
-            targetBotAngle = Math.atan2(slope, 1) * (180 / Math.PI);
-          }
-
-          if (bot.status.isStunned) {
-            targetBotAngle = (gameTime.current * 35) % 360;
-          }
-
-          // Verificação sólida cravando no chão
-          if (bot.velocity >= 0 && botFootY >= groundYAtX - 25) {
-            bot.y = groundYAtX - PLAYER_SIZE + 6;
-            bot.velocity = 0;
-            bot.status.isStunned = false;
-          }
+        if (bot.status.isStunned) {
+          targetBotAngle = (gameTime.current * 35) % 360;
         }
+
+        // Pista reta: uma comparação substitui a busca do bloco + trigonometria.
+        if (bot.velocity >= 0 && botFootY >= GROUND_Y - 25) {
+          bot.y = GROUND_Y - PLAYER_SIZE + 6;
+          bot.velocity = 0;
+          bot.status.isStunned = false;
+        }
+
         bot.angle = targetBotAngle;
       });
 
@@ -920,20 +846,11 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         } else {
           tnt.timer -= 1;
 
-          // Encontra o chão debaixo da caixa para ela cair e fixar
-          const currentTntBlock = blocksRef.current.find(b => tnt.x + (PLAYER_SIZE / 2) >= b.x && tnt.x + (PLAYER_SIZE / 2) <= b.x + b.width);
-          if (currentTntBlock) {
-            let groundY = currentTntBlock.y || 0;
-            if (currentTntBlock.type === 'ramp') {
-              const progress = (tnt.x + (PLAYER_SIZE / 2) - currentTntBlock.x) / currentTntBlock.width;
-              groundY = currentTntBlock.startY! + ((currentTntBlock.endY! - currentTntBlock.startY!) * progress);
-            }
-            // Crava no chão ou cai
-            if (tnt.y + PLAYER_SIZE < groundY - 5) {
-              tnt.y += GRAVITY * 6; // Cai rápido
-            } else {
-              tnt.y = groundY - PLAYER_SIZE;
-            }
+          // Pista reta: TNT cai diretamente para a altura fixa do chão.
+          if (tnt.y + PLAYER_SIZE < GROUND_Y - 5) {
+            tnt.y += GRAVITY * 6;
+          } else {
+            tnt.y = GROUND_Y - PLAYER_SIZE;
           }
 
           // --- 6 DETECÇÃO DE COLISÃO POR PROXIMIDADE ---
@@ -942,15 +859,16 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
           const safetyWindow = tnt.timer < (60 * 10) - 15;
 
           if (safetyWindow) {
-            // Verifica colisão com o Player
-            const distPlayer = Math.sqrt(Math.pow(playerXRef.current - tnt.x, 2) + Math.pow(y.current - tnt.y, 2));
-            if (distPlayer < 40) hitRacer = true;
+            // Distância ao quadrado evita Math.sqrt no loop de física.
+            const playerDx = playerXRef.current - tnt.x;
+            const playerDy = y.current - tnt.y;
+            if ((playerDx * playerDx) + (playerDy * playerDy) < 40 * 40) hitRacer = true;
 
-            // Verifica colisão com os Bots ativos
             botsRef.current.forEach(bot => {
               if (!bot.isDead) {
-                const distBot = Math.sqrt(Math.pow(bot.x - tnt.x, 2) + Math.pow(bot.y - tnt.y, 2));
-                if (distBot < 40) hitRacer = true;
+                const botDx = bot.x - tnt.x;
+                const botDy = bot.y - tnt.y;
+                if ((botDx * botDx) + (botDy * botDy) < 40 * 40) hitRacer = true;
               }
             });
           }
@@ -966,9 +884,9 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
             const applyBlast = (racerId: string, rx: number, ry: number) => {
               const dx = rx - tnt.x;
               const dy = ry - tnt.y;
-              const dist = Math.sqrt(dx * dx + dy * dy);
+              const distSq = (dx * dx) + (dy * dy);
 
-              if (dist < EXPLOSION_RADIUS) {
+              if (distSq < EXPLOSION_RADIUS * EXPLOSION_RADIUS) {
                 const hit = applyDamage(racerId);
                 if (!hit) return;
 
@@ -1026,51 +944,24 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       });
       activeBubblesRef.current = remainingBubbles;
 
-      // --- 7. COLISÕES DO PLAYER
-      let landedOnBlock = false;
+      // --- 7. COLISÃO DO PLAYER COM A PISTA RETA ---
+      let landedOnGround = false;
       const playerFootY = y.current + PLAYER_SIZE;
-      const playerCenterX = playerXRef.current + (PLAYER_SIZE / 2);
       let targetAngle = 0;
 
-      // Encontra exatamente qual bloco está debaixo do centro do jogador
-      const currentBlock = blocksRef.current.find(
-        block => playerCenterX >= block.x && playerCenterX <= block.x + block.width
-      );
+      if (playerStatus.current.isStunned) {
+        targetAngle = (gameTime.current * 35) % 360;
+      }
 
-      if (currentBlock) {
-        let groundYAtX = currentBlock.y || 0;
-
-        if (currentBlock.type === 'flat') {
-          groundYAtX = currentBlock.y!;
-          targetAngle = 0;
-        } else if (currentBlock.type === 'ramp') {
-          // Garante que o progresso fique estrito entre 0 e 1
-          const progress = Math.max(0, Math.min(1, (playerCenterX - currentBlock.x) / currentBlock.width));
-
-          // Mágica do Cosseno: Suaviza o topo e a base da curva
-          const smoothProgress = (1 - Math.cos(progress * Math.PI)) / 2;
-          groundYAtX = currentBlock.startY! + ((currentBlock.endY! - currentBlock.startY!) * smoothProgress);
-
-          // Derivada da função para obter a inclinação exata da curva neste ponto
-          const slope = ((currentBlock.endY! - currentBlock.startY!) * Math.sin(progress * Math.PI) * Math.PI) / (2 * currentBlock.width);
-          targetAngle = Math.atan2(slope, 1) * (180 / Math.PI);
-        }
-
-        if (playerStatus.current.isStunned) {
-          targetAngle = (gameTime.current * 35) % 360;
-        }
-
-        // CRAVA NO CHÃO se estiver caindo
-        if (velocity.current >= 0 && playerFootY >= groundYAtX - 25) {
-          y.current = groundYAtX - PLAYER_SIZE + 6;
-          velocity.current = 0;
-          landedOnBlock = true;
-          playerStatus.current.isStunned = false;
-        }
+      if (velocity.current >= 0 && playerFootY >= GROUND_Y - 25) {
+        y.current = GROUND_Y - PLAYER_SIZE + 6;
+        velocity.current = 0;
+        landedOnGround = true;
+        playerStatus.current.isStunned = false;
       }
 
       angleRenderRef.current = targetAngle;
-      isGrounded.current = landedOnBlock;
+      isGrounded.current = landedOnGround;
 
       if (y.current > SCREEN_HEIGHT + 100) {
         playerIsDead.current = true;
@@ -1089,23 +980,16 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         piece.velY += GRAVITY;
         piece.y += piece.velY;
 
-        const currentPieceBlock = blocksRef.current.find(b => piece.x >= b.x && piece.x <= b.x + b.width);
-        if (currentPieceBlock) {
-          let groundY = currentPieceBlock.y || 0;
-          if (currentPieceBlock.type === 'ramp') {
-            const progress = (piece.x - currentPieceBlock.x) / currentPieceBlock.width;
-            groundY = currentPieceBlock.startY! + ((currentPieceBlock.endY! - currentPieceBlock.startY!) * progress);
-          }
-
-          if (piece.y + 20 >= groundY) {
-            piece.y = groundY - 20;
-            piece.velY = 0;
-          }
+        if (piece.y + 20 >= GROUND_Y) {
+          piece.y = GROUND_Y - 20;
+          piece.velY = 0;
         }
 
-        const distPlayer = Math.sqrt(Math.pow(playerXRef.current - piece.x, 2) + Math.pow(y.current - piece.y, 2));
+        const pieceDx = playerXRef.current - piece.x;
+        const pieceDy = y.current - piece.y;
+        const pieceDistanceSq = (pieceDx * pieceDx) + (pieceDy * pieceDy);
 
-        if (distPlayer < PLAYER_SIZE) {
+        if (pieceDistanceSq < PLAYER_SIZE * PLAYER_SIZE) {
           sessionPartsRef.current[piece.type] += 1;
         } else {
           if (piece.x > -100) {
@@ -1123,7 +1007,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         setPiecesToRender([...activePiecesRef.current]);
         setPlayerY(y.current);
         setPlayerX(playerXRef.current);
-        setBlocks([...blocksRef.current]);
         setBots([...botsRef.current]);
         setBulletsToRender([...activeBulletsRef.current]);
         setTntsToRender([...activeTNTRef.current]);
@@ -1232,9 +1115,15 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     if (effect === 'ghost' && playerStatus.current.isGhost) return;
     if (effect === 'second_chance' && playerStatus.current.secondChanceReady) return;
 
+    // Não gasta boost/cooldown se o jogador já estiver em primeiro
+    // ou se outro Swap ainda estiver resolvendo.
+    if (effect === 'swap' && (activeSwapRef.current || !hasOpponentAhead('player'))) return;
+
     setBoost(prev => prev - cost);
 
-    if (effect === 'swap') { triggerSwap('player'); setSwapCooldown(SWAP_COOLDOWN); }
+    if (effect === 'swap') {
+      if (triggerSwap('player')) setSwapCooldown(SWAP_COOLDOWN);
+    }
     if (effect === 'chains') { triggerChains('player'); setChainsCooldown(CHAINS_COOLDOWN); }
     if (effect === 'bullet') { triggerBullet('player'); setBulletCooldown(BULLET_COOLDOWN); }
     if (effect === 'tnt') { triggerTNT('player'); setTntCooldown(TNT_COOLDOWN); }
@@ -1261,12 +1150,58 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
 
   /* ================= HABILITA O SWAP ================= */
-  function triggerSwap(callerId: string) {
-    if (activeSwap) return;
+  function getRacerX(racerId: string) {
+    if (racerId === 'player') {
+      return playerIsDead.current ? null : playerXRef.current;
+    }
 
-    setActiveSwap({
-      callerId,
-    });
+    const bot = botsRef.current.find(b => b.id === racerId && !b.isDead);
+    return bot?.x ?? null;
+  }
+
+  function hasOpponentAhead(callerId: string) {
+    const callerX = getRacerX(callerId);
+    if (callerX === null) return false;
+
+    if (
+      callerId !== 'player' &&
+      !playerIsDead.current &&
+      playerXRef.current > callerX
+    ) {
+      return true;
+    }
+
+    return botsRef.current.some(bot =>
+      !bot.isDead &&
+      bot.id !== callerId &&
+      bot.x > callerX
+    );
+  }
+
+  function finishSwap() {
+    activeSwapRef.current = null;
+    setCurrentSwapTarget(null);
+    setActiveSwap(null);
+
+    swapScaleAnim.stopAnimation();
+    swapScaleAnim.setValue(1);
+  }
+
+  function triggerSwap(callerId: string) {
+    // O processBotsAI roda dentro do game loop e pode carregar closures antigas.
+    // A ref garante que nunca existam dois Swaps simultâneos.
+    if (activeSwapRef.current) return false;
+
+    // A carta só começa se houver pelo menos um corredor à frente.
+    if (!hasOpponentAhead(callerId)) return false;
+
+    const nextSwap = { callerId };
+
+    activeSwapRef.current = nextSwap;
+    swapScaleAnim.setValue(1);
+    setActiveSwap(nextSwap);
+
+    return true;
   }
 
   /* ================= HABILITA A CHAINS ================= */
@@ -1379,7 +1314,11 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       if (chosenCard.effect === 'swap') {
         const targetRacer = allRacers.find(r => r.id === target);
         if (targetRacer && targetRacer.x <= bot.x) return;
-        triggerSwap(bot.id);
+
+        if (!triggerSwap(bot.id)) {
+          bot.thinkTimer = 8;
+          return;
+        }
       } else if (chosenCard.effect === 'tnt') {
         triggerTNT(bot.id);
       } else if (chosenCard.effect === 'bullet') {
@@ -1922,11 +1861,23 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
   return (
     <View style={styles.container}>
-      <CenarioBackground
+      <MemoCenarioBackground
         isMoving={started && !gameOver}
         mapImage={params.mapImage}
       />
       <View style={StyleSheet.absoluteFillObject} />
+
+      {/* Pista única e reta: um único View substitui todos os blocos e fatias de curvas. */}
+      <View
+        pointerEvents="none"
+        style={[
+          styles.flatGround,
+          {
+            top: GROUND_Y,
+            height: Math.max(100, SCREEN_HEIGHT - GROUND_Y),
+          },
+        ]}
+      />
 
       <View style={styles.leaderboardContainer} pointerEvents="none">
         <Text style={styles.leaderboardTitle}>RANKING</Text>
@@ -2043,10 +1994,11 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
               setCurrentSwapTarget(targetId);
             }}
             onSwapExecute={(targetId) => {
+              // As posições reais são invertidas quando os dois carros estão quase invisíveis.
               applyCardEffect('swap', targetId, activeSwap.callerId);
-              setCurrentSwapTarget(null);
-              setActiveSwap(null);
             }}
+            onComplete={finishSwap}
+            onCancel={finishSwap}
           />
         )}
         {activeChains && (
@@ -2095,6 +2047,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         style={[
           StyleSheet.absoluteFillObject,
           {
+            zIndex: 2,
             transform: [
               { translateX: cameraTransform.x },
               { scale: cameraTransform.scale }
@@ -2102,72 +2055,23 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
           }
         ]}
       >
-        {blocks.map((b) => {
-          if (b.type === 'flat') {
-            return (
-              <View
-                key={`flat-${b.id}`}
-                style={[
-                  styles.block,
-                  {
-                    left: b.x,
-                    top: b.y,
-                    width: b.width,
-                    height: SCREEN_HEIGHT,
-                    backgroundColor: '#2e8b565b', // Terra/Grama escura interna
-                    borderTopWidth: 5,
-                    borderTopColor: '#34C759',  // Linha verde viva da superfície
-                  }
-                ]}
-              />
-            );
-          } else if (b.type === 'ramp') {
-            // Fatiamos a curva em múltiplos pedacinhos para gerar o efeito visual curvo perfeito
-            const SLICES = 16;
-            const sliceWidth = b.width / SLICES;
+        {bots.map((bot, index) => {
+          const isSwapParticipant =
+            activeSwap?.callerId === bot.id ||
+            currentSwapTarget === bot.id;
 
-            return (
-              <View key={`ramp-${b.id}`} style={{ position: 'absolute', left: b.x, width: b.width, height: SCREEN_HEIGHT, zIndex: 3 }}>
-                {Array.from({ length: SLICES }).map((_, i) => {
-                  const pStart = i / SLICES;
-                  const pEnd = (i + 1) / SLICES;
-
-                  const smoothPStart = (1 - Math.cos(pStart * Math.PI)) / 2;
-                  const smoothPEnd = (1 - Math.cos(pEnd * Math.PI)) / 2;
-
-                  const yStart = b.startY! + (b.endY! - b.startY!) * smoothPStart;
-                  const yEnd = b.startY! + (b.endY! - b.startY!) * smoothPEnd;
-
-                  return (
-                    <View
-                      key={i}
-                      style={{
-                        position: 'absolute',
-                        left: i * sliceWidth,
-                        top: Math.min(yStart, yEnd),
-                        width: sliceWidth + 0.8, // Compensação de sub-pixel para evitar gaps brancos
-                        height: SCREEN_HEIGHT,
-                        backgroundColor: '#2e8b565b',
-                        borderTopWidth: 5,
-                        borderTopColor: '#34C759',
-                      }}
-                    />
-                  );
-                })}
-              </View>
-            );
-          }
-        })}
-
-        {bots.map((bot, index) => (
-          <View
+          return (
+          <Animated.View
             key={bot.id}
             style={{
               position: 'absolute',
               top: bot.y,
               left: bot.x,
               zIndex: 4,
-              transform: [{ rotate: `${bot.angle || 0}deg` }],
+              transform: [
+                { rotate: `${bot.angle || 0}deg` },
+                { scale: isSwapParticipant ? swapScaleAnim : 1 },
+              ],
               width: PLAYER_SIZE,
               height: PLAYER_SIZE,
               alignItems: 'center',
@@ -2199,16 +2103,26 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
                 />
               </View>
             </DefenseCardVisual>
-          </View>
-        ))}
+          </Animated.View>
+          );
+        })}
 
-        <View
+        <Animated.View
           style={{
             position: 'absolute',
             zIndex: 5,
             left: playerX,
             top: playerY,
-            transform: [{ rotate: `${angle}deg` }],
+            transform: [
+              { rotate: `${angle}deg` },
+              {
+                scale:
+                  activeSwap?.callerId === 'player' ||
+                  currentSwapTarget === 'player'
+                    ? swapScaleAnim
+                    : 1,
+              },
+            ],
             width: PLAYER_SIZE,
             height: PLAYER_SIZE,
             alignItems: 'center',
@@ -2240,7 +2154,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
               />
             </View>
           </DefenseCardVisual>
-        </View>
+        </Animated.View>
 
         {activeChainsState && activeChainsState.duration > 0 && (() => {
           // Precisamos achar as coordenadas X e Y do Caller e do Target
@@ -2520,6 +2434,15 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#05ebfc', overflow: 'hidden' },
+  flatGround: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 1,
+    backgroundColor: '#2e8b565b',
+    borderTopWidth: 5,
+    borderTopColor: '#34C759',
+  },
   miniMapContainer: { position: 'absolute', top: 20, alignSelf: 'center', width: '60%', height: 20, justifyContent: 'center', zIndex: 10 },
   miniMapLine: { position: 'absolute', left: 0, right: 0, height: 4, backgroundColor: 'rgba(255, 255, 255, 0.4)', borderRadius: 2 },
   miniMapDot: { position: 'absolute', top: '50%', marginTop: -5 },
