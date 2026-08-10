@@ -10,6 +10,7 @@ interface CarroProps {
   carType?: CarKey;
   carColorFront?: string;
   carColorBack?: string;
+  renderWidth?: number;
 }
 
 export default function Carro({
@@ -17,7 +18,8 @@ export default function Carro({
   skin = 'default',
   carType = 'fusca',
   carColorFront = '#cc0000',
-  carColorBack = '#000'
+  carColorBack = '#000',
+  renderWidth = 180
 }: CarroProps) {
 
   const car = carMaps[carType];
@@ -56,7 +58,7 @@ export default function Carro({
   const BASE_HEIGHT = car.baseSize.height;
   const WHEEL_DIAMETER = car.wheels.mapa.size.width; // Assuming the wheel is circular, we can use width as diameter
 
-  const RENDER_WIDTH = 180;
+  const RENDER_WIDTH = renderWidth;
   const RENDER_HEIGHT = RENDER_WIDTH * (BASE_HEIGHT / BASE_WIDTH);
 
   const scaleX = RENDER_WIDTH / BASE_WIDTH;

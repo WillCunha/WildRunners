@@ -42,6 +42,17 @@ export interface RaceProgressSnapshot {
   trophiesAfter: number;
 }
 
+export interface RaceCarVisual {
+  colorFront: string;
+  colorBack: string;
+
+  /**
+   * Já deixamos preparados para depois.
+   */
+  skinId?: string;
+  wheelId?: string;
+}
+
 export interface RaceResult {
   /**
    * ID único da corrida.
@@ -49,7 +60,7 @@ export interface RaceResult {
    * Fundamental para evitar recompensa duplicada.
    */
   raceId: string;
-
+  
   position: number;
 
   totalRacers: number;
@@ -61,6 +72,8 @@ export interface RaceResult {
    * do resultado/persistência.
    */
   carId: string;
+
+  carVisual: RaceCarVisual;
 
   mapId?: string;
 

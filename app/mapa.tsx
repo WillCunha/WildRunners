@@ -12,6 +12,7 @@ import GuidedBulletVisual from '@/components/ui/GuidedBulletVisual';
 import TornadoVisual from '@/components/ui/TornadoVisual';
 import { AudioContext } from '@/context/AudioContext';
 import { useCarSelection } from '@/context/CarContext';
+import { raceRewardsService } from '@/src/services/raceRewardsService';
 import { useLoadingStore } from '@/src/store/LoadingStore';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { carMaps } from '@/src/utils/carMaps';
@@ -85,7 +86,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const finalDeck = params.deck ? JSON.parse(params.deck as string) : fallbackDeck;
 
   const profile = usePlayerStore((state) => state.profile);
-  const addMatchRewards = usePlayerStore((state) => state.addMatchRewards);
 
   const carKey = (selectedCar || 'buggy') as string;
 
@@ -358,6 +358,8 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   // Caixa da partida: motor = peças, spray = pinturas e engrenagem = engrenagens.
   const sessionPartsRef = useRef({ motor: 0, spray: 0, engrenagem: 0 });
 
+  // ID da partida
+  const raceIdRef = useRef('');
   // Evita creditar a mesma partida mais de uma vez.
   const gameOverHandledRef = useRef(false);
 
@@ -446,12 +448,18 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     setTimeRemaining(randomSeconds);
   };
 
-  
+
   /* ================= USE EFFECT DE PREPARAÇÃO DO INICIO ================= */
   useEffect(() => {
     if (!started && !isCountingRef.current && !gameOver) {
       sessionPartsRef.current = { motor: 0, spray: 0, engrenagem: 0 };
       gameOverHandledRef.current = false;
+
+      raceIdRef.current =
+        `race-${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2, 10)}`;
+
 
       const startY = GROUND_Y - PLAYER_SIZE;
 
@@ -469,51 +477,225 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
   /* ================= FINALIZAÇÃO ÚNICA DA PARTIDA ================= */
   useEffect(() => {
-    if (!gameOver || gameOverHandledRef.current) return;
+    if (
+      !gameOver ||
+      gameOverHandledRef.current
+    ) {
+      return;
+    }
 
     gameOverHandledRef.current = true;
+
     setStarted(false);
-    
+
     pauseMusic();
 
-    const finalRanking = [
-      { id: 'player', x: playerXRef.current },
-      ...botsRef.current.map(bot => ({ id: bot.id, x: bot.x })),
-    ].sort((a, b) => b.x - a.x);
+    /**
+     * ================================
+     * 1. CALCULA CLASSIFICAÇÃO FINAL
+     * ================================
+     */
 
-    // Quando o jogador foi eliminado ou caiu do mapa, ele termina em último.
-    const playerPosition = playerIsDead.current
-      ? TOTAL_RACERS
-      : finalRanking.findIndex(racer => racer.id === 'player') + 1;
+    const finalRanking = [
+      {
+        id: 'player',
+        x: playerXRef.current,
+      },
+
+      ...botsRef.current.map(
+        bot => ({
+          id: bot.id,
+          x: bot.x,
+        }),
+      ),
+    ].sort(
+      (a, b) => b.x - a.x,
+    );
+
+    /**
+     * Se o jogador morreu,
+     * termina automaticamente
+     * em último.
+     */
+    const playerPosition =
+      playerIsDead.current
+        ? TOTAL_RACERS
+        : finalRanking.findIndex(
+          racer =>
+            racer.id ===
+            'player',
+        ) + 1;
+
+    /**
+     * ================================
+     * 2. RECOMPENSAS DA CORRIDA
+     * ================================
+     */
 
     const rewards = {
-      // Não deixa um saldo temporário negativo retirar itens antigos da conta.
-      motor: Math.max(0, sessionPartsRef.current.motor),
-      spray: Math.max(0, sessionPartsRef.current.spray),
-      engrenagem: Math.max(0, sessionPartsRef.current.engrenagem),
-      trophies: getTrophyReward(playerPosition),
+      motor: Math.max(
+        0,
+        sessionPartsRef.current
+          .motor,
+      ),
+
+      spray: Math.max(
+        0,
+        sessionPartsRef.current
+          .spray,
+      ),
+
+      engrenagem: Math.max(
+        0,
+        sessionPartsRef.current
+          .engrenagem,
+      ),
+
+      trophies:
+        getTrophyReward(
+          playerPosition,
+        ),
     };
 
-    // Uma única atualização persistida no Zustand/AsyncStorage.
-    addMatchRewards(rewards);
+    /**
+     * ================================
+     * 3. FINALIZA A CORRIDA
+     * ================================
+     *
+     * IMPORTANTE:
+     *
+     * O Mapa não altera mais diretamente
+     * o saldo do jogador.
+     *
+     * Quem faz isso agora é o service.
+     */
 
-    // Exibe a LoadingScreen global e, depois, troca a rota sem permitir voltar ao mapa finalizado.
-    showLoading();
-    const navigationTimer = setTimeout(() => {
-      router.replace('/SelectionCar' as any);
+    const completion =
+      raceRewardsService.completeRace({
+        raceId:
+          raceIdRef.current,
 
-      // Dá tempo para a SelectionCar montar antes de retirar a tela de loading.
-      setTimeout(() => hideLoading(), 350);
-    }, 1400);
+        position:
+          playerPosition,
 
-    return () => clearTimeout(navigationTimer);
+        totalRacers:
+          TOTAL_RACERS,
+
+        carId:
+          carKey,
+
+        /**
+         * Snapshot exato das cores
+         * utilizadas nesta corrida.
+         */
+        carVisual: {
+          colorFront:
+            selectedColorFront ||
+            '#cc0000',
+
+          colorBack:
+            selectedColorBack ||
+            '#000000',
+        },
+
+        rewards,
+
+        /**
+         * Ainda não estamos calculando
+         * desbloqueios reais no mapa.
+         *
+         * Isso virá depois.
+         */
+        unlocks: [],
+
+        finishedAt:
+          Date.now(),
+
+        /**
+         * Depois podemos criar um
+         * sistema real de recordes.
+         */
+        isNewRecord: false,
+      });
+
+    /**
+     * Segurança:
+     *
+     * Se por alguma razão não existir
+     * perfil/result, não mandamos o
+     * jogador para uma ResultScreen vazia.
+     */
+    if (!completion.result) {
+      console.warn(
+        '[RaceResult] Não foi possível concluir a corrida:',
+        completion.status,
+      );
+
+      showLoading();
+
+      const fallbackTimer =
+        setTimeout(() => {
+          router.replace( '/SelectionCar' as any );
+
+          setTimeout(
+            () =>
+              hideLoading(),
+            350,
+          );
+        }, 900);
+
+      return () =>
+        clearTimeout(
+          fallbackTimer,
+        );
+    }
+
+    /**
+     * ================================
+     * 4. TRANSIÇÃO
+     * ================================
+     */
+
+    showLoading(
+      'Preparando suas recompensas...',
+    );
+
+    const navigationTimer =
+      setTimeout(() => {
+        /**
+         * replace() é importante.
+         *
+         * Não queremos que o botão
+         * "voltar" retorne para uma
+         * corrida já finalizada.
+         */
+        router.replace( '/RaceResultScreen' as any );
+
+        /**
+         * Dá um pequeno tempo para
+         * RaceResultScreen montar antes
+         * de retirar o Loading global.
+         */
+        setTimeout(
+          () =>
+            hideLoading(),
+          300,
+        );
+      }, 900);
+
+    return () =>
+      clearTimeout(
+        navigationTimer,
+      );
   }, [
-    addMatchRewards,
     gameOver,
     pauseMusic,
+    showLoading,
     hideLoading,
     router,
-    showLoading,
+    carKey,
+    selectedColorFront,
+    selectedColorBack,
   ]);
 
   /* ================= GAME LOOP ================= */
@@ -2061,49 +2243,50 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
             currentSwapTarget === bot.id;
 
           return (
-          <Animated.View
-            key={bot.id}
-            style={{
-              position: 'absolute',
-              top: bot.y,
-              left: bot.x,
-              zIndex: 4,
-              transform: [
-                { rotate: `${bot.angle || 0}deg` },
-                { scale: isSwapParticipant ? swapScaleAnim : 1 },
-              ],
-              width: PLAYER_SIZE,
-              height: PLAYER_SIZE,
-              alignItems: 'center',
-              justifyContent: 'flex-end',
-            }}
-          >
-            {focusedDriver === index && (
-              <View style={styles.nameTag}>
-                <Text style={styles.nameTagText}>{bot.name || `BOT_${index + 1}`}</Text>
-                <View style={styles.nameTagArrow} />
-              </View>
-            )}
-            <DefenseCardVisual
-              size={PLAYER_SIZE}
-              shieldCharges={bot.status?.shieldCharges || 0}
-              armorCharges={bot.status?.armorCharges || 0}
-              isGhost={Boolean(bot.status?.isGhost)}
-              secondChanceReady={Boolean(bot.status?.secondChanceReady)}
-              isInvincible={(bot.status?.invincibleTimer || 0) > 0}
-              event={defenseVisualEvents[bot.id]}
+            <Animated.View
+              key={bot.id}
+              style={{
+                position: 'absolute',
+                top: bot.y,
+                left: bot.x,
+                zIndex: 4,
+                transform: [
+                  { rotate: `${bot.angle || 0}deg` },
+                  { scale: isSwapParticipant ? swapScaleAnim : 1 },
+                ],
+                width: PLAYER_SIZE,
+                height: PLAYER_SIZE,
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+              }}
             >
-              <View style={{ width: '200%', alignItems: 'center' }}>
-                <Carro
-                  carType={bot.carType}
-                  carColorFront={bot.carColorFront}
-                  carColorBack={bot.carColorBack}
-                  speed={bot.speed}
-                  skin={bot.skin}
-                />
-              </View>
-            </DefenseCardVisual>
-          </Animated.View>
+              {focusedDriver === index && (
+                <View style={styles.nameTag}>
+                  <Text style={styles.nameTagText}>{bot.name || `BOT_${index + 1}`}</Text>
+                  <View style={styles.nameTagArrow} />
+                </View>
+              )}
+              <DefenseCardVisual
+                size={PLAYER_SIZE}
+                shieldCharges={bot.status?.shieldCharges || 0}
+                armorCharges={bot.status?.armorCharges || 0}
+                isGhost={Boolean(bot.status?.isGhost)}
+                secondChanceReady={Boolean(bot.status?.secondChanceReady)}
+                isInvincible={(bot.status?.invincibleTimer || 0) > 0}
+                event={defenseVisualEvents[bot.id]}
+              >
+                <View style={{ width: '200%', alignItems: 'center' }}>
+                  <Carro
+                    carType={bot.carType}
+                    carColorFront={bot.carColorFront}
+                    carColorBack={bot.carColorBack}
+                    speed={bot.speed}
+                    skin={bot.skin}
+                    renderWidth={180}
+                  />
+                </View>
+              </DefenseCardVisual>
+            </Animated.View>
           );
         })}
 
@@ -2118,7 +2301,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
               {
                 scale:
                   activeSwap?.callerId === 'player' ||
-                  currentSwapTarget === 'player'
+                    currentSwapTarget === 'player'
                     ? swapScaleAnim
                     : 1,
               },
@@ -2151,6 +2334,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
                 carColorBack={selectedColorBack}
                 speed={playerSpeed.current}
                 skin="default"
+                renderWidth={180}
               />
             </View>
           </DefenseCardVisual>

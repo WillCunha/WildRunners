@@ -1,5 +1,7 @@
+import Carro from '@/components/Carro';
 import { useRaceResultStore } from '@/src/store/raceResultStore';
 import { RaceResult, RewardRarity } from '@/src/types/raceTypes';
+import { carMaps } from '@/src/utils/carMaps';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState, } from 'react';
@@ -609,8 +611,8 @@ export default function RaceResultScreen() {
                 </Text>
 
                 <TouchableOpacity
-                    style={ styles.continueButton } onPress={() => router.replace( '/CarSelectionScreen' ) } >
-                    <Text style={ styles.buttonText } >
+                    style={styles.continueButton} onPress={() => router.replace('/CarSelectionScreen')} >
+                    <Text style={styles.buttonText} >
                         CONTINUAR
                     </Text>
                 </TouchableOpacity>
@@ -768,39 +770,26 @@ export default function RaceResultScreen() {
                                 },
                             ]}
                         >
-                            {carImage ? (
-                                <Animated.Image
-                                    source={
-                                        carImage
-                                    }
-                                    resizeMode="contain"
-                                    style={
-                                        styles.carImage
-                                    }
+                            <Animated.View
+                                style={[
+                                    styles.carArea,
+                                    {
+                                        transform: [
+                                            { translateX: carX, },
+                                            { scale: carScale, },
+                                            { rotate: rotation, },
+                                        ],
+                                    },
+                                ]}
+                            >
+                                <Carro
+                                    speed={0}
+                                    carType={result.carId as keyof typeof carMaps}
+                                    carColorFront={result.carVisual.colorFront}
+                                    carColorBack={result.carVisual.colorBack}
+                                    renderWidth={330}
                                 />
-                            ) : (
-                                <View
-                                    style={
-                                        styles.carFallback
-                                    }
-                                >
-                                    <Text
-                                        style={
-                                            styles.carEmoji
-                                        }
-                                    >
-                                        🏎️
-                                    </Text>
-
-                                    <Text
-                                        style={
-                                            styles.carName
-                                        }
-                                    >
-                                        {result.carId.toUpperCase()}
-                                    </Text>
-                                </View>
-                            )}
+                            </Animated.View>
                         </Animated.View>
 
                         {result.isNewRecord && (
@@ -823,93 +812,51 @@ export default function RaceResultScreen() {
 
                     {/* COLUNA DIREITA */}
 
-                    <View
-                        style={
-                            styles.rightColumn
-                        }
-                    >
-                        <Text
-                            style={
-                                styles.sectionTitle
-                            }
-                        >
+                    <View style={styles.rightColumn} >
+                        <Text style={styles.sectionTitle}>
                             RECOMPENSAS
                         </Text>
 
-                        <View
-                            style={
-                                styles.rewardsGrid
-                            }
-                        >
+                        <View style={styles.rewardsGrid}>
                             <RewardCounter
                                 icon="⚙️"
                                 label="ENGRENAGENS"
-                                amount={
-                                    result.rewards
-                                        .engrenagem
-                                }
+                                amount={result.rewards.engrenagem}
                                 delay={1700}
                             />
 
                             <RewardCounter
                                 icon="🏆"
                                 label="TROFÉUS"
-                                amount={
-                                    result.rewards
-                                        .trophies
-                                }
+                                amount={result.rewards.trophies}
                                 delay={1950}
                             />
 
                             <RewardCounter
                                 icon="🔧"
                                 label="MOTOR"
-                                amount={
-                                    result.rewards
-                                        .motor
-                                }
+                                amount={result.rewards.motor}
                                 delay={2200}
                             />
 
                             <RewardCounter
                                 icon="🎨"
                                 label="SPRAY"
-                                amount={
-                                    result.rewards
-                                        .spray
-                                }
+                                amount={result.rewards.spray}
                                 delay={2450}
                             />
                         </View>
 
                         {result.progress && (
-                            <View
-                                style={
-                                    styles.progressBox
-                                }
-                            >
-                                <Text
-                                    style={
-                                        styles.progressLabel
-                                    }
-                                >
+                            <View style={styles.progressBox}>
+                                <Text style={styles.progressLabel}>
                                     PROGRESSO
                                 </Text>
 
-                                <Text
-                                    style={
-                                        styles.progressValue
-                                    }
-                                >
-                                    {
-                                        result.progress
-                                            .trophiesBefore
-                                    }
+                                <Text style={styles.progressValue}>
+                                    {result.progress.trophiesBefore}
                                     {'  →  '}
-                                    {
-                                        result.progress
-                                            .trophiesAfter
-                                    }
+                                    {result.progress.trophiesAfter}
                                     {' 🏆'}
                                 </Text>
                             </View>
@@ -977,7 +924,7 @@ export default function RaceResultScreen() {
                                     handleRaceAgain
                                 }
                             >
-                                <Text style={ styles.secondaryButtonText } >
+                                <Text style={styles.secondaryButtonText} >
                                     CORRER NOVAMENTE
                                 </Text>
                             </TouchableOpacity>
@@ -1033,17 +980,17 @@ const styles =
         leftColumn: {
             flex: 1.05,
             alignItems: 'center',
-            justifyContent:'center',
+            justifyContent: 'center',
             borderRightWidth: 1,
             borderRightColor: 'rgba(255,255,255,0.16)',
             paddingRight: 32,
         },
         rightColumn: {
             flex: 1,
-            justifyContent:'center',
+            justifyContent: 'center',
         },
         completedText: {
-            color:'rgba(255,255,255,0.72)',
+            color: 'rgba(255,255,255,0.72)',
             fontSize: 16,
             fontWeight: '900',
             letterSpacing: 4,
@@ -1061,7 +1008,7 @@ const styles =
             height: 170,
             marginTop: 10,
             alignItems: 'center',
-            justifyContent:  'center',
+            justifyContent: 'center',
         },
         carImage: {
             width: '90%',
@@ -1069,7 +1016,7 @@ const styles =
         },
         carFallback: {
             alignItems: 'center',
-            justifyContent:'center',
+            justifyContent: 'center',
         },
         carEmoji: {
             fontSize: 92,
@@ -1097,7 +1044,7 @@ const styles =
             letterSpacing: 1.2,
         },
         sectionTitle: {
-            color:'rgba(255,255,255,0.7)',
+            color: 'rgba(255,255,255,0.7)',
             fontSize: 13,
             fontWeight: '900',
             letterSpacing: 3,
@@ -1115,16 +1062,16 @@ const styles =
             alignItems: 'center',
             paddingHorizontal: 12,
             borderRadius: 12,
-            backgroundColor:'rgba(8,8,12,0.32)',
+            backgroundColor: 'rgba(8,8,12,0.32)',
             borderWidth: 1,
-            borderColor:'rgba(255,255,255,0.13)',
+            borderColor: 'rgba(255,255,255,0.13)',
         },
         rewardIcon: {
             fontSize: 27,
             marginRight: 10,
         },
         rewardLabel: {
-            color:'rgba(255,255,255,0.58)',
+            color: 'rgba(255,255,255,0.58)',
             fontSize: 9,
             fontWeight: '800',
             letterSpacing: 1,
@@ -1142,7 +1089,7 @@ const styles =
             borderRadius: 10,
         },
         progressLabel: {
-            color:'rgba(255,255,255,0.5)',
+            color: 'rgba(255,255,255,0.5)',
             fontSize: 9,
             fontWeight: '900',
             letterSpacing: 2,
@@ -1166,8 +1113,8 @@ const styles =
         unlockCard: {
             flexDirection: 'row',
             alignItems: 'center',
-            justifyContent:'space-between',
-            backgroundColor:'rgba(255,255,255,0.11)',
+            justifyContent: 'space-between',
+            backgroundColor: 'rgba(255,255,255,0.11)',
             borderWidth: 1,
             borderColor: 'rgba(255,255,255,0.22)',
             paddingHorizontal: 14,
@@ -1195,7 +1142,7 @@ const styles =
             flex: 1,
             minHeight: 48,
             alignItems: 'center',
-            justifyContent:'center',
+            justifyContent: 'center',
             borderRadius: 10,
             borderWidth: 1,
             borderColor: 'rgba(255,255,255,0.35)',
