@@ -1,5 +1,6 @@
 import { AudioContext } from '@/context/AudioContext';
 import { useCarSelection } from '@/context/CarContext';
+import { raceRewardsService } from '@/src/services/raceRewardsService';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { carMaps } from '@/src/utils/carMaps';
 import { router } from 'expo-router';
@@ -202,7 +203,7 @@ export default function CarSelectionScreen() {
 
         router.push({ pathname: '/LoadingScreen', params: { next: '/CarStore' } });
     };
-    
+
     const handleOpenOficina = () => {
         if (previewCar) {
             setSelectedCar(previewCar);
@@ -226,6 +227,38 @@ export default function CarSelectionScreen() {
         setSelectedColorFront(previewColorFront);
         setSelectedColorBack(previewColorBack);
         router.navigate('/deckselection' as any);
+    };
+
+    const testRaceResult = () => {
+        const raceId =
+            `test-${Date.now()}`;
+
+        raceRewardsService.completeRace({
+            raceId,
+            position: 2,
+            totalRacers: 6,
+            carId: 'uno',
+            mapId: 'city',
+            rewards: {
+                motor: 2,
+                spray: 1,
+                engrenagem: 225,
+                trophies: 1,
+            },
+
+            unlocks: [
+                {
+                    id: 'unlock-test-tnt',
+                    itemId: 'tnt',
+                    type: 'card',
+                    name: 'TNT',
+                    rarity: 'epic',
+                },
+            ],
+            finishedAt: Date.now(),
+            isNewRecord: true,
+        });
+        router.push('/RaceResultScreen' as any,);
     };
 
     return (
@@ -473,7 +506,7 @@ export default function CarSelectionScreen() {
                         <View style={styles.actionsRow}>
                             <TouchableOpacity
                                 activeOpacity={0.84}
-                                onPress={handleOpenOficina}
+                                onPress={testRaceResult}
                                 style={styles.secondaryButton}
                             >
                                 <Text style={styles.secondaryButtonText}>OFICINA</Text>
@@ -695,7 +728,7 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255,255,255,0.25)',
     },
     previewArea: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 4 },
-    carLayer: { position: 'absolute', left: 0, top: 0 , zIndex: 2},
+    carLayer: { position: 'absolute', left: 0, top: 0, zIndex: 2 },
     wheel: { position: 'absolute', zIndex: 1 },
     emptyGarage: { alignItems: 'center', maxWidth: 290 },
     emptyGarageIcon: { fontSize: 30 },

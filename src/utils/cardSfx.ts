@@ -77,9 +77,9 @@ export function useCardSfx() {
     require('@/assets/audio/cards/tnt_explosion.mp3')
   );
 
-  const tntFusePlayer = useAudioPlayer(
-    require('@/assets/audio/cards/tnt_fuse.mp3')
-  );
+//   const tntFusePlayer = useAudioPlayer(
+//     require('@/assets/audio/cards/tnt_fuse.mp3')
+//   );
 
   const nitroPlayer = useAudioPlayer(
     require('@/assets/audio/cards/nitro.mp3')
@@ -97,9 +97,9 @@ export function useCardSfx() {
     require('@/assets/audio/cards/chains_launch.mp3')
   );
 
-  const chainsHitPlayer = useAudioPlayer(
-    require('@/assets/audio/cards/chains_hit.mp3')
-  );
+//   const chainsHitPlayer = useAudioPlayer(
+//     require('@/assets/audio/cards/chains_hit.mp3')
+//   );
 
   /*
    * Mapeia o nome lógico da carta para o player.
@@ -112,7 +112,7 @@ export function useCardSfx() {
       swap: swapPlayer,
 
       tntExplosion: tntExplosionPlayer,
-      tntFuse: tntFusePlayer,
+    //   tntFuse: tntFusePlayer,
 
       nitro: nitroPlayer,
       slow: slowPlayer,
@@ -120,17 +120,17 @@ export function useCardSfx() {
       tornado: tornadoPlayer,
 
       chainsLaunch: chainsLaunchPlayer,
-      chainsHit: chainsHitPlayer,
+    //   chainsHit: chainsHitPlayer,
     }),
     [
       swapPlayer,
       tntExplosionPlayer,
-      tntFusePlayer,
+    //   tntFusePlayer,
       nitroPlayer,
       slowPlayer,
       tornadoPlayer,
       chainsLaunchPlayer,
-      chainsHitPlayer,
+    //   chainsHitPlayer,
     ]
   );
 
