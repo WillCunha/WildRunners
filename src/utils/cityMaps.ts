@@ -4,7 +4,7 @@ export const CITY_MAPS = [
     city: 'São Paulo', 
     levelRequired: 0,
     icon: require('@/assets/images/components/cityMaps/sao_paulo.png'),
-    background: require('@/assets/images/components/cenarios/sao_pauloV4.png'),
+    background: require('@/assets/images/components/cenarios/sao_pauloV5.png'),
     gameplay: {
       trackLength: 1500, 
       baseSpeed: 5,

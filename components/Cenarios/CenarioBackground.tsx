@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, useWindowDimensions, View } from 'react-native';
 
-const IMAGEM_SAO_PAULO = require('@/assets/images/components/cenarios/sao_pauloV4.png');
+const IMAGEM_SAO_PAULO = require('@/assets/images/components/cenarios/sao_pauloV5.png');
 
 interface CenarioBackgroundProps {
   isMoving: boolean;

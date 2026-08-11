@@ -9,6 +9,7 @@ import TornadoEffect from '@/components/Decks/TornadoEffect';
 import CorrenteVisual from '@/components/ui/CorrenteVisual';
 import ExplosionVisual from '@/components/ui/ExplosionVisual';
 import GuidedBulletVisual from '@/components/ui/GuidedBulletVisual';
+import RaceFinishTransition from '@/components/ui/RaceFinishTransition';
 import TornadoVisual from '@/components/ui/TornadoVisual';
 import { AudioContext } from '@/context/AudioContext';
 import { useCarSelection } from '@/context/CarContext';
@@ -234,9 +235,15 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const [playerDeck, setPlayerDeck] = useState<string[]>(finalDeck);
 
   const [bots, setBots] = useState(botsRef.current);
-  const [started, setStarted] = useState(false);
-  const [gameOver, setGameOver] = useState(false);
   const [score, setScore] = useState(0);
+
+
+  // COMEÇO DE CORRIDA
+  const [started, setStarted] = useState(false);
+
+  // FIM DE CORRIDA
+  const [gameOver, setGameOver] = useState(false);
+  const [showFinishTransition, setShowFinishTransition] = useState(false);
 
   const [countdownStep, setCountdownStep] = useState<number | string | null>(null);
 
@@ -333,6 +340,8 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const [defenseVisualEvents, setDefenseVisualEvents] = useState<
     Record<string, DefenseVisualEvent | undefined>
   >({});
+
+
 
   const triggerDefenseVisual = (
     racerId: string,
@@ -454,6 +463,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     if (!started && !isCountingRef.current && !gameOver) {
       sessionPartsRef.current = { motor: 0, spray: 0, engrenagem: 0 };
       gameOverHandledRef.current = false;
+      setShowFinishTransition(false);
 
       raceIdRef.current =
         `race-${Date.now()}-${Math.random()
@@ -490,12 +500,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
     pauseMusic();
 
-    /**
-     * ================================
-     * 1. CALCULA CLASSIFICAÇÃO FINAL
-     * ================================
-     */
-
     const finalRanking = [
       {
         id: 'player',
@@ -512,11 +516,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       (a, b) => b.x - a.x,
     );
 
-    /**
-     * Se o jogador morreu,
-     * termina automaticamente
-     * em último.
-     */
     const playerPosition =
       playerIsDead.current
         ? TOTAL_RACERS
@@ -526,11 +525,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
             'player',
         ) + 1;
 
-    /**
-     * ================================
-     * 2. RECOMPENSAS DA CORRIDA
-     * ================================
-     */
 
     const rewards = {
       motor: Math.max(
@@ -557,18 +551,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         ),
     };
 
-    /**
-     * ================================
-     * 3. FINALIZA A CORRIDA
-     * ================================
-     *
-     * IMPORTANTE:
-     *
-     * O Mapa não altera mais diretamente
-     * o saldo do jogador.
-     *
-     * Quem faz isso agora é o service.
-     */
 
     const completion =
       raceRewardsService.completeRace({
@@ -584,10 +566,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         carId:
           carKey,
 
-        /**
-         * Snapshot exato das cores
-         * utilizadas nesta corrida.
-         */
         carVisual: {
           colorFront:
             selectedColorFront ||
@@ -600,31 +578,12 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
         rewards,
 
-        /**
-         * Ainda não estamos calculando
-         * desbloqueios reais no mapa.
-         *
-         * Isso virá depois.
-         */
         unlocks: [],
 
         finishedAt:
           Date.now(),
-
-        /**
-         * Depois podemos criar um
-         * sistema real de recordes.
-         */
         isNewRecord: false,
       });
-
-    /**
-     * Segurança:
-     *
-     * Se por alguma razão não existir
-     * perfil/result, não mandamos o
-     * jogador para uma ResultScreen vazia.
-     */
     if (!completion.result) {
       console.warn(
         '[RaceResult] Não foi possível concluir a corrida:',
@@ -635,7 +594,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
       const fallbackTimer =
         setTimeout(() => {
-          router.replace( '/SelectionCar' as any );
+          router.replace('/SelectionCar' as any);
 
           setTimeout(
             () =>
@@ -650,43 +609,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         );
     }
 
-    /**
-     * ================================
-     * 4. TRANSIÇÃO
-     * ================================
-     */
-
-    showLoading(
-      'Preparando suas recompensas...',
-    );
-
-    const navigationTimer =
-      setTimeout(() => {
-        /**
-         * replace() é importante.
-         *
-         * Não queremos que o botão
-         * "voltar" retorne para uma
-         * corrida já finalizada.
-         */
-        router.replace( '/RaceResultScreen' as any );
-
-        /**
-         * Dá um pequeno tempo para
-         * RaceResultScreen montar antes
-         * de retirar o Loading global.
-         */
-        setTimeout(
-          () =>
-            hideLoading(),
-          300,
-        );
-      }, 900);
-
-    return () =>
-      clearTimeout(
-        navigationTimer,
-      );
+    setShowFinishTransition(true);
   }, [
     gameOver,
     pauseMusic,
@@ -1417,8 +1340,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   }
 
 
-
-
   /* ================= IA DOS BOTS ================= */
   function isBotUnderThreat(bot: (typeof botsRef.current)[number]) {
     const guidedBulletComing = activeBulletsRef.current.some(bullet => bullet.targetId === bot.id);
@@ -1918,6 +1839,8 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     setCameraTransform(cameraTransformRef.current);
   };
 
+
+  /* ================= SEQUENCIA DE PREPARAÇÃO DA CORRIDA ================= */
   const startRaceSequence = async () => {
     if (isCountingRef.current) return;
     isCountingRef.current = true;
@@ -1996,6 +1919,14 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     setCountdownStep(null);
   };
 
+  /* ================= TRANSIÇÃO DE TELA APÓS TERMINO DA CORRIDA ================= */
+  const handleFinishTransitionComplete =
+    useCallback(() => {
+      router.replace('/RaceResultScreen' as any,);
+    }, [router]);
+
+
+  /* ================= NITRO COMEÇO DA CORRIDA ================= */
   const handleMiniGamePress = () => {
     if (!miniGameVisible) return;
     miniGameClicksRef.current += 1;
@@ -2014,10 +1945,12 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     if (isGrounded.current) { velocity.current = DYNAMIC_JUMP_FORCE; isGrounded.current = false; }
   }
 
+  /* ================= ATIVA O NITRO ================= */
   function handleActivateNitro() {
     if (isNitroReady && !isNitroActive.current) { isNitroActive.current = true; nitroTimer.current = NITRO_DURATION; setNitroReady(false); }
   }
 
+  /* ================= POSIÇÕES DOS PLAYERS E BOTS ================= */
   const allRacersPositions = [
     {
       id: 'player',
@@ -2605,13 +2538,16 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         </View>
       )}
 
-      {gameOver && (
-        <View style={styles.overlay} pointerEvents="none">
-          <Text style={styles.titleText}>FIM DE CORRIDA!</Text>
-          <Text style={{ color: '#fff', fontSize: 20 }}>Você correu {score}m</Text>
-          <Text style={{ color: '#aaa', marginTop: 20 }}>Salvando suas recompensas...</Text>
-        </View>
-      )}
+      
+        <RaceFinishTransition
+          visible={
+            showFinishTransition
+          }
+          onFinished={
+            handleFinishTransitionComplete
+          }
+        />
+      
     </View >
   );
 }
