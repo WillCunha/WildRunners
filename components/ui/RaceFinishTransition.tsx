@@ -1,7 +1,5 @@
-import React, {
-    useEffect, useRef,
-} from 'react';
-
+import { useRaceFinishSfx } from '@/src/audio/raceSfx';
+import React, { useEffect, useRef, } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 
 interface RaceFinishTransitionProps {
@@ -16,225 +14,316 @@ export default function RaceFinishTransition({
     visible,
     onFinished,
 }: RaceFinishTransitionProps) {
-    const backdropOpacity =
-        useRef(
-            new Animated.Value(0),
-        ).current;
 
-    const titleOpacity =
-        useRef(
-            new Animated.Value(0),
-        ).current;
+    const { playFinishWhoosh, playResultScan, playResultConfirm } = useRaceFinishSfx();
 
-    const titleScale =
-        useRef(
-            new Animated.Value(0.72),
-        ).current;
-
-    const titleY =
-        useRef(
-            new Animated.Value(18),
-        ).current;
-
-    const subtitleOpacity =
-        useRef(
-            new Animated.Value(0),
-        ).current;
-
-    const checkerOpacity =
-        useRef(
-            new Animated.Value(0),
-        ).current;
-
-    const progress =
-        useRef(
-            new Animated.Value(0),
-        ).current;
-
-    const blackoutOpacity =
-        useRef(
-            new Animated.Value(0),
-        ).current;
+    const backdropOpacity = useRef(new Animated.Value(0),).current;
+    const titleOpacity = useRef(new Animated.Value(0),).current;
+    const titleScale = useRef(new Animated.Value(0.72),).current;
+    const titleY = useRef(new Animated.Value(18),).current;
+    const subtitleOpacity = useRef(new Animated.Value(0),).current;
+    const checkerOpacity = useRef(new Animated.Value(0),).current;
+    const progress = useRef(new Animated.Value(0),).current;
+    const blackoutOpacity = useRef(new Animated.Value(0),).current;
 
     /**
      * Mantemos a callback atualizada
      * sem precisar reiniciar a animação
      * caso a função do pai mude.
      */
-    const onFinishedRef =
-        useRef(onFinished);
+    const onFinishedRef = useRef(onFinished);
 
-    useEffect(() => {
-        onFinishedRef.current =
-            onFinished;
-    }, [onFinished]);
+    useEffect(() => { onFinishedRef.current = onFinished; }, [onFinished]);
 
     useEffect(() => {
         if (!visible) {
             backdropOpacity.setValue(0);
+
             titleOpacity.setValue(0);
             titleScale.setValue(0.72);
             titleY.setValue(18);
+
             subtitleOpacity.setValue(0);
             checkerOpacity.setValue(0);
+
             progress.setValue(0);
+
             blackoutOpacity.setValue(0);
 
             return;
         }
 
+        let cancelled = false;
+        let revealTimer:
+            ReturnType<typeof setTimeout>
+            | null = null;
+
         backdropOpacity.setValue(0);
+
         titleOpacity.setValue(0);
         titleScale.setValue(0.72);
         titleY.setValue(18);
+
         subtitleOpacity.setValue(0);
         checkerOpacity.setValue(0);
+
         progress.setValue(0);
+
         blackoutOpacity.setValue(0);
 
-        /**
-         * ================================
-         * FASE 1
-         * Escurece a corrida congelada.
-         * ================================
-         */
-        const animation =
-            Animated.sequence([
-                Animated.parallel([
-                    Animated.timing(
-                        backdropOpacity,
-                        {
-                            toValue: 0.72,
-                            duration: 300,
-                            easing:
-                                Easing.out(
-                                    Easing.quad,
-                                ),
-                            useNativeDriver: true,
-                        },
-                    ),
+        /* ============================
+           FASE 1
+           FIM DE CORRIDA
+        ============================ */
 
-                    Animated.timing(
-                        checkerOpacity,
-                        {
-                            toValue: 0.16,
-                            duration: 350,
-                            useNativeDriver: true,
-                        },
-                    ),
+        playFinishWhoosh();
 
-                    Animated.timing(
-                        titleOpacity,
-                        {
-                            toValue: 1,
-                            duration: 220,
-                            useNativeDriver: true,
-                        },
-                    ),
-
-                    Animated.spring(
-                        titleScale,
-                        {
-                            toValue: 1,
-                            friction: 5,
-                            tension: 100,
-                            useNativeDriver: true,
-                        },
-                    ),
-
-                    Animated.spring(
-                        titleY,
-                        {
-                            toValue: 0,
-                            friction: 6,
-                            tension: 80,
-                            useNativeDriver: true,
-                        },
-                    ),
-                ]),
-
-                /**
-                 * Pequena pausa.
-                 */
-                Animated.delay(180),
-
-                /**
-                 * ================================
-                 * FASE 2
-                 * Mostra processamento.
-                 * ================================
-                 */
+        const intro =
+            Animated.parallel([
                 Animated.timing(
-                    subtitleOpacity,
+                    backdropOpacity,
                     {
-                        toValue: 1,
-                        duration: 180,
-                        useNativeDriver: true,
-                    },
-                ),
+                        toValue: 0.72,
 
-                /**
-                 * ================================
-                 * FASE 3
-                 * Barra falsa de processamento.
-                 * ================================
-                 */
-                Animated.timing(
-                    progress,
-                    {
-                        toValue: 1,
-                        duration: 800,
+                        duration: 300,
+
                         easing:
-                            Easing.inOut(
-                                Easing.cubic,
-                            ),
-                        useNativeDriver: false,
-                    },
-                ),
-
-                Animated.delay(100),
-
-                /**
-                 * ================================
-                 * FASE 4
-                 * Fecha a tela em preto.
-                 * ================================
-                 */
-                Animated.timing(
-                    blackoutOpacity,
-                    {
-                        toValue: 1,
-                        duration: 240,
-                        easing:
-                            Easing.in(
+                            Easing.out(
                                 Easing.quad,
                             ),
-                        useNativeDriver: true,
+
+                        useNativeDriver:
+                            true,
+                    },
+                ),
+
+                Animated.timing(
+                    checkerOpacity,
+                    {
+                        toValue: 0.16,
+
+                        duration: 350,
+
+                        useNativeDriver:
+                            true,
+                    },
+                ),
+
+                Animated.timing(
+                    titleOpacity,
+                    {
+                        toValue: 1,
+
+                        duration: 220,
+
+                        useNativeDriver:
+                            true,
+                    },
+                ),
+
+                Animated.spring(
+                    titleScale,
+                    {
+                        toValue: 1,
+
+                        friction: 5,
+                        tension: 100,
+
+                        useNativeDriver:
+                            true,
+                    },
+                ),
+
+                Animated.spring(
+                    titleY,
+                    {
+                        toValue: 0,
+
+                        friction: 6,
+                        tension: 80,
+
+                        useNativeDriver:
+                            true,
                     },
                 ),
             ]);
 
-        animation.start(
+        intro.start(
             ({ finished }) => {
-                if (finished) {
-                    onFinishedRef.current();
+                if (
+                    !finished ||
+                    cancelled
+                ) {
+                    return;
                 }
+
+                revealTimer =
+                    setTimeout(() => {
+                        if (cancelled) {
+                            return;
+                        }
+
+                        /* ============================
+                           FASE 2
+                           CALCULANDO RESULTADO
+                        ============================ */
+
+                        playResultScan();
+
+                        Animated.timing(
+                            subtitleOpacity,
+                            {
+                                toValue: 1,
+
+                                duration: 180,
+
+                                useNativeDriver:
+                                    true,
+                            },
+                        ).start(
+                            ({
+                                finished:
+                                subtitleFinished,
+                            }) => {
+                                if (
+                                    !subtitleFinished ||
+                                    cancelled
+                                ) {
+                                    return;
+                                }
+
+                                /* ============================
+                                   FASE 3
+                                   BARRA
+                                ============================ */
+
+                                Animated.timing(
+                                    progress,
+                                    {
+                                        toValue: 1,
+
+                                        duration: 800,
+
+                                        easing:
+                                            Easing.inOut(
+                                                Easing.cubic,
+                                            ),
+
+                                        useNativeDriver:
+                                            false,
+                                    },
+                                ).start(
+                                    ({
+                                        finished:
+                                        progressFinished,
+                                    }) => {
+                                        if (
+                                            !progressFinished ||
+                                            cancelled
+                                        ) {
+                                            return;
+                                        }
+
+                                        /* ============================
+                                           RESULTADO CONFIRMADO
+                                        ============================ */
+
+                                        playResultConfirm();
+
+                                        /* ============================
+                                           FASE 4
+                                           BLACKOUT
+                                        ============================ */
+
+                                        Animated.sequence([
+                                            /*
+                                             * Dá tempo para o impacto
+                                             * do confirm respirar.
+                                             */
+                                            Animated.delay(
+                                                180,
+                                            ),
+
+                                            Animated.timing(
+                                                blackoutOpacity,
+                                                {
+                                                    toValue: 1,
+
+                                                    duration: 280,
+
+                                                    easing:
+                                                        Easing.in(
+                                                            Easing.quad,
+                                                        ),
+
+                                                    useNativeDriver:
+                                                        true,
+                                                },
+                                            ),
+                                        ]).start(
+                                            ({
+                                                finished:
+                                                outroFinished,
+                                            }) => {
+                                                if (
+                                                    outroFinished &&
+                                                    !cancelled
+                                                ) {
+                                                    onFinishedRef
+                                                        .current();
+                                                }
+                                            },
+                                        );
+                                    },
+                                );
+                            },
+                        );
+                    }, 160);
             },
         );
 
         return () => {
-            animation.stop();
+            cancelled = true;
+
+            if (revealTimer) {
+                clearTimeout(
+                    revealTimer,
+                );
+            }
+
+            backdropOpacity.stopAnimation();
+
+            titleOpacity.stopAnimation();
+            titleScale.stopAnimation();
+            titleY.stopAnimation();
+
+            subtitleOpacity.stopAnimation();
+
+            checkerOpacity.stopAnimation();
+
+            progress.stopAnimation();
+
+            blackoutOpacity.stopAnimation();
         };
     }, [
         visible,
+
         backdropOpacity,
+
         titleOpacity,
         titleScale,
         titleY,
+
         subtitleOpacity,
         checkerOpacity,
+
         progress,
+
         blackoutOpacity,
+
+        playFinishWhoosh,
+        playResultScan,
+        playResultConfirm,
     ]);
 
     if (!visible) {

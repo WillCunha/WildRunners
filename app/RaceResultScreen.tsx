@@ -1,4 +1,5 @@
 import Carro from '@/components/Carro';
+import { useRaceResultSfx } from '@/src/audio/raceSfx';
 import { useRaceResultStore } from '@/src/store/raceResultStore';
 import { RaceResult, RewardRarity } from '@/src/types/raceTypes';
 import { carMaps } from '@/src/utils/carMaps';
@@ -6,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState, } from 'react';
 import { Animated, ImageSourcePropType, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, } from 'react-native';
+
 
 type ResultTheme = {
     colors: [
@@ -21,6 +23,8 @@ type RewardCounterProps = {
     label: string;
     amount: number;
     delay?: number;
+    onTick?: () => void;
+    onComplete?: () => void;
 };
 
 /**
@@ -200,7 +204,12 @@ const RewardCounter = ({
     label,
     amount,
     delay = 0,
+    onTick,
+    onComplete,
 }: RewardCounterProps) => {
+    const lastAudioTickRef =
+        useRef(0);
+
     const value =
         useRef(
             new Animated.Value(0),
@@ -234,6 +243,35 @@ const RewardCounter = ({
                     setDisplayedValue(
                         Math.floor(value),
                     );
+
+                    /*
+                     * Não tocamos um áudio
+                     * para cada número.
+                     *
+                     * O Animated pode atualizar
+                     * cerca de 60 vezes/s.
+                     */
+                    if (
+                        value > 0 &&
+                        amount > 0 &&
+                        onTick
+                    ) {
+                        const now =
+                            Date.now();
+
+                        if (
+                            now -
+                            lastAudioTickRef
+                                .current >=
+                            70
+                        ) {
+                            lastAudioTickRef
+                                .current =
+                                now;
+
+                            onTick();
+                        }
+                    }
                 },
             );
 
@@ -285,7 +323,16 @@ const RewardCounter = ({
                         false,
                 },
             ),
-        ]).start();
+        ]).start(
+            ({ finished }) => {
+                if (
+                    finished &&
+                    amount > 0
+                ) {
+                    onComplete?.();
+                }
+            },
+        );
 
         return () => {
             value.removeListener(
@@ -299,6 +346,8 @@ const RewardCounter = ({
         scale,
         value,
     ]);
+
+
 
     return (
         <Animated.View
@@ -347,6 +396,11 @@ const RewardCounter = ({
 };
 
 export default function RaceResultScreen() {
+
+    const { playCarArrival, playRewardTick, playRewardComplete, playRareUnlock, playVictory } = useRaceResultSfx();
+
+    const [showUnlocks, setShowUnlocks] = useState(false);
+
     const result =
         useRaceResultStore(
             state =>
@@ -413,6 +467,72 @@ export default function RaceResultScreen() {
 
             [result],
         );
+
+    useEffect(() => {
+        setShowUnlocks(false);
+
+        if (
+            !result ||
+            result.unlocks.length === 0
+        ) {
+            return;
+        }
+
+        /*
+         * O último RewardCounter começa
+         * em 2450ms e dura aproximadamente
+         * 900ms.
+         *
+         * 3600ms deixa um pequeno respiro.
+         */
+        const timer =
+            setTimeout(() => {
+                setShowUnlocks(true);
+
+                const hasSpecialUnlock =
+                    result.unlocks.some(
+                        unlock =>
+                            unlock.rarity ===
+                            'rare' ||
+                            unlock.rarity ===
+                            'epic' ||
+                            unlock.rarity ===
+                            'legendary',
+                    );
+
+                if (
+                    hasSpecialUnlock
+                ) {
+                    playRareUnlock();
+                }
+            }, 3600);
+
+        return () =>
+            clearTimeout(timer);
+    }, [
+        result,
+        playRareUnlock,
+    ]);
+
+    useEffect(() => {
+        if (
+            !result ||
+            result.position !== 1
+        ) {
+            return;
+        }
+
+        const timer =
+            setTimeout(() => {
+                playVictory();
+            }, 420);
+
+        return () =>
+            clearTimeout(timer);
+    }, [
+        result,
+        playVictory,
+    ]);
 
     useEffect(() => {
         if (!result) {
@@ -589,6 +709,7 @@ export default function RaceResultScreen() {
         result,
         titleOpacity,
         titleY,
+        playCarArrival,
     ]);
 
     if (
@@ -823,6 +944,12 @@ export default function RaceResultScreen() {
                                 label="ENGRENAGENS"
                                 amount={result.rewards.engrenagem}
                                 delay={1700}
+                                onTick={
+                                    playRewardTick
+                                }
+                                onComplete={
+                                    playRewardComplete
+                                }
                             />
 
                             <RewardCounter
@@ -830,6 +957,12 @@ export default function RaceResultScreen() {
                                 label="TROFÉUS"
                                 amount={result.rewards.trophies}
                                 delay={1950}
+                                onTick={
+                                    playRewardTick
+                                }
+                                onComplete={
+                                    playRewardComplete
+                                }
                             />
 
                             <RewardCounter
@@ -837,6 +970,12 @@ export default function RaceResultScreen() {
                                 label="MOTOR"
                                 amount={result.rewards.motor}
                                 delay={2200}
+                                onTick={
+                                    playRewardTick
+                                }
+                                onComplete={
+                                    playRewardComplete
+                                }
                             />
 
                             <RewardCounter
@@ -844,6 +983,12 @@ export default function RaceResultScreen() {
                                 label="SPRAY"
                                 amount={result.rewards.spray}
                                 delay={2450}
+                                onTick={
+                                    playRewardTick
+                                }
+                                onComplete={
+                                    playRewardComplete
+                                }
                             />
                         </View>
 
@@ -862,7 +1007,8 @@ export default function RaceResultScreen() {
                             </View>
                         )}
 
-                        {result.unlocks.length >
+                        {showUnlocks &&
+                            result.unlocks.length >
                             0 && (
                                 <View
                                     style={

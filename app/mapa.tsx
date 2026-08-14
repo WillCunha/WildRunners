@@ -486,6 +486,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   }, [SCREEN_HEIGHT, SCREEN_WIDTH]);
 
   /* ================= FINALIZAÇÃO ÚNICA DA PARTIDA ================= */
+
   useEffect(() => {
     if (
       !gameOver ||
@@ -496,9 +497,19 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
     gameOverHandledRef.current = true;
 
+    /*
+     * Congela a corrida.
+     */
     setStarted(false);
 
+    /*
+     * Para a música da corrida.
+     */
     pauseMusic();
+
+    /* ================================
+       1. CLASSIFICAÇÃO FINAL
+    ================================ */
 
     const finalRanking = [
       {
@@ -521,28 +532,27 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         ? TOTAL_RACERS
         : finalRanking.findIndex(
           racer =>
-            racer.id ===
-            'player',
+            racer.id === 'player',
         ) + 1;
 
+    /* ================================
+       2. RECOMPENSAS
+    ================================ */
 
     const rewards = {
       motor: Math.max(
         0,
-        sessionPartsRef.current
-          .motor,
+        sessionPartsRef.current.motor,
       ),
 
       spray: Math.max(
         0,
-        sessionPartsRef.current
-          .spray,
+        sessionPartsRef.current.spray,
       ),
 
       engrenagem: Math.max(
         0,
-        sessionPartsRef.current
-          .engrenagem,
+        sessionPartsRef.current.engrenagem,
       ),
 
       trophies:
@@ -551,6 +561,9 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         ),
     };
 
+    /* ================================
+       3. REGISTRA RESULTADO
+    ================================ */
 
     const completion =
       raceRewardsService.completeRace({
@@ -582,39 +595,37 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
         finishedAt:
           Date.now(),
-        isNewRecord: false,
+
+        isNewRecord:
+          false,
       });
+
+    /* ================================
+       4. FALLBACK DE SEGURANÇA
+    ================================ */
+
     if (!completion.result) {
       console.warn(
         '[RaceResult] Não foi possível concluir a corrida:',
         completion.status,
       );
 
-      showLoading();
+      router.replace(
+        '/SelectionCar' as any,
+      );
 
-      const fallbackTimer =
-        setTimeout(() => {
-          router.replace('/SelectionCar' as any);
-
-          setTimeout(
-            () =>
-              hideLoading(),
-            350,
-          );
-        }, 900);
-
-      return () =>
-        clearTimeout(
-          fallbackTimer,
-        );
+      return;
     }
 
+    /* ================================
+       5. TRANSIÇÃO VISUAL
+    ================================ */
+
     setShowFinishTransition(true);
+
   }, [
     gameOver,
     pauseMusic,
-    showLoading,
-    hideLoading,
     router,
     carKey,
     selectedColorFront,
@@ -2538,16 +2549,16 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         </View>
       )}
 
-      
-        <RaceFinishTransition
-          visible={
-            showFinishTransition
-          }
-          onFinished={
-            handleFinishTransitionComplete
-          }
-        />
-      
+
+      <RaceFinishTransition
+        visible={
+          showFinishTransition
+        }
+        onFinished={
+          handleFinishTransitionComplete
+        }
+      />
+
     </View >
   );
 }
