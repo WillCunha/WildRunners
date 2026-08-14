@@ -372,11 +372,17 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   // Evita creditar a mesma partida mais de uma vez.
   const gameOverHandledRef = useRef(false);
 
-  const getTrophyReward = (position: number) => {
-    if (position === 1) return 5;
-    if (position === 2) return 3;
-    if (position === 3) return 2;
-    if (position <= 5) return 1;
+  const getTrophyReward = (
+    position: number,
+    didFinish: boolean,
+  ) => {
+    if (
+      didFinish &&
+      position === 1
+    ) {
+      return 1;
+    }
+
     return 0;
   };
 
@@ -558,6 +564,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       trophies:
         getTrophyReward(
           playerPosition,
+          !playerIsDead.current,
         ),
     };
 
@@ -2420,10 +2427,18 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
         {/* ================= RENDER DAS PEÇAS ================= */}
         {piecesToRender.map((piece) => {
-          const getIcon = (type: string) => {
-            if (type === 'motor') return '⚙️';
-            if (type === 'spray') return '🎨';
-            return '🔧'; // engrenagem
+          const getIcon = (
+            type: PartType,
+          ) => {
+            if (type === 'motor') {
+              return '🔧';
+            }
+
+            if (type === 'spray') {
+              return '🎨';
+            }
+
+            return '⚙️';
           };
 
           return (

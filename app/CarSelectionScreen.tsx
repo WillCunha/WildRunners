@@ -204,6 +204,12 @@ export default function CarSelectionScreen() {
         router.push({ pathname: '/LoadingScreen', params: { next: '/CarStore' } });
     };
 
+    const resetProfile =
+        usePlayerStore(
+            state =>
+                state.resetProfile,
+        );
+
     const handleOpenOficina = () => {
         if (previewCar) {
             setSelectedCar(previewCar);
@@ -486,7 +492,7 @@ export default function CarSelectionScreen() {
                                 <View style={styles.partsRow}>
                                     <View style={styles.partBadge}>
                                         <Text style={styles.partIcon}>⚙️</Text>
-                                        <Text style={styles.partValue}>{profile?.parts?.motor ?? 0}</Text>
+                                        <Text style={styles.partValue}>{profile?.parts?.engrenagem ?? 0}</Text>
                                         <Text style={styles.partLabel}>MOTOR</Text>
                                     </View>
                                     <View style={styles.partBadge}>
@@ -496,7 +502,7 @@ export default function CarSelectionScreen() {
                                     </View>
                                     <View style={styles.partBadge}>
                                         <Text style={styles.partIcon}>🔧</Text>
-                                        <Text style={styles.partValue}>{profile?.parts?.engrenagem ?? 0}</Text>
+                                        <Text style={styles.partValue}>{profile?.parts?.motor ?? 0}</Text>
                                         <Text style={styles.partLabel}>PEÇAS</Text>
                                     </View>
                                 </View>
@@ -504,9 +510,17 @@ export default function CarSelectionScreen() {
                         </ScrollView>
 
                         <View style={styles.actionsRow}>
+                            {/* <TouchableOpacity
+                                activeOpacity={0.84}
+                                onPress={resetProfile}
+                                style={styles.secondaryButton}
+                            >
+                                <Text style={styles.secondaryButtonText}>RESET</Text>
+                            </TouchableOpacity> */}
+
                             <TouchableOpacity
                                 activeOpacity={0.84}
-                                onPress={testRaceResult}
+                                onPress={handleOpenOficina}
                                 style={styles.secondaryButton}
                             >
                                 <Text style={styles.secondaryButtonText}>OFICINA</Text>

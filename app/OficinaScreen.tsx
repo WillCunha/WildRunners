@@ -168,6 +168,20 @@ export default function OficinaScreen() {
         isCompactLandscape ? 385 : 465,
     );
 
+    const getResourceName = (
+        category: PartCategory,
+    ) => {
+        if (category === 'motor') {
+            return 'peças de motor';
+        }
+
+        if (category === 'engrenagem') {
+            return 'engrenagens';
+        }
+
+        return 'sprays';
+    };
+
     const renderUpgradeItem = (
         title: string,
         subtitle: string,
@@ -194,8 +208,8 @@ export default function OficinaScreen() {
 
             if (!success) {
                 Alert.alert(
-                    'PEÇAS INSUFICIENTES',
-                    `Você precisa de ${upgradeCost} peças de ${partCategory.toUpperCase()} para este upgrade.`,
+                    'RECURSOS INSUFICIENTES',
+                    `Você precisa de ${upgradeCost} ${getResourceName(partCategory)} para este upgrade.`,
                 );
             }
         };
@@ -299,13 +313,13 @@ export default function OficinaScreen() {
                     <View style={styles.accountRow}>
                         <View style={styles.accountBadge}>
                             <Text style={styles.accountLabel}>MOTOR</Text>
-                            <Text style={styles.accountValue}>⚙️ {myParts.motor}</Text>
+                            <Text style={styles.accountValue}>⚙️ {myParts.engrenagem}</Text>
                         </View>
 
                         <View style={styles.accountBadge}>
                             <Text style={styles.accountLabel}>PEÇAS</Text>
                             <Text style={styles.accountValue}>
-                                🔧 {myParts.engrenagem}
+                                🔧 {myParts.motor}
                             </Text>
                         </View>
 
@@ -439,7 +453,7 @@ export default function OficinaScreen() {
                                 'Velocidade Máxima',
                                 'Aumenta a velocidade final do veículo',
                                 speedLevel,
-                                'motor',
+                                'engrenagem',
                                 'speedLevel',
                                 '⚙️',
                             )}
@@ -449,7 +463,7 @@ export default function OficinaScreen() {
                                 accelerationLevel,
                                 'motor',
                                 'accelerationLevel',
-                                '⚙️',
+                                '🔧',
                             )}
                             {renderUpgradeItem(
                                 'Força do Pulo',
@@ -457,7 +471,7 @@ export default function OficinaScreen() {
                                 jumpLevel,
                                 'motor',
                                 'jumpPowerLevel',
-                                '⚙️',
+                                '🔧',
                             )}
                             {renderUpgradeItem(
                                 'Defesa / Resistência',
@@ -465,7 +479,7 @@ export default function OficinaScreen() {
                                 defenseLevel,
                                 'engrenagem',
                                 'defenseLevel',
-                                '🔧',
+                                '⚙️',
                             )}
                             {renderUpgradeItem(
                                 'Estética e Raridade',

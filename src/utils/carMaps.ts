@@ -50,9 +50,9 @@ export const carMaps = {
             },
 
             oficina: {
-                rodaFrente: { x: 169, y: -11 },
-                rodaTras: { x: 43, y: -11 },
-                size: { width: 65, height: 65 },
+                rodaFrente: { x: 237, y: -17 },
+                rodaTras: { x: 63, y: -17 },
+                size: { width: 45, height: 45 },
             },
 
             loja: {

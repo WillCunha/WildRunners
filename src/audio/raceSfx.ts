@@ -1,7 +1,7 @@
 import { useAudioPlayer } from 'expo-audio';
 import {
-    useCallback,
-    useRef,
+  useCallback,
+  useRef,
 } from 'react';
 
 type SfxPlayer =
@@ -90,7 +90,7 @@ export function useRaceResultSfx() {
   const carArrival =
     useAudioPlayer(
       require(
-        '@/assets/audio/race/car_arrive.mp3',
+        '@/assets/audio/race/result_car_arrive.mp3',
       ),
     );
 

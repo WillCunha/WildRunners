@@ -20,6 +20,8 @@ type RaceRewardStatus =
   | 'no_profile'
   | 'invalid_race';
 
+
+
 type UnlockCategory = keyof PlayerUnlocks;
 
 type PlayerState = {
@@ -32,6 +34,8 @@ type PlayerState = {
    * Futuramente isso será responsabilidade do servidor.
    */
   processedRaceIds: string[];
+
+  resetProfile: () => void;
 
   createProfile: (username: string) => void;
 
@@ -153,6 +157,48 @@ export const usePlayerStore = create<PlayerState>()(
         });
       },
 
+      resetProfile: () => {
+        const currentProfile =
+          get().profile;
+
+        const now = Date.now();
+
+        set({
+          profile: {
+            id:
+              currentProfile?.id ??
+              Math.random()
+                .toString(36)
+                .substring(2, 15),
+
+            username:
+              currentProfile?.username ??
+              'PLAYER',
+
+            trophies: 0,
+
+            parts: {
+              motor: 100,
+              spray: 100,
+              engrenagem: 100,
+            },
+
+            garage: {
+              buggy:
+                createBaseGarageCar(),
+            },
+
+            unlocks:
+              createBaseUnlocks(),
+
+            createdAt: now,
+            updatedAt: now,
+          },
+
+          processedRaceIds: [],
+        });
+      },
+
       addTrophies: amount =>
         set(state => {
           if (!state.profile) return state;
@@ -164,7 +210,7 @@ export const usePlayerStore = create<PlayerState>()(
               trophies: Math.max(
                 0,
                 state.profile.trophies +
-                  Math.floor(amount),
+                Math.floor(amount),
               ),
 
               updatedAt: Date.now(),
@@ -188,19 +234,19 @@ export const usePlayerStore = create<PlayerState>()(
                 motor: Math.max(
                   0,
                   state.profile.parts.motor +
-                    Math.floor(motor),
+                  Math.floor(motor),
                 ),
 
                 spray: Math.max(
                   0,
                   state.profile.parts.spray +
-                    Math.floor(spray),
+                  Math.floor(spray),
                 ),
 
                 engrenagem: Math.max(
                   0,
                   state.profile.parts.engrenagem +
-                    Math.floor(engrenagem),
+                  Math.floor(engrenagem),
                 ),
               },
 
@@ -386,7 +432,7 @@ export const usePlayerStore = create<PlayerState>()(
 
           const items =
             state.profile.unlocks?.[
-              category
+            category
             ] ?? [];
 
           if (items.includes(safeId)) {
@@ -469,7 +515,7 @@ export const usePlayerStore = create<PlayerState>()(
 
           if (
             state.profile.garage?.[
-              carId
+            carId
             ] !== undefined
           ) {
             return state;
@@ -539,16 +585,16 @@ export const usePlayerStore = create<PlayerState>()(
         const validStat =
           partCategory === 'motor'
             ? [
-                'speedLevel',
-                'accelerationLevel',
-                'jumpPowerLevel',
-              ].includes(stat)
+              'speedLevel',
+              'accelerationLevel',
+              'jumpPowerLevel',
+            ].includes(stat)
             : partCategory ===
-                'engrenagem'
+              'engrenagem'
               ? stat ===
-                'defenseLevel'
+              'defenseLevel'
               : stat ===
-                'rarityLevel';
+              'rarityLevel';
 
         if (!validStat) {
           return false;
@@ -556,7 +602,7 @@ export const usePlayerStore = create<PlayerState>()(
 
         if (
           profile.parts[
-            partCategory
+          partCategory
           ] < safeCost
         ) {
           return false;
@@ -569,7 +615,7 @@ export const usePlayerStore = create<PlayerState>()(
 
           const currentCar =
             state.profile.garage?.[
-              carId
+            carId
             ];
 
           if (!currentCar) {
@@ -578,7 +624,7 @@ export const usePlayerStore = create<PlayerState>()(
 
           const currentBalance =
             state.profile.parts[
-              partCategory
+            partCategory
             ];
 
           /**
@@ -605,9 +651,9 @@ export const usePlayerStore = create<PlayerState>()(
           ) {
             const motorStat =
               stat as
-                | 'speedLevel'
-                | 'accelerationLevel'
-                | 'jumpPowerLevel';
+              | 'speedLevel'
+              | 'accelerationLevel'
+              | 'jumpPowerLevel';
 
             updatedCar.motor[
               motorStat
