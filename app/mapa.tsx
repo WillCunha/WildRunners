@@ -20,7 +20,7 @@ import { usePlayerStore } from '@/src/store/playerStore';
 import { carMaps } from '@/src/utils/carMaps';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { Animated, Image, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 
 type CarKey = keyof typeof carMaps;
 
@@ -45,6 +45,23 @@ const MAP_MUSIC = require(
 // O cenário não precisa renderizar novamente a cada snapshot da física.
 // Ele só atualiza quando isMoving ou mapImage realmente mudam.
 const MemoCenarioBackground = React.memo(CenarioBackground);
+
+const CARD_IMAGES: Record<string, any> = {
+  chains: require('@/assets/images/cards/chains.png'),
+  tnt: require('@/assets/images/cards/tnt.png'),
+  swap: require('@/assets/images/cards/swap.png'),
+  slow_slow: require('@/assets/images/cards/slow_slow.png'),
+  blind: require('@/assets/images/cards/blind.png'),
+  bullet: require('@/assets/images/cards/bullet.png'),
+  tornado: require('@/assets/images/cards/tornado.png'),
+  bubble_lift: require('@/assets/images/cards/bubble_lift.png'),
+  nitro_power: require('@/assets/images/cards/nitro_power.png'),
+  shield: require('@/assets/images/cards/shield.png'),
+  armor: require('@/assets/images/cards/armor.png'),
+  quick_repair: require('@/assets/images/cards/repair_quick.png'),
+  ghost: require('@/assets/images/cards/ghost.png'),
+  second_chance: require('@/assets/images/cards/second_chance.png'),
+};
 
 
 /* ================= CONFIGURAÇÕES DA FÍSICA E VELOCIDADE ================= */
@@ -173,7 +190,13 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const timeRemainingRef = useRef(0);
 
   const isCountingRef = useRef(false);
-  const { playBeep, playMusic, pauseMusic } = useContext(AudioContext);
+  const {
+    playBeep,
+    playMusic,
+    pauseMusic,
+    playRaceTick,
+    playFinal30Warning,
+  } = useContext(AudioContext);
 
   const getRandomColor = () => AVAILABLE_BOT_COLORS[Math.floor(Math.random() * AVAILABLE_BOT_COLORS.length)];
   const getRandomCarType = (): CarKey => {
@@ -216,6 +239,8 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
   // ---- CRONOMETRO DA PARTIDA ---- //
   const [timeRemaining, setTimeRemaining] = useState(0);
+  const timerPulseAnim = useRef(new Animated.Value(1)).current;
+  const final30WarningPlayedRef = useRef(false);
 
   // ---- NITRO ---- //
   const [nitroPercent, setNitroPercent] = useState(0);
@@ -455,6 +480,8 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     setDefenseVisualEvents({});
     playerSpeed.current = MIN_SPEED;
     gameTime.current = 0;
+    final30WarningPlayedRef.current = false;
+    timerPulseAnim.setValue(1);
 
     const startY = GROUND_Y - PLAYER_SIZE;
 
@@ -662,6 +689,54 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     selectedColorBack,
   ]);
 
+  /* ================= PRESSÃO DOS 30 SEGUNDOS FINAIS ================= */
+  const pulseRaceTimer = useCallback((scale: number) => {
+    timerPulseAnim.stopAnimation();
+    timerPulseAnim.setValue(1);
+
+    Animated.sequence([
+      Animated.spring(timerPulseAnim, {
+        toValue: scale,
+        speed: 28,
+        bounciness: 8,
+        useNativeDriver: true,
+      }),
+      Animated.spring(timerPulseAnim, {
+        toValue: 1,
+        speed: 24,
+        bounciness: 5,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [timerPulseAnim]);
+
+  useEffect(() => {
+    if (!started || gameOver || timeRemaining <= 0 || timeRemaining > 30) {
+      return;
+    }
+
+    if (timeRemaining === 30) {
+      if (!final30WarningPlayedRef.current) {
+        final30WarningPlayedRef.current = true;
+        playFinal30Warning();
+      }
+
+      pulseRaceTimer(1.24);
+      return;
+    }
+
+    // Um único tick por segundo. Nada deste efeito entra no loop de física de 60 FPS.
+    playRaceTick();
+    pulseRaceTimer(timeRemaining <= 10 ? 1.18 : 1.10);
+  }, [
+    started,
+    gameOver,
+    timeRemaining,
+    playRaceTick,
+    playFinal30Warning,
+    pulseRaceTimer,
+  ]);
+
   /* ================= GAME LOOP ================= */
   useEffect(() => {
     if (!started || gameOver) return;
@@ -845,14 +920,39 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
         let targetSpeed = bot.targetSpeed;
 
-        if (bot.speed < targetSpeed) bot.speed += (ACCELERATION * (1 + (bot.stats.impulse - IMPULSE_FORCE)));
-        if (bot.speed > targetSpeed) bot.speed -= FRICTION;
-
+        // ================= SLOW SLOW =================
         if (bot.status.isSlowed) {
-          targetSpeed = MAX_SPEED * -1.5;
-        } else if (bot.activeEffectsTimers['nitro_power'] && bot.activeEffectsTimers['nitro_power'] > 0) {
+          const slowMaxSpeed = bot.stats.maxSpeed * 0.4;
+
+          targetSpeed = slowMaxSpeed;
+
+          bot.speed = Math.min(bot.speed, slowMaxSpeed);
+        }
+
+        // ================= NITRO POWER =================
+        else if (
+          bot.activeEffectsTimers['nitro_power'] &&
+          bot.activeEffectsTimers['nitro_power'] > 0
+        ) {
           targetSpeed = NITRO_SPEED * 1.3;
           bot.speed = targetSpeed;
+        }
+
+        // ================= ACELERAÇÃO NORMAL =================
+        if (bot.speed < targetSpeed) {
+          bot.speed += (
+            ACCELERATION *
+            (1 + (bot.stats.impulse - IMPULSE_FORCE))
+          );
+
+          bot.speed = Math.min(bot.speed, targetSpeed);
+        }
+
+        if (bot.speed > targetSpeed) {
+          bot.speed = Math.max(
+            bot.speed - FRICTION,
+            targetSpeed
+          );
         }
 
         bot.x += (bot.speed - dynamicSpeed);
@@ -2286,7 +2386,24 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       </View>
 
       <View style={styles.hud}>
-        <Text style={styles.scoreText}>⏱️ {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}</Text>
+        <Animated.View
+          style={[
+            styles.timerBadge,
+            timeRemaining <= 30 && styles.timerBadgeDanger,
+            timeRemaining <= 10 && styles.timerBadgeCritical,
+            { transform: [{ scale: timerPulseAnim }] },
+          ]}
+        >
+          <Text
+            style={[
+              styles.scoreText,
+              timeRemaining <= 30 && styles.scoreTextDanger,
+              timeRemaining <= 10 && styles.scoreTextCritical,
+            ]}
+          >
+            ⏱️ {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}
+          </Text>
+        </Animated.View>
         <View
           style={{ flexDirection: 'row', marginTop: 10, alignSelf: 'flex-end', gap: 2 }}
         >
@@ -2531,6 +2648,28 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
             );
           }
 
+          {/* ================= RENDER DO SLOW_SLOW ================= */ }
+          {
+            isSlowActive && (
+              <View style={styles.slowEffect} pointerEvents="none">
+                <View style={styles.slowBorder} />
+
+                <View style={styles.slowWarning}>
+                  <Text style={styles.slowWarningText}>
+                    🐌 SLOWED!
+                  </Text>
+                </View>
+              </View>
+            )
+          }
+
+          {/* ================= RENDER DO BLIND ================= */ }
+          {
+            isBlindActive &&
+              <View style={styles.blindEffect} pointerEvents="none" />
+          }
+
+
 
           return (
             <View key={tnt.id} style={{
@@ -2605,7 +2744,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
 
 
-      {isBlindActive && <View style={styles.blindEffect} pointerEvents="none" />}
 
       <View style={styles.boostBarContainer}>
         <View style={[styles.boostBarFill, { width: `${(boost / MAX_BOOST) * 100}%` }]} />
@@ -2657,9 +2795,11 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
                 <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '900' }}>💧{cost}</Text>
               </View>
 
-              <Text style={{ color: 'white', fontWeight: '900', fontSize: 13, textAlign: 'center' }}>
-                {cardId.replace(/_/g, ' ').toUpperCase()}
-              </Text>
+              <Image
+                source={CARD_IMAGES[cardId]}
+                resizeMode="contain"
+                style={styles.deckCardImage}
+              />
             </TouchableOpacity>
           );
         })}
@@ -2721,70 +2861,70 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#05ebfc', overflow: 'hidden' },
-  flatGround: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    zIndex: 1,
-    backgroundColor: '#2e8b565b',
-    borderTopWidth: 5,
-    borderTopColor: '#34C759',
-  },
-  miniMapContainer: { position: 'absolute', top: 20, alignSelf: 'center', width: '60%', height: 20, justifyContent: 'center', zIndex: 10 },
+  flatGround: {position: 'absolute',left: 0,right: 0,zIndex: 1,backgroundColor: '#2e8b565b',borderTopWidth: 5,borderTopColor: '#34C759',},
+  miniMapContainer: { position: 'absolute', top: 20, alignSelf: 'center', width: '60%', height: 20, justifyContent: 'center', zIndex: 20 },
   miniMapLine: { position: 'absolute', left: 0, right: 0, height: 4, backgroundColor: 'rgba(255, 255, 255, 0.4)', borderRadius: 2 },
   miniMapDot: { position: 'absolute', top: '50%', marginTop: -5 },
-  hud: { position: 'absolute', top: 60, right: 50, zIndex: 10 },
-  scoreText: { fontSize: 32, fontWeight: '900', color: '#FFF' },
-  leaderboardContainer: { position: 'absolute', top: 60, left: 20, backgroundColor: 'rgba(0, 0, 0, 0.5)', padding: 10, borderRadius: 10, zIndex: 10, width: 150 },
+  hud: { position: 'absolute', top: 60, right: 50, zIndex: 20, alignItems: 'flex-end' },
+  timerBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  timerBadgeDanger: {
+    backgroundColor: 'rgba(180, 20, 20, 0.78)',
+    borderColor: '#FF453A',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+  },
+  timerBadgeCritical: {
+    backgroundColor: 'rgba(125, 0, 0, 0.90)',
+    borderColor: '#FFD60A',
+    borderWidth: 3,
+    elevation: 12,
+  },
+  scoreText: { fontSize: 32, fontWeight: '900', color: '#FFF', zIndex: 20 },
+  scoreTextDanger: {
+    color: '#FFF',
+    textShadowColor: '#FF3B30',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
+  scoreTextCritical: {
+    color: '#FFD60A',
+    textShadowColor: '#000',
+    textShadowOffset: { width: 1, height: 2 },
+    textShadowRadius: 3,
+  },
+  leaderboardContainer: { position: 'absolute', top: 60, left: 20, backgroundColor: 'rgba(0, 0, 0, 0.5)', padding: 10, borderRadius: 10, zIndex: 20, width: 150 },
   leaderboardTitle: { color: '#FFD700', fontWeight: '900', fontStyle: 'italic', marginBottom: 5, textAlign: 'center', fontSize: 12 },
   leaderboardItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 255, 255, 0.1)', marginBottom: 4, paddingVertical: 4, paddingHorizontal: 8, borderRadius: 5 },
   leaderboardItemPlayer: { backgroundColor: 'rgba(0, 208, 132, 0.4)', borderWidth: 1, borderColor: '#00D084' },
   leaderboardRank: { color: '#FFF', fontWeight: 'bold', width: 25, fontSize: 12 },
   leaderboardName: { color: '#FFF', fontSize: 12, flex: 1 },
-  nitroBarContainer: { marginTop: '3%', alignSelf: 'center', width: '100%', height: 20, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 10, borderWidth: 2, borderColor: '#FFF', overflow: 'hidden', zIndex: 10, justifyContent: 'center', alignItems: 'center' },
+  nitroBarContainer: { marginTop: '3%', alignSelf: 'center', width: '100%', height: 20, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 10, borderWidth: 2, borderColor: '#FFF', overflow: 'hidden', zIndex: 20, justifyContent: 'center', alignItems: 'center' },
   nitroBarFill: { position: 'absolute', left: 0, top: 0, bottom: 0 },
   nitroBarText: { color: '#FFF', fontWeight: 'bold', fontSize: 10, fontStyle: 'italic', zIndex: 2 },
   jumpArea: { position: 'absolute', backgroundColor: '#fff', left: 40, bottom: 30, height: 90, width: 90, borderRadius: 45, zIndex: 30, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 5 },
-  drivingControls: { position: 'absolute', bottom: 30, right: 40, flexDirection: 'row', alignItems: 'center', gap: 20, zIndex: 30 },
-  throttleBtn: { width: 90, height: 90, borderRadius: 45, backgroundColor: 'rgba(0, 208, 132, 0.8)', borderWidth: 4, borderColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 5 },
+  drivingControls: { position: 'absolute', bottom: 30, right: 40, flexDirection: 'row', alignItems: 'center', gap: 20, zIndex: 20 },
+  throttleBtn: { width: 90, height: 90, borderRadius: 45, backgroundColor: 'rgba(0, 208, 132, 0.8)', borderWidth: 4, borderColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 5, zIndex: 20 },
   throttleBtnText: { color: '#FFF', fontWeight: '900', fontSize: 14, fontStyle: 'italic' },
-  nitroBtn: { width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(0, 255, 255, 0.9)', borderWidth: 3, borderColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 5 },
+  nitroBtn: { width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(0, 255, 255, 0.9)', borderWidth: 3, borderColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 5, zIndex: 20 },
   nitroBtnText: { color: '#000', fontWeight: '900', fontSize: 14, fontStyle: 'italic' },
   block: { position: 'absolute', zIndex: 3 },
-  miniGameBtn: {
-    position: 'absolute',
-    width: 64,
-    height: 64,
-    backgroundColor: '#FFCC00',
-    borderWidth: 4,
-    borderColor: '#1C1C1E',
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 9999,
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 2, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 3,
-  },
-  miniGameBtnText: {
-    fontSize: 28,
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 20
-  },
-  titleText: {
-    fontSize: 48,
-    fontWeight: '900',
-    color: '#FFD700',
-    textShadowColor: '#FF4500',
-    textShadowOffset: { width: 3, height: 3 },
-    textShadowRadius: 5,
-  },
+  slowEffect: {...StyleSheet.absoluteFillObject,zIndex: 25,},
+  slowBorder: {...StyleSheet.absoluteFillObject,borderWidth: 8,borderColor: 'rgba(77, 163, 255, 0.45)',},
+  slowWarning: { position: 'absolute',top: 90,alignSelf: 'center',backgroundColor: 'rgba(0, 0, 0, 0.65)',paddingHorizontal: 18,paddingVertical: 7,borderRadius: 14,borderWidth: 2,borderColor: '#4DA3FF',},
+  slowWarningText: {color: '#FFFFFF',fontSize: 16,fontWeight: '900',fontStyle: 'italic',},
+  miniGameBtn: {position: 'absolute',width: 64,height: 64,backgroundColor: '#FFCC00',borderWidth: 4,borderColor: '#1C1C1E',borderRadius: 20,justifyContent: 'center',alignItems: 'center',zIndex: 9999,elevation: 10,shadowColor: '#000',shadowOffset: { width: 2, height: 4 },shadowOpacity: 0.4,shadowRadius: 3,},
+  miniGameBtnText: {fontSize: 28,},
+  overlay: {...StyleSheet.absoluteFillObject,justifyContent: 'center',alignItems: 'center',zIndex: 20},
+  titleText: {fontSize: 48,fontWeight: '900',color: '#FFD700',textShadowColor: '#FF4500',textShadowOffset: { width: 3, height: 3 },textShadowRadius: 5,},
   nameTag: {
     position: 'absolute',
     top: -65,
@@ -2847,7 +2987,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 90,
-    zIndex: 30,
+    zIndex: 20,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
@@ -2864,5 +3004,6 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#FF004D'
   },
+  deckCardImage: { width: '82%', height: '82%' },
   cardCostBadge: { position: 'absolute', top: -2, right: -2, backgroundColor: '#FF007A', borderRadius: 8, paddingHorizontal: 4, paddingVertical: 1, borderWidth: 1, borderColor: '#FFF', zIndex: 10 },
 });

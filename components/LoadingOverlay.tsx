@@ -1,21 +1,21 @@
 import { useLoadingStore } from '@/src/store/LoadingStore';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Image, StyleSheet, Text, View } from 'react-native';
 
 export default function LoadingOverlay() {
   const { isLoading, tip } = useLoadingStore();
-  
+
   const [isVisible, setIsVisible] = useState(isLoading);
-  
+
   const progress = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (isLoading) {
       setIsVisible(true);
-      
+
       Animated.timing(opacity, { toValue: 1, duration: 300, useNativeDriver: true }).start();
-      
+
       progress.setValue(0);
       Animated.timing(progress, {
         toValue: 1,
@@ -23,7 +23,7 @@ export default function LoadingOverlay() {
         easing: Easing.linear,
         useNativeDriver: false,
       }).start();
-      
+
     } else {
       // 2. Usamos o callback do .start() para desmontar a tela APENAS quando a opacidade zerar
       Animated.timing(opacity, { toValue: 0, duration: 500, useNativeDriver: true }).start(({ finished }) => {
@@ -40,13 +40,13 @@ export default function LoadingOverlay() {
   });
 
   // 3. Substituímos a checagem que causava o erro pelo nosso novo estado
-  if (!isVisible) return null; 
+  if (!isVisible) return null;
 
   return (
     <Animated.View style={[styles.overlay, { opacity }]} pointerEvents={isLoading ? 'auto' : 'none'}>
       <View style={styles.cardContainer}>
         <Text style={styles.title}>CARREGANDO...</Text>
-        
+
         <View style={styles.tipBox}>
           <Text style={styles.tipText}>{tip}</Text>
         </View>
@@ -55,6 +55,11 @@ export default function LoadingOverlay() {
           <Animated.View style={[styles.progressBarFill, { width: widthInterpolate }]} />
         </View>
       </View>
+      <Image
+        source={require('@/assets/images/logo1024v1.png')}
+        style={styles.wfLogo}
+        resizeMode="contain"
+      />
     </Animated.View>
   );
 }
@@ -67,4 +72,6 @@ const styles = StyleSheet.create({
   tipText: { fontSize: 16, fontWeight: 'bold', color: '#000', textAlign: 'center', lineHeight: 22 },
   progressBarBackground: { width: '100%', height: 24, backgroundColor: '#e0e0e0', borderWidth: 3, borderColor: '#000', borderRadius: 12, overflow: 'hidden' },
   progressBarFill: { height: '100%', backgroundColor: '#34C759' },
+  wfLogo: { position: 'absolute', right: 18, bottom: 14, width: 50, height: 50, opacity: 0.90, },
+
 });

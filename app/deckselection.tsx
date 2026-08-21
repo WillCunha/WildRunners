@@ -1,14 +1,16 @@
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
-    Alert,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-    useWindowDimensions,
+  Alert,
+  Image,
+  ImageSourcePropType,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
 } from 'react-native';
 
 type CardCategory = 'attack' | 'defense';
@@ -20,6 +22,7 @@ type CardDefinition = {
   color: string;
   category: CardCategory;
   description: string;
+  image: ImageSourcePropType;
 };
 
 const MAX_DECK_SIZE = 4;
@@ -33,6 +36,7 @@ const ALL_CARDS: CardDefinition[] = [
     color: '#AF52DE',
     category: 'attack',
     description: 'Puxa um adversário e reduz sua vantagem.',
+    image: require('@/assets/images/cards/chains.png'),
   },
   {
     id: 'tnt',
@@ -41,6 +45,8 @@ const ALL_CARDS: CardDefinition[] = [
     color: '#FF4500',
     category: 'attack',
     description: 'Deixa uma caixa explosiva na pista.',
+    image: require('@/assets/images/cards/tnt.png'),
+
   },
   {
     id: 'swap',
@@ -49,6 +55,8 @@ const ALL_CARDS: CardDefinition[] = [
     color: '#FF004D',
     category: 'attack',
     description: 'Troca sua posição com outro corredor.',
+    image: require('@/assets/images/cards/swap.png'),
+
   },
   {
     id: 'slow_slow',
@@ -57,6 +65,8 @@ const ALL_CARDS: CardDefinition[] = [
     color: '#FF9500',
     category: 'attack',
     description: 'Reduz temporariamente a velocidade dos rivais.',
+    image: require('@/assets/images/cards/slow_slow.png'),
+
   },
   {
     id: 'blind',
@@ -65,6 +75,8 @@ const ALL_CARDS: CardDefinition[] = [
     color: '#FFCC80',
     category: 'attack',
     description: 'Prejudica a visão do adversário.',
+    image: require('@/assets/images/cards/blind.png'),
+
   },
   {
     id: 'bullet',
@@ -73,14 +85,18 @@ const ALL_CARDS: CardDefinition[] = [
     color: '#007AFF',
     category: 'attack',
     description: 'Dispara um míssil guiado contra um rival.',
+    image: require('@/assets/images/cards/bullet.png'),
+
   },
   {
     id: 'tornado',
     name: 'TORNADO',
     cost: 4,
-    color: '#34C759',
+    color: '#03009e',
     category: 'attack',
-    description: 'Lança um tornado contra os carros à frente.',
+    description: 'Lança um tornado contra os oponentes à frente.',
+    image: require('@/assets/images/cards/tornado.png'),
+
   },
   {
     id: 'bubble_lift',
@@ -89,6 +105,8 @@ const ALL_CARDS: CardDefinition[] = [
     color: '#32CD32',
     category: 'attack',
     description: 'Suspende o adversário e interrompe sua corrida.',
+    image: require('@/assets/images/cards/bubble_lift.png'),
+
   },
 
   // DEFESA E SOBREVIVÊNCIA
@@ -99,6 +117,8 @@ const ALL_CARDS: CardDefinition[] = [
     color: '#00FFFF',
     category: 'defense',
     description: 'Aceleração de emergência para escapar de ameaças.',
+    image: require('@/assets/images/cards/nitro_power.png'),
+
   },
   {
     id: 'shield',
@@ -107,6 +127,8 @@ const ALL_CARDS: CardDefinition[] = [
     color: '#4DA3FF',
     category: 'defense',
     description: 'Bloqueia completamente o próximo ataque.',
+    image: require('@/assets/images/cards/shield.png'),
+
   },
   {
     id: 'armor',
@@ -115,6 +137,8 @@ const ALL_CARDS: CardDefinition[] = [
     color: '#9AA0A6',
     category: 'defense',
     description: 'Absorve dois ataques sem perder vidas.',
+    image: require('@/assets/images/cards/armor.png'),
+
   },
   {
     id: 'quick_repair',
@@ -123,6 +147,8 @@ const ALL_CARDS: CardDefinition[] = [
     color: '#FFD60A',
     category: 'defense',
     description: 'Recupera até duas vidas do carro.',
+    image: require('@/assets/images/cards/repair_quick.png'),
+
   },
   {
     id: 'ghost',
@@ -131,6 +157,8 @@ const ALL_CARDS: CardDefinition[] = [
     color: '#B388FF',
     category: 'defense',
     description: 'Concede imunidade temporária contra ataques.',
+    image: require('@/assets/images/cards/ghost.png'),
+
   },
   {
     id: 'second_chance',
@@ -139,6 +167,7 @@ const ALL_CARDS: CardDefinition[] = [
     color: '#FF6B9A',
     category: 'defense',
     description: 'Evita uma eliminação e devolve uma vida.',
+    image: require('@/assets/images/cards/second_chance.png'),
   },
 ];
 
@@ -151,6 +180,7 @@ export default function DeckSelection() {
   const { width, height } = useWindowDimensions();
   const [activeCategory, setActiveCategory] = useState<CardCategory>('attack');
   const [selectedDeck, setSelectedDeck] = useState<string[]>([]);
+  const [openDescriptionId, setOpenDescriptionId] = useState<string | null>(null);
 
   const isCompactLandscape = height < 420;
   const columns = width >= 1180 ? 4 : width >= 760 ? 3 : 2;
@@ -177,6 +207,8 @@ export default function DeckSelection() {
   );
 
   const toggleCard = (cardId: string) => {
+    setOpenDescriptionId(null);
+
     if (selectedDeck.includes(cardId)) {
       setSelectedDeck(current => current.filter(id => id !== cardId));
       return;
@@ -301,7 +333,7 @@ export default function DeckSelection() {
                       styles.card,
                       {
                         width: availableCardWidth,
-                        minHeight: isCompactLandscape ? 76 : 94,
+                        minHeight: isCompactLandscape ? 108 : 126,
                         borderColor: card.color,
                       },
                       isSelected && {
@@ -322,14 +354,47 @@ export default function DeckSelection() {
                       )}
                     </View>
 
-                    <Text style={styles.cardName} numberOfLines={1}>
-                      {card.name}
-                    </Text>
+                    <Image
+                      source={card.image}
+                      resizeMode="contain"
+                      style={[
+                        styles.cardImage,
+                        isCompactLandscape && styles.cardImageCompact,
+                      ]}
+                    />
 
-                    {!isCompactLandscape && (
-                      <Text style={styles.cardDescription} numberOfLines={2}>
-                        {card.description}
+                    <View style={styles.cardBottomRow}>
+                      <Text style={styles.cardName} numberOfLines={1}>
+                        {card.name}
                       </Text>
+
+                      <TouchableOpacity
+                        activeOpacity={0.75}
+                        hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                        onPress={(event) => {
+                          event.stopPropagation();
+                          setOpenDescriptionId(current =>
+                            current === card.id ? null : card.id,
+                          );
+                        }}
+                        style={[styles.infoButton, { borderColor: card.color }]}
+                      >
+                        <Text style={styles.infoButtonText}>?</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {openDescriptionId === card.id && (
+                      <View
+                        pointerEvents="none"
+                        style={[styles.descriptionBubble, { borderColor: card.color }]}
+                      >
+                        <Text style={styles.descriptionBubbleText}>
+                          {card.description}
+                        </Text>
+                        <View
+                          style={[styles.descriptionBubbleArrow, { borderTopColor: card.color }]}
+                        />
+                      </View>
                     )}
                   </TouchableOpacity>
                 );
@@ -599,19 +664,83 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
   },
-  cardName: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '900',
-    textAlign: 'center',
-    marginTop: 17,
+  cardImage: {
+    width: '100%',
+    height: 100,
+    alignSelf: 'center',
+    marginTop: 14,
+    marginBottom: 5,
   },
-  cardDescription: {
-    color: '#A7A7AE',
+  cardImageCompact: {
+    height: 100,
+    marginTop: 12,
+    marginBottom: 3,
+  },
+  cardBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginTop: 'auto',
+  },
+  cardName: {
+    flex: 1,
+    minWidth: 0,
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '900',
+    textAlign: 'left',
+  },
+  infoButton: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    backgroundColor: '#1C1C20',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '900',
+    lineHeight: 16,
+  },
+  descriptionBubble: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    bottom: 38,
+    zIndex: 30,
+    elevation: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    backgroundColor: '#111114',
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 5,
+  },
+  descriptionBubbleText: {
+    color: '#FFFFFF',
     fontSize: 10,
-    lineHeight: 13,
-    textAlign: 'center',
-    marginTop: 4,
+    lineHeight: 14,
+    fontWeight: '700',
+    textAlign: 'left',
+  },
+  descriptionBubbleArrow: {
+    position: 'absolute',
+    right: 9,
+    bottom: -7,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderLeftColor: 'transparent',
+    borderRightWidth: 6,
+    borderRightColor: 'transparent',
+    borderTopWidth: 7,
   },
   selectedHeader: {
     flexDirection: 'row',

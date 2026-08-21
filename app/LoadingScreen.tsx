@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Image, StyleSheet, Text, View } from 'react-native';
 
 const TIPS = [
   "Use suas cartas de corrida no momento certo para virar o jogo!",
@@ -12,7 +12,7 @@ const TIPS = [
 export default function LoadingScreen() {
   const router = useRouter();
   const { next } = useLocalSearchParams(); // Pega a rota de destino
-  
+
   const [tip, setTip] = useState('');
   const progress = useRef(new Animated.Value(0)).current;
 
@@ -24,7 +24,7 @@ export default function LoadingScreen() {
     // Dispara a animação da barra de progresso (4.5 segundos)
     Animated.timing(progress, {
       toValue: 1,
-      duration: 4500, 
+      duration: 4500,
       easing: Easing.linear,
       useNativeDriver: false, // Necessário false pois animamos a propriedade 'width'
     }).start(() => {
@@ -48,7 +48,7 @@ export default function LoadingScreen() {
       <View style={styles.cardContainer}>
         {/* Agora você pode usar a sua fonte Fredoka aqui sem medo se quiser! */}
         <Text style={styles.title}>CARREGANDO...</Text>
-        
+
         <View style={styles.tipBox}>
           <Text style={styles.tipText}>{tip}</Text>
         </View>
@@ -56,7 +56,14 @@ export default function LoadingScreen() {
         <View style={styles.progressBarBackground}>
           <Animated.View style={[styles.progressBarFill, { width: widthInterpolate }]} />
         </View>
+
+
       </View>
+      <Image
+        source={require('@/assets/images/logo1024v1.png')}
+        style={styles.wfLogo}
+        resizeMode="contain"
+      />
     </View>
   );
 }
@@ -64,9 +71,10 @@ export default function LoadingScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1a1a1a', justifyContent: 'center', alignItems: 'center', padding: 20 },
   cardContainer: { width: '90%', backgroundColor: '#333', borderWidth: 4, borderColor: '#000000', borderRadius: 20, padding: 24, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 6, height: 6 }, shadowOpacity: 1, shadowRadius: 0, elevation: 5 },
-  title: { fontSize: 28, color: '#fff', marginBottom: 20, letterSpacing: 2, fontFamily: 'Fredoka-Bold' }, // Exemplo aplicando a fonte
+  title: { fontSize: 28, color: '#fff', marginBottom: 20, letterSpacing: 2, fontFamily: 'Fredoka-Bold' },
   tipBox: { width: '100%', backgroundColor: '#FFF275', borderWidth: 3, borderColor: '#000', borderRadius: 12, padding: 16, marginBottom: 30 },
-  tipText: { fontSize: 16, color: '#000', textAlign: 'center', lineHeight: 22, fontFamily: 'Fredoka-Medium' }, // Exemplo aplicando a fonte
+  tipText: { fontSize: 16, color: '#000', textAlign: 'center', lineHeight: 22, fontFamily: 'Fredoka-Medium' },
   progressBarBackground: { width: '100%', height: 24, backgroundColor: '#e0e0e0', borderWidth: 3, borderColor: '#000', borderRadius: 12, overflow: 'hidden' },
   progressBarFill: { height: '100%', backgroundColor: '#34C759' },
+  wfLogo: { position: 'absolute', right: 18, bottom: 14, width: 50, height: 50, opacity: 0.90, },
 });
