@@ -5,6 +5,7 @@ import BubbleLiftVisual from '@/components/Decks/BubbleLiftVisual';
 import ChainsEffect from '@/components/Decks/ChainsEffect';
 import DefenseCardVisual, { DefenseVisualEvent, DefenseVisualKind } from '@/components/Decks/DefenseCardVisual';
 import GuidedBulletEffect from '@/components/Decks/GuidedBulletEffect';
+import SlowSlowVisual from '@/components/Decks/SlowSlowVisual';
 import SwapEffect from '@/components/Decks/SwapEffect';
 import TornadoEffect from '@/components/Decks/TornadoEffect';
 import CorrenteVisual from '@/components/ui/CorrenteVisual';
@@ -98,7 +99,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   );
 
 
-  const params = useLocalSearchParams<{ deck?: string; mapImage?: string }>();
+  const params = useLocalSearchParams<{ deck?: string; mapId?: string; skyTheme?: string; }>();
   const { selectedCar, selectedColorFront, selectedColorBack } = useCarSelection();
 
   const fallbackDeck = ['swap', 'bullet', 'chains', 'tnt'];
@@ -196,6 +197,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     pauseMusic,
     playRaceTick,
     playFinal30Warning,
+    playCardSfx
   } = useContext(AudioContext);
 
   const getRandomColor = () => AVAILABLE_BOT_COLORS[Math.floor(Math.random() * AVAILABLE_BOT_COLORS.length)];
@@ -478,6 +480,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     playerStatus.current = { ...defaultStatus };
     activeEffectsTimers.current = {};
     setDefenseVisualEvents({});
+    setIsSlowActive(false);
     playerSpeed.current = MIN_SPEED;
     gameTime.current = 0;
     final30WarningPlayedRef.current = false;
@@ -800,8 +803,9 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         playerSpeed.current = Math.min(playerSpeed.current + ACCELERATION, DYNAMIC_MAX_SPEED);
       }
 
+
       if (playerStatus.current.isSlowed) {
-        playerSpeed.current = Math.min(playerSpeed.current, MAX_SPEED * 0.4);
+        playerSpeed.current = Math.min(playerSpeed.current, DYNAMIC_MAX_SPEED * 0.4);
       }
 
       const dynamicSpeed = playerSpeed.current;
@@ -923,7 +927,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         // ================= SLOW SLOW =================
         if (bot.status.isSlowed) {
           const slowMaxSpeed = bot.stats.maxSpeed * 0.4;
-
           targetSpeed = slowMaxSpeed;
 
           bot.speed = Math.min(bot.speed, slowMaxSpeed);
@@ -1449,7 +1452,14 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     if (effect === 'second_chance') { applyCardEffect('second_chance', 'player', 'player'); setSecondChanceCooldown(SECOND_CHANCE_COOLDOWN); }
     if (effect === 'armor') { applyCardEffect('armor', 'player', 'player'); setArmorCooldown(ARMOR_COOLDOWN); }
     if (effect === 'slow_slow') {
-      botsRef.current.forEach(bot => applyCardEffect('slow_slow', bot.id, 'player'));
+      playCardSfx('slow_slow');
+
+      botsRef.current.forEach(bot => {
+        if (!bot.isDead) {
+          applyCardEffect('slow_slow', bot.id, 'player');
+        }
+      });
+
       setSlowCooldown(SLOW_COOLDOWN);
     }
   }
@@ -1770,6 +1780,9 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         case 'slow_slow':
           playerStatus.current.isSlowed = true;
           setIsSlowActive(true);
+          if (sourceId !== 'player') {
+            playCardSfx('slow_slow');
+          }
           break;
         case 'bubble_lift':
           playerStatus.current.isLevitating = true;
@@ -2235,7 +2248,9 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     <View style={styles.container}>
       <MemoCenarioBackground
         isMoving={started && !gameOver}
-        mapImage={params.mapImage}
+        mapId="sao_paulo"
+        skyTheme="day"
+        groundY={GROUND_Y}
       />
       <View style={StyleSheet.absoluteFillObject} />
 
@@ -2473,6 +2488,11 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
                   <View style={styles.nameTagArrow} />
                 </View>
               )}
+
+              {bot.status?.isSlowed && (
+                <SlowSlowVisual variant="racer" size={PLAYER_SIZE} />
+              )}
+
               <DefenseCardVisual
                 size={PLAYER_SIZE}
                 shieldCharges={bot.status?.shieldCharges || 0}
@@ -2651,15 +2671,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
           {/* ================= RENDER DO SLOW_SLOW ================= */ }
           {
             isSlowActive && (
-              <View style={styles.slowEffect} pointerEvents="none">
-                <View style={styles.slowBorder} />
-
-                <View style={styles.slowWarning}>
-                  <Text style={styles.slowWarningText}>
-                    🐌 SLOWED!
-                  </Text>
-                </View>
-              </View>
+              <SlowSlowVisual variant="screen" />
             )
           }
 
@@ -2861,7 +2873,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#05ebfc', overflow: 'hidden' },
-  flatGround: {position: 'absolute',left: 0,right: 0,zIndex: 1,backgroundColor: '#2e8b565b',borderTopWidth: 5,borderTopColor: '#34C759',},
+  flatGround: { position: 'absolute', left: 0, right: 0, zIndex: 1, backgroundColor: '#2e8b565b', borderTopWidth: 5, borderTopColor: '#34C759', },
   miniMapContainer: { position: 'absolute', top: 20, alignSelf: 'center', width: '60%', height: 20, justifyContent: 'center', zIndex: 20 },
   miniMapLine: { position: 'absolute', left: 0, right: 0, height: 4, backgroundColor: 'rgba(255, 255, 255, 0.4)', borderRadius: 2 },
   miniMapDot: { position: 'absolute', top: '50%', marginTop: -5 },
@@ -2917,14 +2929,10 @@ const styles = StyleSheet.create({
   nitroBtn: { width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(0, 255, 255, 0.9)', borderWidth: 3, borderColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 5, zIndex: 20 },
   nitroBtnText: { color: '#000', fontWeight: '900', fontSize: 14, fontStyle: 'italic' },
   block: { position: 'absolute', zIndex: 3 },
-  slowEffect: {...StyleSheet.absoluteFillObject,zIndex: 25,},
-  slowBorder: {...StyleSheet.absoluteFillObject,borderWidth: 8,borderColor: 'rgba(77, 163, 255, 0.45)',},
-  slowWarning: { position: 'absolute',top: 90,alignSelf: 'center',backgroundColor: 'rgba(0, 0, 0, 0.65)',paddingHorizontal: 18,paddingVertical: 7,borderRadius: 14,borderWidth: 2,borderColor: '#4DA3FF',},
-  slowWarningText: {color: '#FFFFFF',fontSize: 16,fontWeight: '900',fontStyle: 'italic',},
-  miniGameBtn: {position: 'absolute',width: 64,height: 64,backgroundColor: '#FFCC00',borderWidth: 4,borderColor: '#1C1C1E',borderRadius: 20,justifyContent: 'center',alignItems: 'center',zIndex: 9999,elevation: 10,shadowColor: '#000',shadowOffset: { width: 2, height: 4 },shadowOpacity: 0.4,shadowRadius: 3,},
-  miniGameBtnText: {fontSize: 28,},
-  overlay: {...StyleSheet.absoluteFillObject,justifyContent: 'center',alignItems: 'center',zIndex: 20},
-  titleText: {fontSize: 48,fontWeight: '900',color: '#FFD700',textShadowColor: '#FF4500',textShadowOffset: { width: 3, height: 3 },textShadowRadius: 5,},
+  miniGameBtn: { position: 'absolute', width: 64, height: 64, backgroundColor: '#FFCC00', borderWidth: 4, borderColor: '#1C1C1E', borderRadius: 20, justifyContent: 'center', alignItems: 'center', zIndex: 9999, elevation: 10, shadowColor: '#000', shadowOffset: { width: 2, height: 4 }, shadowOpacity: 0.4, shadowRadius: 3, },
+  miniGameBtnText: { fontSize: 28, },
+  overlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', zIndex: 20 },
+  titleText: { fontSize: 48, fontWeight: '900', color: '#FFD700', textShadowColor: '#FF4500', textShadowOffset: { width: 3, height: 3 }, textShadowRadius: 5, },
   nameTag: {
     position: 'absolute',
     top: -65,

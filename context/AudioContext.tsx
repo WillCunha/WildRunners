@@ -19,6 +19,8 @@ interface AudioContextProps {
   pauseMusic: () => void;
   stopMusic: () => void;
   playBeep: () => void;
+  playRaceTick: () => void;
+  playFinal30Warning: () => void;
   playCardSfx: (
     sfx: CardSfx,
     options?: CardSfxOptions
@@ -36,6 +38,8 @@ export const AudioContext = createContext<AudioContextProps>({
   pauseMusic: () => { },
   stopMusic: () => { },
   playBeep: () => { },
+  playRaceTick: () => { },
+  playFinal30Warning: () => { },
   playCardSfx: () => { },
   stopCardSfx: () => { },
   stopAllCardSfx: () => { },
@@ -94,6 +98,45 @@ export const AudioProvider = ({
     require('@/assets/audio/cards/swap.mp3')
   );
 
+  const raceTickPlayer = useAudioPlayer(
+    require('@/assets/audio/race/race_tick.mp3')
+  );
+
+  const playRaceTick = useCallback(() => {
+    void raceTickPlayer
+      .seekTo(0)
+      .then(() => {
+        raceTickPlayer.volume = 0.65;
+        raceTickPlayer.play();
+      })
+      .catch((error) => {
+        console.warn(
+          '[AudioContext] Falha ao tocar race tick:',
+          error
+        );
+      });
+  }, [raceTickPlayer]);
+
+  const final30WarningPlayer = useAudioPlayer(
+    require('@/assets/audio/race/final_30s_warning.mp3')
+  );
+
+
+  const playFinal30Warning = useCallback(() => {
+    void final30WarningPlayer
+      .seekTo(0)
+      .then(() => {
+        final30WarningPlayer.volume = 0.9;
+        final30WarningPlayer.play();
+      })
+      .catch((error) => {
+        console.warn(
+          '[AudioContext] Falha ao tocar aviso dos 30 segundos:',
+          error
+        );
+      });
+  }, [final30WarningPlayer]);
+
   const swapPlayerRef = useRef(swapPlayer);
   swapPlayerRef.current = swapPlayer;
 
@@ -148,33 +191,14 @@ export const AudioProvider = ({
     activePlayer.play();
   }, []);
 
-  const playSwap = useCallback(() => {
-    const player = swapPlayerRef.current;
-
-    /*
-     * Sempre reinicia no começo para que cada uso da carta
-     * tenha o "suction whoosh" completo.
-     */
-    void player.seekTo(0)
-      .then(() => {
-        player.volume = 0.8;
-        player.play();
-      })
-      .catch((error) => {
-        console.warn(
-          '[AudioContext] Falha ao tocar SFX do Swap:',
-          error
-        );
-      });
-  }, []);
-
   const contextValue = useMemo(
     () => ({
       playMusic,
       pauseMusic,
       stopMusic,
       playBeep,
-
+      playRaceTick,
+      playFinal30Warning,
       playCardSfx,
       stopCardSfx,
       stopAllCardSfx,
@@ -184,7 +208,8 @@ export const AudioProvider = ({
       pauseMusic,
       stopMusic,
       playBeep,
-
+      playRaceTick,
+      playFinal30Warning,
       playCardSfx,
       stopCardSfx,
       stopAllCardSfx,

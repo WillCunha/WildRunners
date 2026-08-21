@@ -15,7 +15,7 @@ export type CardSfx =
   | 'tntExplosion'
   | 'tntFuse'
   | 'nitro'
-  | 'slow'
+  | 'slow_slow'
   | 'tornado'
   | 'chainsLaunch'
   | 'chainsHit';
@@ -49,7 +49,7 @@ const DEFAULT_VOLUMES: Record<CardSfx, number> = {
   tntFuse: 0.65,
 
   nitro: 0.85,
-  slow: 0.75,
+  slow_slow: 0.75,
 
   tornado: 0.8,
 
@@ -115,7 +115,7 @@ export function useCardSfx() {
     //   tntFuse: tntFusePlayer,
 
       nitro: nitroPlayer,
-      slow: slowPlayer,
+      slow_slow: slowPlayer,
 
       tornado: tornadoPlayer,
 
