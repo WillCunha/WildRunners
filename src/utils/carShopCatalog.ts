@@ -6,6 +6,8 @@ export const CAR_SHOP_ORDER = [
   'astor',
   'ferrari',
   'monster',
+  'lamborghini',
+  'caravana'
 ] as const;
 
 export type ShopCarId = (typeof CAR_SHOP_ORDER)[number];
@@ -85,5 +87,21 @@ export const CAR_SHOP_CATALOG: Record<ShopCarId, CarShopDefinition> = {
     price: 1080,
     accent: '#30D158',
     description: 'Aceleração brutal e visual dominante para o endgame.',
+  },
+  lamborghini: {
+    name: 'LAMBORGHINI',
+    shortName: 'LAMBORGHINI',
+    className: 'SUPERCAR',
+    price: 1200,
+    accent: '#FF453A',
+    description: 'Poder de aceleração e design icônico para os mais exigentes.',
+  },
+  caravana: {
+    name: 'CARAVANA',
+    shortName: 'CARAVANA',
+    className: 'VAN',
+    price: 1200,
+    accent: '#FFD60A',
+    description: 'Espaço e conforto para a jornada com amigos.',
   },
 };

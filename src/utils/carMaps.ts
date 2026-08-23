@@ -151,9 +151,9 @@ export const carMaps = {
 
         wheels: {
             mapa: {
-                rodaFrente: { x: 128, y: 10 },
-                rodaTras: { x: 45, y: 12 },
-                size: { width: 55, height: 55 },
+                rodaFrente: { x: 126, y: 10 },
+                rodaTras: { x: 47.5, y: 12 },
+                size: { width: 50, height: 50 },
             },
 
             oficina: {
@@ -168,7 +168,7 @@ export const carMaps = {
                 size: { width: 50, height: 50 },
             },
         },
-        tier: 5,
+        tier: 1,
         stats: {
             speed: { base: 170, maxUpgrade: 230 },
             acceleration: { base: 100, maxUpgrade: 150 }
@@ -183,19 +183,19 @@ export const carMaps = {
         wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
         wheels: {
             mapa: {
-                rodaFrente: { x: 120, y: 12 },
-                rodaTras: { x: 131, y: 12 },
-                size: { width: 35, height: 35 },
+                rodaFrente: { x: 137, y: 9 },
+                rodaTras: { x: 51, y: 9 },
+                size: { width: 50, height: 50 },
             },
             oficina: {
-                rodaFrente: { x: 185, y: 1 },
-                rodaTras: { x: 60, y: 1 },
-                size: { width: 35, height: 35 },
+                rodaFrente: { x: 250, y: -9 },
+                rodaTras: { x: 77, y: -9 },
+                size: { width: 50, height: 50 },
             },
             loja: {
-                rodaFrente: { x: 185, y: 1 },
-                rodaTras: { x: 60, y: 1 },
-                size: { width: 35, height: 35 },
+                rodaFrente: { x: 250, y: -9 },
+                rodaTras: { x: 77, y: -9 },
+                size: { width: 50, height: 50 },
             }
         },
         tier: 3,
@@ -218,9 +218,9 @@ export const carMaps = {
 
         wheels: {
             mapa: {
-                rodaFrente: { x: 134.5, y: 18 },
-                rodaTras: { x: 30.5, y: 18 },
-                size: { width: 60, height: 60 },
+                rodaFrente: { x: 135.5, y: 17 },
+                rodaTras: { x: 32.5, y: 19 },
+                size: { width: 55, height: 55 },
             },
 
             oficina: {
@@ -233,6 +233,39 @@ export const carMaps = {
                 rodaFrente: { x: 236, y: 0 },
                 rodaTras: { x: 28.5, y: 0 },
                 size: { width: 65, height: 65 },
+            },
+        },
+        tier: 8,
+        stats: {
+            speed: { base: 220, maxUpgrade: 300 },
+            acceleration: { base: 140, maxUpgrade: 200 }
+        }
+    },
+    lamborghini: {
+        icone: require('@/assets/images/cars/carroceria/lamborghini/icon.png'),
+        corpoBrancoFrente: require('@/assets/images/cars/carroceria/lamborghini/brancoFrente.png'),
+        corpoBrancoTras: require('@/assets/images/cars/carroceria/lamborghini/brancoTras.png'),
+        corpoTransparente: require('@/assets/images/cars/carroceria/lamborghini/transparent.png'),
+        baseSize: { width: 350, height: 120 },
+        wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
+
+        wheels: {
+            mapa: {
+                rodaFrente: { x: 130, y: 20 },
+                rodaTras: { x: 38, y: 22 },
+                size: { width: 50, height: 50 },
+            },
+
+            oficina: {
+                rodaFrente: { x: 232.5, y: 10 },
+                rodaTras: { x: 48.5, y: 12 },
+                size: { width: 50, height: 50 },
+            },
+
+            loja: {
+                rodaFrente: { x: 232.5, y: 10 },
+                rodaTras: { x: 50, y: 12 },
+                size: { width: 50, height: 50 },
             },
         },
         tier: 8,
