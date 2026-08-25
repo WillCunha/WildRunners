@@ -1,6 +1,8 @@
 import { AudioContext } from '@/context/AudioContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { CITY_MAPS } from '@/src/utils/cityMaps';
+import { getPlayerLevel, normalizeLegacyLevelRequirement } from '@/src/utils/progression';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useContext, useRef, useState } from 'react';
 import {
@@ -24,6 +26,9 @@ const ACCENT = '#FFD60A';
 export default function MapSelectionScreen() {
   const { width, height } = useWindowDimensions();
   const isCompactLandscape = height < 430;
+
+  const { t } = useLanguage();
+
   const itemSize = Math.min(width * 0.37, 440);
   const spacerSize = Math.max(0, (width - itemSize) / 2);
 
@@ -41,9 +46,11 @@ export default function MapSelectionScreen() {
 
   const activeMap = CITY_MAPS[activeIndex] ?? CITY_MAPS[0];
   const trophies = profile?.trophies ?? 0;
+  const playerLevel = getPlayerLevel(profile?.xp ?? 0);
 
   const startRace = (item: CityMap) => {
-    if (trophies < item.levelRequired) return;
+    const requiredLevel = normalizeLegacyLevelRequirement(item.levelRequired);
+    if (playerLevel < requiredLevel) return;
 
     pauseMusic();
     router.navigate({
@@ -83,7 +90,8 @@ export default function MapSelectionScreen() {
       extrapolate: 'clamp',
     });
 
-    const isUnlocked = trophies >= item.levelRequired;
+    const requiredLevel = normalizeLegacyLevelRequirement(item.levelRequired);
+    const isUnlocked = playerLevel >= requiredLevel;
 
     return (
       <View style={{ width: itemSize, alignItems: 'center', justifyContent: 'center' }}>
@@ -108,7 +116,7 @@ export default function MapSelectionScreen() {
               <View style={styles.imageShade} />
 
               <View style={styles.mapNumberBadge}>
-                <Text style={styles.mapNumberLabel}>PISTA</Text>
+                <Text style={styles.mapNumberLabel}>{t('mapSelection.track')}</Text>
                 <Text style={styles.mapNumberValue}>
                   {String(realIndex + 1).padStart(2, '0')}
                 </Text>
@@ -117,31 +125,31 @@ export default function MapSelectionScreen() {
               {!isUnlocked && (
                 <View style={styles.lockedOverlay}>
                   <Text style={styles.lockIcon}>🔒</Text>
-                  <Text style={styles.lockTitle}>PISTA BLOQUEADA</Text>
+                  <Text style={styles.lockTitle}>{t('mapSelection.lockedTrack')}</Text>
                   <Text style={styles.lockRequirement}>
-                    REQUER {item.levelRequired} TROFÉUS
+                    {t('mapSelection.requiresLevel', { level: requiredLevel })}
                   </Text>
                 </View>
               )}
             </View>
 
             <View style={styles.cardInfo}>
-              <Text style={styles.mapCategory}>WILD RUNNERS CIRCUIT</Text>
+              <Text style={styles.mapCategory}> {t('mapSelection.circuit')}</Text>
               <Text style={styles.cityText} numberOfLines={1}>
                 {item.city}
               </Text>
 
               <View style={styles.metaRow}>
                 <View style={styles.metaCell}>
-                  <Text style={styles.metaLabel}>STATUS</Text>
+                  <Text style={styles.metaLabel}>{t('mapSelection.status')}</Text>
                   <Text style={[styles.metaValue, isUnlocked && styles.metaValueReady]}>
-                    {isUnlocked ? 'LIBERADA' : 'BLOQUEADA'}
+                    {isUnlocked ? t('mapSelection.unlocked') : t('mapSelection.locked')}
                   </Text>
                 </View>
                 <View style={styles.metaDivider} />
                 <View style={styles.metaCell}>
-                  <Text style={styles.metaLabel}>REQUISITO</Text>
-                  <Text style={styles.metaValue}>🏆 {item.levelRequired}</Text>
+                  <Text style={styles.metaLabel}>{t('mapSelection.requirement')}</Text>
+                  <Text style={styles.metaValue}>{t('mapSelection.levelShort')} {requiredLevel}</Text>
                 </View>
               </View>
             </View>
@@ -151,8 +159,12 @@ export default function MapSelectionScreen() {
     );
   };
 
+  const activeRequiredLevel = activeMap
+    ? normalizeLegacyLevelRequirement(activeMap.levelRequired)
+    : 1;
+
   const activeUnlocked = activeMap
-    ? trophies >= activeMap.levelRequired
+    ? playerLevel >= activeRequiredLevel
     : false;
 
   return (
@@ -168,20 +180,24 @@ export default function MapSelectionScreen() {
           <View style={styles.header}>
             <View>
               <Text style={[styles.headerTitle, isCompactLandscape && styles.headerTitleCompact]}>
-                STREET CIRCUITS
+                {t('mapSelection.title')}
               </Text>
-              <Text style={styles.headerSubtitle}>ESCOLHA O PRÓXIMO DESTINO</Text>
+              <Text style={styles.headerSubtitle}>{t('mapSelection.subtitle')}</Text>
             </View>
 
             <View style={styles.headerBadges}>
               <View style={styles.headerBadge}>
-                <Text style={styles.badgeLabel}>PILOTO</Text>
+                <Text style={styles.badgeLabel}>{t('mapSelection.pilot')}</Text>
                 <Text style={styles.badgeValue} numberOfLines={1}>
                   @{profile?.username ?? 'PLAYER'}
                 </Text>
               </View>
+              <View style={styles.headerBadge}>
+                <Text style={styles.badgeLabel}>{t('mapSelection.level')}</Text>
+                <Text style={styles.badgeValue}>⭐ {playerLevel}</Text>
+              </View>
               <View style={[styles.headerBadge, styles.trophyBadge]}>
-                <Text style={styles.badgeLabel}>TROFÉUS</Text>
+                <Text style={styles.badgeLabel}>{t('mapSelection.trophies')}</Text>
                 <Text style={styles.badgeValue}>🏆 {trophies}</Text>
               </View>
             </View>
@@ -229,9 +245,9 @@ export default function MapSelectionScreen() {
 
           <View style={styles.footer}>
             <View style={styles.selectedMapInfo}>
-              <Text style={styles.selectedMapLabel}>PISTA SELECIONADA</Text>
+              <Text style={styles.selectedMapLabel}>{t('mapSelection.selectedTrack')}</Text>
               <Text style={styles.selectedMapName} numberOfLines={1}>
-                {activeMap?.city?.toUpperCase() ?? 'SEM PISTA'}
+                {activeMap?.city?.toUpperCase() ?? t('mapSelection.noTrack')}
               </Text>
             </View>
 
@@ -250,8 +266,10 @@ export default function MapSelectionScreen() {
                 ]}
               >
                 {activeUnlocked
-                  ? 'CORRER NESTA PISTA'
-                  : `BLOQUEADA • 🏆 ${activeMap?.levelRequired ?? 0}`}
+                  ? t('mapSelection.raceOnTrack')
+                  : t('mapSelection.lockedButton', {
+                    level: activeRequiredLevel,
+                  })}
               </Text>
             </TouchableOpacity>
           </View>

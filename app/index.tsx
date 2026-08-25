@@ -1,3 +1,4 @@
+import { useLanguage } from '@/context/LanguageContext';
 import { useLoadingStore } from '@/src/store/LoadingStore';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { useAssets } from 'expo-asset';
@@ -20,6 +21,8 @@ export default function StartScreen() {
   const profile = usePlayerStore((state) => state.profile);
   const { width } = useWindowDimensions();
 
+  const { t, hasSelectedLanguage, isLoading: isLanguageLoading, } = useLanguage();
+
   const showLoading = useLoadingStore((state) => state.showLoading);
   const hideLoading = useLoadingStore((state) => state.hideLoading);
 
@@ -31,8 +34,8 @@ export default function StartScreen() {
   );
 
   const [assets] = useAssets([
-    require('@/assets/images/components/background/start_screen.png'),
-    require('@/assets/images/gameLogoV3.png'),
+    require('@/assets/images/components/background/background_home.png'),
+    require('@/assets/images/gameLogoV5.png'),
     require('@/assets/images/logo1024v1.png'),
   ]);
 
@@ -92,19 +95,35 @@ export default function StartScreen() {
   }, [player, scaleValue, arrowProgress]);
 
   const handleStartPress = () => {
+    if (isLanguageLoading) {
+      return;
+    }
+
     player.pause();
 
-    if (!profile) {
+  
+    const nextScreen = !profile
+      ? '/RegistrationScreen'
+      : '/CarSelectionScreen';
+
+
+    if (!hasSelectedLanguage) {
       router.push({
-        pathname: '/LoadingScreen',
-        params: { next: '/RegistrationScreen' },
+        pathname: '/LanguageSelectionScreen',
+        params: {
+          next: nextScreen,
+        },
       });
-    } else {
-      router.push({
-        pathname: '/LoadingScreen',
-        params: { next: '/CarSelectionScreen' },
-      });
+
+      return;
     }
+
+    router.push({
+      pathname: '/LoadingScreen',
+      params: {
+        next: nextScreen,
+      },
+    });
   };
 
   if (!assets) {
@@ -160,7 +179,7 @@ export default function StartScreen() {
               &gt;&gt;&gt;
             </Animated.Text>
 
-            <Text style={styles.buttonText}>PRESSIONE PARA COMEÇAR</Text>
+            <Text style={styles.buttonText}>{t('start.pressToStart')}</Text>
             <View style={styles.bottomGlow} />
           </TouchableOpacity>
         </Animated.View>

@@ -7,6 +7,8 @@ import {
   PlayerUnlocks,
 } from '@/src/types/playerTypes';
 
+import { getPlayerLevel } from '@/src/utils/progression';
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import {
@@ -105,14 +107,6 @@ const createBaseUnlocks = (): PlayerUnlocks => ({
   achievements: [],
 });
 
-const getPlayerTier = (trophies: number) => {
-  if (trophies >= 600) return 4;
-  if (trophies >= 300) return 3;
-  if (trophies >= 100) return 2;
-
-  return 1;
-};
-
 const sanitizeReward = (value: number) =>
   Math.max(0, Math.floor(value));
 
@@ -135,6 +129,7 @@ export const usePlayerStore = create<PlayerState>()(
             username,
 
             trophies: 0,
+            xp: 0,
 
             parts: {
               motor: 100,
@@ -176,6 +171,7 @@ export const usePlayerStore = create<PlayerState>()(
               'PLAYER',
 
             trophies: 0,
+            xp: 0,
 
             parts: {
               motor: 100,
@@ -277,6 +273,9 @@ export const usePlayerStore = create<PlayerState>()(
           const safeTrophies =
             sanitizeReward(rewards.trophies);
 
+          const safeXp =
+            sanitizeReward(rewards.xp ?? 0);
+
           return {
             profile: {
               ...state.profile,
@@ -284,6 +283,10 @@ export const usePlayerStore = create<PlayerState>()(
               trophies:
                 state.profile.trophies +
                 safeTrophies,
+
+              xp:
+                (state.profile.xp ?? 0) +
+                safeXp,
 
               parts: {
                 motor:
@@ -352,6 +355,11 @@ export const usePlayerStore = create<PlayerState>()(
             rewards.trophies,
           );
 
+        const safeXp =
+          sanitizeReward(
+            rewards.xp ?? 0,
+          );
+
         set(state => {
           if (!state.profile) {
             return state;
@@ -375,6 +383,10 @@ export const usePlayerStore = create<PlayerState>()(
               trophies:
                 state.profile.trophies +
                 safeTrophies,
+
+              xp:
+                (state.profile.xp ?? 0) +
+                safeXp,
 
               parts: {
                 motor:
@@ -482,8 +494,8 @@ export const usePlayerStore = create<PlayerState>()(
           );
 
         const playerTier =
-          getPlayerTier(
-            profile.trophies,
+          getPlayerLevel(
+            profile.xp ?? 0,
           );
 
         const isAlreadyOwned =
@@ -710,7 +722,7 @@ export const usePlayerStore = create<PlayerState>()(
       /**
        * Começamos a versionar o save.
        */
-      version: 2,
+      version: 3,
 
       storage:
         createJSONStorage(
@@ -749,6 +761,11 @@ export const usePlayerStore = create<PlayerState>()(
 
           profile: {
             ...profile,
+
+            xp: Math.max(
+              0,
+              Math.floor(profile.xp ?? 0),
+            ),
 
             unlocks: {
               maps:

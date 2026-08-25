@@ -1,6 +1,7 @@
 import LoadingOverlay from '@/components/LoadingOverlay';
 import { AudioProvider } from '@/context/AudioContext';
 import { CarProvider } from '@/context/CarContext';
+import { LanguageProvider } from '@/context/LanguageContext';
 import { useLoadingStore } from '@/src/store/LoadingStore';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
@@ -30,11 +31,13 @@ export default function Layout() {
   }
 
   return (
-    <AudioProvider>
-      <CarProvider>
-        <Stack screenOptions={{ headerShown: false }} />
-        {isLoading && <LoadingOverlay />}
-      </CarProvider>
-    </AudioProvider>
+    <LanguageProvider>
+      <AudioProvider>
+        <CarProvider>
+          <Stack screenOptions={{ headerShown: false }} />
+          {isLoading && <LoadingOverlay />}
+        </CarProvider>
+      </AudioProvider>
+    </LanguageProvider>
   );
 }

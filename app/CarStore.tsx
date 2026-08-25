@@ -1,4 +1,5 @@
 import { useCarSelection } from '@/context/CarContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { carMaps } from '@/src/utils/carMaps';
 import {
@@ -6,6 +7,7 @@ import {
   CAR_SHOP_ORDER,
   ShopCarId,
 } from '@/src/utils/carShopCatalog';
+import { getPlayerLevel } from '@/src/utils/progression';
 import { router } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -61,13 +63,6 @@ const MAX_UPGRADE_POTENTIAL = Math.max(
     carMaps[carId].stats.acceleration.maxUpgrade,
   ),
 );
-
-const getPlayerTier = (trophies: number) => {
-  if (trophies >= 600) return 4;
-  if (trophies >= 300) return 3;
-  if (trophies >= 100) return 2;
-  return 1;
-};
 
 const CarCanvas = React.memo(
   ({ carId, width, colorFront, colorBack, opacity = 1 }: CarCanvasProps) => {
@@ -158,6 +153,9 @@ const PerformanceBar = ({
 
 export default function SelectionCar() {
   const { width, height } = useWindowDimensions();
+
+  const { t } = useLanguage();
+
   const isCompactLandscape = height < 430;
 
   const {
@@ -199,13 +197,13 @@ export default function SelectionCar() {
     setPreviewCar(firstOwnedCar ?? AVAILABLE_SHOP_CARS[0]);
   }, [previewCar, profile]);
 
-  const playerTier = getPlayerTier(profile?.trophies ?? 0);
+  const playerLevel = getPlayerLevel(profile?.xp ?? 0);
   const gears = profile?.parts?.engrenagem ?? 0;
   const carData = carMaps[previewCar];
   const shopData = CAR_SHOP_CATALOG[previewCar];
   const ownedCarData = profile?.garage?.[previewCar];
   const isOwned = ownedCarData !== undefined;
-  const isLocked = carData.tier > playerTier;
+  const isLocked = carData.tier > playerLevel;
   const canAfford = gears >= shopData.price;
   const missingGears = Math.max(0, shopData.price - gears);
 
@@ -228,47 +226,78 @@ export default function SelectionCar() {
 
   const handleBuy = () => {
     if (!profile) {
-      Alert.alert('Perfil indisponível', 'Crie ou carregue seu perfil antes de comprar.');
+      Alert.alert(
+        t('carStore.profileUnavailableTitle'),
+        t('carStore.profileUnavailableMessage'),
+      );
+
       return;
     }
 
     if (isLocked) {
       Alert.alert(
-        'Veículo bloqueado',
-        `Alcance o nível ${carData.tier} para liberar o ${shopData.name}.`,
+        t('carStore.vehicleLockedTitle'),
+        t('carStore.vehicleLockedMessage', {
+          level: carData.tier,
+          car: shopData.name,
+        }),
       );
+
       return;
     }
 
     if (!canAfford) {
       Alert.alert(
-        'Engrenagens insuficientes',
-        `Ainda faltam ${missingGears} engrenagens para comprar o ${shopData.name}.`,
+        t('carStore.insufficientGearsTitle'),
+        t('carStore.insufficientGearsMessage', {
+          count: missingGears,
+          car: shopData.name,
+        }),
       );
+
       return;
     }
 
     Alert.alert(
-      `Comprar ${shopData.name}?`,
-      `${shopData.price} engrenagens serão retiradas do seu saldo.`,
+      t('carStore.buyConfirmTitle', {
+        car: shopData.name,
+      }),
+
+      t('carStore.buyConfirmMessage', {
+        price: shopData.price,
+      }),
+
       [
-        { text: 'CANCELAR', style: 'cancel' },
         {
-          text: 'COMPRAR',
+          text: t('carStore.cancel'),
+          style: 'cancel',
+        },
+
+        {
+          text: t('carStore.buy'),
+
           onPress: () => {
-            const success = buyCar(previewCar, carData.tier, shopData.price);
+            const success = buyCar(
+              previewCar,
+              carData.tier,
+              shopData.price,
+            );
 
             if (!success) {
               Alert.alert(
-                'Compra não concluída',
-                'Verifique seu nível, seu saldo ou se o carro já está na garagem.',
+                t('carStore.purchaseFailedTitle'),
+                t('carStore.purchaseFailedMessage'),
               );
+
               return;
             }
 
             Alert.alert(
-              'NOVO CARRO NA GARAGEM!',
-              `${shopData.name} foi comprado com sucesso.`,
+              t('carStore.purchaseSuccessTitle'),
+
+              t('carStore.purchaseSuccessMessage', {
+                car: shopData.name,
+              }),
             );
           },
         },
@@ -294,23 +323,35 @@ export default function SelectionCar() {
 
   const handleWorkshop = () => {
     if (!isOwned) {
-      Alert.alert('Carro não comprado', 'Compre o veículo antes de abrir a oficina.');
+      Alert.alert(
+        t('carStore.carNotPurchasedTitle'),
+        t('carStore.carNotPurchasedMessage'),
+      );
+
       return;
     }
 
     setSelectedCar(previewCar);
     setSelectedColorFront(previewColorFront);
     setSelectedColorBack(previewColorBack);
-    router.push({ pathname: '/LoadingScreen', params: { next: '/OficinaScreen' } });
+
+    router.push({
+      pathname: '/LoadingScreen',
+      params: {
+        next: '/OficinaScreen',
+      },
+    });
   };
 
   const mainButtonText = isLocked
-    ? `BLOQUEADO • NÍVEL ${carData.tier}`
+    ? t('carStore.lockedLevel', {
+      level: carData.tier,
+    })
     : isOwned
-      ? 'EQUIPAR E CONTINUAR'
+      ? t('carStore.equipAndContinue')
       : canAfford
-        ? `COMPRAR • ⚙️ ${shopData.price}`
-        : `FALTAM ⚙️ ${missingGears}`;
+        ? `${t('carStore.buy')} • ⚙️ ${shopData.price}`
+        : `${t('carStore.missing')} ⚙️ ${missingGears}`;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -328,18 +369,18 @@ export default function SelectionCar() {
                 isCompactLandscape && styles.titleCompact,
               ]}
             >
-              WILD GARAGE
+              {t('carStore.title')}
             </Text>
-            <Text style={styles.subtitle}>STREET MARKET / ESCOLHA SUA MÁQUINA</Text>
+            <Text style={styles.subtitle}>{t('carStore.subtitle')}</Text>
           </View>
 
           <View style={styles.accountRow}>
             <View style={styles.accountBadge}>
-              <Text style={styles.accountLabel}>NÍVEL</Text>
-              <Text style={styles.accountValue}>{playerTier}</Text>
+              <Text style={styles.accountLabel}>{t('carStore.level')}</Text>
+              <Text style={styles.accountValue}>{playerLevel}</Text>
             </View>
             <View style={[styles.accountBadge, styles.gearBadge]}>
-              <Text style={styles.accountLabel}>ENGRENAGENS</Text>
+              <Text style={styles.accountLabel}>{t('carStore.gears')}</Text>
               <Text style={styles.accountValue}>⚙️ {gears}</Text>
             </View>
           </View>
@@ -362,7 +403,7 @@ export default function SelectionCar() {
               const itemShop = CAR_SHOP_CATALOG[carId];
               const selected = previewCar === carId;
               const owned = profile?.garage?.[carId] !== undefined;
-              const locked = itemCar.tier > playerTier;
+              const locked = itemCar.tier > playerLevel;
 
               return (
                 <TouchableOpacity
@@ -406,7 +447,7 @@ export default function SelectionCar() {
                   </Text>
 
                   <View style={styles.railStatusRow}>
-                    <Text style={styles.railTier}>LV.{itemCar.tier}</Text>
+                    <Text style={styles.railTier}>{t('carStore.levelShort')} {itemCar.tier}</Text>
                     <Text
                       style={[
                         styles.railStatus,
@@ -414,7 +455,7 @@ export default function SelectionCar() {
                         locked && styles.railStatusLocked,
                       ]}
                     >
-                      {owned ? 'GARAGEM' : locked ? 'BLOQUEADO' : `⚙️ ${itemShop.price}`}
+                      {owned ? t('carStore.garage') : locked ? t('carStore.locked') : `⚙️ ${itemShop.price}`}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -443,9 +484,11 @@ export default function SelectionCar() {
                 {isLocked && (
                   <View style={styles.previewLock}>
                     <Text style={styles.previewLockIcon}>🔒</Text>
-                    <Text style={styles.previewLockTitle}>ACESSO BLOQUEADO</Text>
+                    <Text style={styles.previewLockTitle}>{t('carStore.accessLocked')}</Text>
                     <Text style={styles.previewLockText}>
-                      REQUER NÍVEL {carData.tier}
+                      {t('carStore.requiresLevel', {
+                        level: carData.tier,
+                      })}
                     </Text>
                   </View>
                 )}
@@ -453,7 +496,7 @@ export default function SelectionCar() {
 
               <View style={styles.paintPanel}>
                 <View style={styles.paintColumn}>
-                  <Text style={styles.paintLabel}>COR PRINCIPAL</Text>
+                  <Text style={styles.paintLabel}> {t('carStore.primaryColor')}</Text>
                   <View style={styles.colorRow}>
                     {AVAILABLE_COLORS.map(color => (
                       <TouchableOpacity
@@ -471,7 +514,7 @@ export default function SelectionCar() {
                 </View>
 
                 <View style={styles.paintColumn}>
-                  <Text style={styles.paintLabel}>COR SECUNDÁRIA</Text>
+                  <Text style={styles.paintLabel}> {t('carStore.secondaryColor')}</Text>
                   <View style={styles.colorRow}>
                     {AVAILABLE_COLORS.map(color => (
                       <TouchableOpacity
@@ -503,87 +546,96 @@ export default function SelectionCar() {
               bounces={false}
             >
               <View style={styles.carIdentityRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.className}>{shopData.className}</Text>
-                <Text
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.className}>{shopData.className}</Text>
+                  <Text
+                    style={[
+                      styles.selectedCarName,
+                      { color: shopData.accent },
+                      isCompactLandscape && styles.selectedCarNameCompact,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {shopData.name}
+                  </Text>
+                </View>
+
+                <View
                   style={[
-                    styles.selectedCarName,
-                    { color: shopData.accent },
-                    isCompactLandscape && styles.selectedCarNameCompact,
+                    styles.availabilityBadge,
+                    isOwned && styles.availabilityOwned,
+                    isLocked && styles.availabilityLocked,
                   ]}
-                  numberOfLines={1}
                 >
-                  {shopData.name}
-                </Text>
+                  <Text style={styles.availabilityText}>
+                    {isOwned ? t('carStore.purchased') : isLocked ? t('carStore.locked') : t('carStore.available')}
+                  </Text>
+                </View>
               </View>
 
-              <View
+              <Text
                 style={[
-                  styles.availabilityBadge,
-                  isOwned && styles.availabilityOwned,
-                  isLocked && styles.availabilityLocked,
+                  styles.description,
+                  isCompactLandscape && styles.descriptionCompact,
                 ]}
+                numberOfLines={isCompactLandscape ? 2 : 3}
               >
-                <Text style={styles.availabilityText}>
-                  {isOwned ? 'COMPRADO' : isLocked ? 'LOCKED' : 'DISPONÍVEL'}
-                </Text>
+                {shopData.description}
+              </Text>
+
+              <View style={styles.tierPriceRow}>
+                <View style={styles.infoCell}>
+                  <Text style={styles.infoCellLabel}>{t('carStore.requirement')}</Text>
+                  <Text style={styles.infoCellValue}> {t('carStore.level')}  {carData.tier}</Text>
+                </View>
+                <View style={styles.infoDivider} />
+                <View style={styles.infoCell}>
+                  <Text style={styles.infoCellLabel}>{t('carStore.price')}</Text>
+                  <Text style={styles.infoCellValue}>
+                    {isOwned ? t('carStore.inGarage') : `⚙️ ${shopData.price}`}
+                  </Text>
+                </View>
               </View>
-            </View>
 
-            <Text
-              style={[
-                styles.description,
-                isCompactLandscape && styles.descriptionCompact,
-              ]}
-              numberOfLines={isCompactLandscape ? 2 : 3}
-            >
-              {shopData.description}
-            </Text>
+              <View style={styles.performancePanel}>
+                <Text style={styles.performanceTitle}> {t('carStore.factoryPerformance')}</Text>
 
-            <View style={styles.tierPriceRow}>
-              <View style={styles.infoCell}>
-                <Text style={styles.infoCellLabel}>REQUISITO</Text>
-                <Text style={styles.infoCellValue}>NÍVEL {carData.tier}</Text>
+                <PerformanceBar
+                  label={t('carStore.speed')}
+                  percent={stats.speed}
+                  value={`${carData.stats.speed.base}`}
+                  accent={shopData.accent}
+                />
+                <PerformanceBar
+                  label={t('carStore.acceleration')}
+                  percent={stats.acceleration}
+                  value={`${carData.stats.acceleration.base}`}
+                  accent={shopData.accent}
+                />
+                <PerformanceBar
+                  label={t('carStore.potential')}
+                  percent={stats.potential}
+                  value={`${carData.stats.speed.maxUpgrade}/${carData.stats.acceleration.maxUpgrade}`}
+                  accent={shopData.accent}
+                />
+
+                {isOwned && ownedCarData && (
+                  <Text
+                    style={styles.upgradeSummary}
+                    numberOfLines={1}
+                  >
+                    {t('carStore.upgrades')}:{' '}
+                    {t('carStore.engine')}{' '}
+                    {ownedCarData.motor?.speedLevel ?? 1}
+                    {' • '}
+                    {t('carStore.launch')}{' '}
+                    {ownedCarData.motor?.accelerationLevel ?? 1}
+                    {' • '}
+                    {t('carStore.defense')}{' '}
+                    {ownedCarData.engrenagem?.defenseLevel ?? 1}
+                  </Text>
+                )}
               </View>
-              <View style={styles.infoDivider} />
-              <View style={styles.infoCell}>
-                <Text style={styles.infoCellLabel}>VALOR</Text>
-                <Text style={styles.infoCellValue}>
-                  {isOwned ? 'NA GARAGEM' : `⚙️ ${shopData.price}`}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.performancePanel}>
-              <Text style={styles.performanceTitle}>PERFORMANCE DE FÁBRICA</Text>
-
-              <PerformanceBar
-                label="VELOCIDADE"
-                percent={stats.speed}
-                value={`${carData.stats.speed.base}`}
-                accent={shopData.accent}
-              />
-              <PerformanceBar
-                label="ACELERAÇÃO"
-                percent={stats.acceleration}
-                value={`${carData.stats.acceleration.base}`}
-                accent={shopData.accent}
-              />
-              <PerformanceBar
-                label="POTENCIAL"
-                percent={stats.potential}
-                value={`${carData.stats.speed.maxUpgrade}/${carData.stats.acceleration.maxUpgrade}`}
-                accent={shopData.accent}
-              />
-
-              {isOwned && ownedCarData && (
-                <Text style={styles.upgradeSummary} numberOfLines={1}>
-                  UPGRADES: MOTOR {ownedCarData.motor?.speedLevel ?? 1} • ARRANCADA{' '}
-                  {ownedCarData.motor?.accelerationLevel ?? 1} • DEFESA{' '}
-                  {ownedCarData.engrenagem?.defenseLevel ?? 1}
-                </Text>
-              )}
-            </View>
             </ScrollView>
 
             <View style={styles.actionsRow}>
@@ -595,7 +647,7 @@ export default function SelectionCar() {
                   !isOwned && styles.secondaryButtonDisabled,
                 ]}
               >
-                <Text style={styles.secondaryButtonText}>OFICINA</Text>
+                <Text style={styles.secondaryButtonText}> {t('carStore.workshop')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity

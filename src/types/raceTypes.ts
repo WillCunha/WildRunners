@@ -1,9 +1,5 @@
-import { MatchRewards } from '@/src/types/playerTypes';
-
-export type RaceUnlockType =
-  | 'map'
-  | 'card'
-  | 'achievement';
+import type { MatchRewards } from '@/src/types/playerTypes';
+import type { XpBreakdown } from '@/src/utils/progression';
 
 export type RewardRarity =
   | 'common'
@@ -11,84 +7,37 @@ export type RewardRarity =
   | 'epic'
   | 'legendary';
 
-export interface RaceUnlock {
-  /**
-   * ID único deste evento de desbloqueio.
-   *
-   * Exemplo:
-   * unlock_desert_map
-   */
+export type RaceUnlock = {
   id: string;
-
-  /**
-   * Item real desbloqueado.
-   *
-   * Exemplo:
-   * desert
-   * tnt
-   * first_win
-   */
   itemId: string;
-
-  type: RaceUnlockType;
-
+  type: 'map' | 'card' | 'achievement' | 'car' | string;
   name: string;
-
   rarity?: RewardRarity;
-}
+};
 
-export interface RaceProgressSnapshot {
+export type RaceProgress = {
   trophiesBefore: number;
   trophiesAfter: number;
-}
+  xpBefore: number;
+  xpAfter: number;
+  levelBefore: number;
+  levelAfter: number;
+};
 
-export interface RaceCarVisual {
-  colorFront: string;
-  colorBack: string;
-
-  /**
-   * Já deixamos preparados para depois.
-   */
-  skinId?: string;
-  wheelId?: string;
-}
-
-export interface RaceResult {
-  /**
-   * ID único da corrida.
-   *
-   * Fundamental para evitar recompensa duplicada.
-   */
+export type RaceResult = {
   raceId: string;
-  
   position: number;
-
   totalRacers: number;
-
-  /**
-   * Apenas o ID.
-   *
-   * Nunca salvamos require() ou asset dentro
-   * do resultado/persistência.
-   */
   carId: string;
-
-  carVisual: RaceCarVisual;
-
   mapId?: string;
-
-  rewards: MatchRewards;
-
+  carVisual: {
+    colorFront: string;
+    colorBack: string;
+  };
+  rewards: MatchRewards & { xp: number };
+  xpBreakdown: XpBreakdown;
   unlocks: RaceUnlock[];
-
   finishedAt: number;
-
-  isNewRecord?: boolean;
-
-  /**
-   * Preenchido pelo raceRewardsService.
-   *
-   * A tela usa isso para animar a progressão.
-   */
-  progress?: RaceProgressSnapshot;
-}
+  isNewRecord: boolean;
+  progress: RaceProgress;
+};

@@ -84,6 +84,16 @@ const AVAILABLE_BOT_COLORS = [
   '#FF3B30', '#34C759', '#007AFF', '#FFCC00', '#FF9500', '#AF52DE', '#1C1C1E', '#F2F2F7',
 ];
 
+type BotDifficulty = 'easy' | 'balanced' | 'rival';
+
+// Balanceamento da IA: 2 bots mais acessíveis, 2 equilibrados e 1 rival forte.
+const BOT_DIFFICULTIES: BotDifficulty[] = ['easy', 'easy', 'balanced', 'balanced', 'rival'];
+const BOT_CATCHUP_DISTANCE = 180;
+const BOT_CATCHUP_MULTIPLIER = 1.10;
+const BOT_PLAYER_TARGET_CHANCE = 0.35;
+const BOT_DEFENSE_REACTION_CHANCE = 0.75;
+const NITRO_POWER_MULTIPLIER = 1.25;
+
 export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: MapaProps) {
 
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
@@ -208,7 +218,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
   const botsRef = useRef(
     ['bot1', 'bot2', 'bot3', 'bot4', 'bot5'].map((id, index) => {
-      const bStats = generateBotsStats(carStats);
+      const bStats = generateBotsStats(carStats, BOT_DIFFICULTIES[index] ?? 'balanced');
       const skins = ['default', 'gangster', 'ninja', 'pirate', 'surger'];
 
       return {
@@ -338,6 +348,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const [activeTornado, setActiveTornado] = useState<{ callerId: string } | null>(null);
   const [tornadosToRender, setTornadosToRender] = useState<{
     id: string;
+    callerId: string;
     callerX: number;
     callerY: number;
     victims: { id: string; x: number; y: number }[];
@@ -422,6 +433,26 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   // Evita creditar a mesma partida mais de uma vez.
   const gameOverHandledRef = useRef(false);
 
+  // Métricas objetivas usadas pelo novo sistema de XP.
+  const racePerformanceRef = useRef({
+    successfulAttacks: 0,
+    successfulDefenses: 0,
+    livesLost: 0,
+    worstPosition: 1,
+  });
+
+  const registerSuccessfulAttack = (sourceId: string, targetId: string) => {
+    if (sourceId === 'player' && targetId !== 'player') {
+      racePerformanceRef.current.successfulAttacks += 1;
+    }
+  };
+
+  const registerSuccessfulDefense = (racerId: string, sourceId?: string) => {
+    if (racerId === 'player' && sourceId && sourceId !== 'player') {
+      racePerformanceRef.current.successfulDefenses += 1;
+    }
+  };
+
   const getTrophyReward = (
     position: number,
     didFinish: boolean,
@@ -447,20 +478,33 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
 
   /* ================= CONFIGURA OS MULTIPLICADORES DE FISICA DOS BOTS ================= */
-  function generateBotsStats(playerStats: typeof carStats) {
-    const randomFactor = () => Math.floor(Math.random() * 3) - 1;
+  function generateBotsStats(playerStats: typeof carStats, difficulty: BotDifficulty = 'balanced') {
+    const getLevelOffset = () => {
+      const roll = Math.random();
 
-    const botSpeedLevel = Math.max(1, playerStats.motor.speedLevel + randomFactor());
-    const botAccelLevel = Math.max(1, playerStats.motor.accelerationLevel + randomFactor());
-    const botJumpLevel = Math.max(1, playerStats.motor.jumpPowerLevel + randomFactor());
-    const botDefenseLevel = Math.max(1, playerStats.engrenagem.defenseLevel + randomFactor());
+      if (difficulty === 'easy') return roll < 0.75 ? -1 : 0;
+      if (difficulty === 'rival') return roll < 0.65 ? 0 : 1;
+      if (roll < 0.20) return -1;
+      if (roll < 0.80) return 0;
+      return 1;
+    };
+
+    const botSpeedLevel = Math.max(1, playerStats.motor.speedLevel + getLevelOffset());
+    const botAccelLevel = Math.max(1, playerStats.motor.accelerationLevel + getLevelOffset());
+    const botJumpLevel = Math.max(1, playerStats.motor.jumpPowerLevel + getLevelOffset());
+    const botDefenseLevel = Math.max(1, playerStats.engrenagem.defenseLevel + getLevelOffset());
+
+    // Pequena diferença de pilotagem mantém os perfis distintos até no nível 1,
+    // onde um offset -1 seria limitado de volta para o nível mínimo.
+    const paceMultiplier = difficulty === 'easy' ? 0.97 : difficulty === 'rival' ? 1.015 : 1;
+    const accelMultiplier = difficulty === 'easy' ? 0.98 : difficulty === 'rival' ? 1.01 : 1;
 
     return {
-      maxSpeed: MAX_SPEED + ((botSpeedLevel - 1) * 0.8),
-      impulse: IMPULSE_FORCE + ((botAccelLevel - 1) * 0.15),
+      maxSpeed: (MAX_SPEED + ((botSpeedLevel - 1) * 0.8)) * paceMultiplier,
+      impulse: (IMPULSE_FORCE + ((botAccelLevel - 1) * 0.15)) * accelMultiplier,
       jumpForce: JUMP_FORCE - ((botJumpLevel - 1) * 0.6),
       maxLives: 4 + botDefenseLevel,
-    }
+    };
   }
 
 
@@ -483,14 +527,26 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     setIsSlowActive(false);
     playerSpeed.current = MIN_SPEED;
     gameTime.current = 0;
+    racePerformanceRef.current = {
+      successfulAttacks: 0,
+      successfulDefenses: 0,
+      livesLost: 0,
+      worstPosition: 1,
+    };
     final30WarningPlayedRef.current = false;
     timerPulseAnim.setValue(1);
 
     const startY = GROUND_Y - PLAYER_SIZE;
 
     const newBots = [...botsRef.current];
+    const raceDifficulties = [...BOT_DIFFICULTIES];
+    for (let i = raceDifficulties.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [raceDifficulties[i], raceDifficulties[j]] = [raceDifficulties[j], raceDifficulties[i]];
+    }
+
     for (let i = 0; i < 5; i++) {
-      const refreshedStats = generateBotsStats(carStats);
+      const refreshedStats = generateBotsStats(carStats, raceDifficulties[i] ?? 'balanced');
       newBots[i].x = positions[i + 1];
       newBots[i].y = startY;
       newBots[i].velocity = 0;
@@ -594,6 +650,20 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
             racer.id === 'player',
         ) + 1;
 
+    racePerformanceRef.current.worstPosition = Math.max(
+      racePerformanceRef.current.worstPosition,
+      playerPosition,
+    );
+
+    const performance = {
+      perfectStart: miniGameClicksRef.current >= 3,
+      successfulAttacks: racePerformanceRef.current.successfulAttacks,
+      successfulDefenses: racePerformanceRef.current.successfulDefenses,
+      livesLost: racePerformanceRef.current.livesLost,
+      worstPosition: racePerformanceRef.current.worstPosition,
+      survived: !playerIsDead.current,
+    };
+
     /* ================================
        2. RECOMPENSAS
     ================================ */
@@ -650,6 +720,8 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         },
 
         rewards,
+
+        performance,
 
         unlocks: [],
 
@@ -789,7 +861,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       if (playerStatus.current.isStunned) {
         playerSpeed.current = 0;
       } else if (activeEffectsTimers.current['nitro_power'] && activeEffectsTimers.current['nitro_power'] > 0) {
-        playerSpeed.current = NITRO_SPEED * 0.7;
+        playerSpeed.current = DYNAMIC_MAX_SPEED * NITRO_POWER_MULTIPLIER;
       } else if (isNitroActive.current) {
         playerSpeed.current = NITRO_SPEED;
         nitroTimer.current -= 1;
@@ -828,6 +900,13 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       // Placar e Efeitos (Mantidos Iguais)
       if (gameTime.current % 30 === 0) {
         const allRacers = [{ id: 'player', name: 'Você (P1)', x: playerXRef.current }, ...botsRef.current.map(b => ({ id: b.id, name: b.name, x: b.x }))].sort((a, b) => b.x - a.x);
+        const sampledPlayerPosition = allRacers.findIndex(r => r.id === 'player') + 1;
+        if (sampledPlayerPosition > 0) {
+          racePerformanceRef.current.worstPosition = Math.max(
+            racePerformanceRef.current.worstPosition,
+            sampledPlayerPosition,
+          );
+        }
         const currentOrder = allRacers.map(r => r.id).join(',');
         if (currentOrder !== lastOrderRef.current) {
           setLeaderboard(allRacers.map(r => ({ id: r.id, name: r.name })));
@@ -917,8 +996,8 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         if (gameTime.current % 15 === 0) {
           bot.targetSpeed = bot.stats.maxSpeed * (0.85 + Math.random() * 0.2);
 
-          if (bot.x < playerXRef.current - 100) {
-            bot.targetSpeed = bot.stats.maxSpeed * 1.35;
+          if (bot.x < playerXRef.current - BOT_CATCHUP_DISTANCE) {
+            bot.targetSpeed = bot.stats.maxSpeed * BOT_CATCHUP_MULTIPLIER;
           }
         }
 
@@ -937,7 +1016,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
           bot.activeEffectsTimers['nitro_power'] &&
           bot.activeEffectsTimers['nitro_power'] > 0
         ) {
-          targetSpeed = NITRO_SPEED * 1.3;
+          targetSpeed = bot.stats.maxSpeed * NITRO_POWER_MULTIPLIER;
           bot.speed = targetSpeed;
         }
 
@@ -1112,8 +1191,10 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
           const JUMP_PENALTY = JUMP_FORCE * 1.2;
           const SPEED_PENALTY = 0;
 
-          const hit = applyDamage(bullet.targetId)
+          const hit = applyDamage(bullet.targetId, bullet.callerId)
           if (!hit) return;
+
+          registerSuccessfulAttack(bullet.callerId, bullet.targetId);
 
           if (bullet.targetId === 'player') {
             playerSpeed.current = SPEED_PENALTY;
@@ -1190,8 +1271,10 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
               const distSq = (dx * dx) + (dy * dy);
 
               if (distSq < EXPLOSION_RADIUS * EXPLOSION_RADIUS) {
-                const hit = applyDamage(racerId);
+                const hit = applyDamage(racerId, tnt.callerId);
                 if (!hit) return;
+
+                registerSuccessfulAttack(tnt.callerId, racerId);
 
                 if (racerId === 'player') {
                   playerSpeed.current = 0;
@@ -1424,6 +1507,16 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     // ou se outro Swap ainda estiver resolvendo.
     if (effect === 'swap' && (activeSwapRef.current || !hasOpponentAhead('player'))) return;
 
+    // Bubble Lift só cobra o boost se realmente conseguir lançar em um alvo.
+    if (effect === 'bubble_lift') {
+      const launched = triggerBubbleLift('player');
+      if (!launched) return;
+
+      setBoost(prev => prev - cost);
+      setBubbleCooldown(BUBBLE_COOLDOWN);
+      return;
+    }
+
     setBoost(prev => prev - cost);
 
     if (effect === 'swap') {
@@ -1434,18 +1527,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     if (effect === 'tnt') { triggerTNT('player'); setTntCooldown(TNT_COOLDOWN); }
     if (effect === 'tornado') { triggerTornado('player'); setTornadoCooldown(TORNADO_COOLDOWN); }
     if (effect === 'nitro_power') { triggerNitroPower('player'); setNitroCooldown(NITRO_COOLDOWN); }
-    if (effect === 'bubble_lift') {
-      const launched = triggerBubbleLift('player');
-
-      if (!launched) {
-        return;
-      }
-
-      setBoost(prev => prev - cost);
-      setBubbleCooldown(BUBBLE_COOLDOWN);
-
-      return;
-    }
     if (effect === 'shield') { applyCardEffect('shield', 'player', 'player'); setShieldCooldown(SHIELD_COOLDOWN); }
     if (effect === 'quick_repair') { applyCardEffect('quick_repair', 'player', 'player'); setQuickRepairCooldown(QUICK_REPAIR_COOLDOWN); }
     if (effect === 'ghost') { applyCardEffect('ghost', 'player', 'player'); setGhostCooldown(GHOST_COOLDOWN); }
@@ -1574,6 +1655,11 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
   function shouldBotUseDefenseCard(bot: (typeof botsRef.current)[number], effect: CardEffect) {
     const threatened = isBotUnderThreat(bot);
+    const isReactiveDefense = effect === 'shield' || effect === 'armor' || effect === 'ghost';
+
+    if (threatened && isReactiveDefense && Math.random() > BOT_DEFENSE_REACTION_CHANCE) {
+      return false;
+    }
 
     if (effect === 'quick_repair') return bot.lives <= bot.maxLives - 2;
     if (effect === 'second_chance') return !bot.status.secondChanceReady && bot.lives <= 2;
@@ -1620,7 +1706,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
         if (opponentsAhead.length > 0) {
           const playerAhead = opponentsAhead.find(r => r.id === 'player');
-          if (playerAhead && Math.random() < 0.7) {
+          if (playerAhead && Math.random() < BOT_PLAYER_TARGET_CHANCE) {
             target = 'player';
           } else {
             target = opponentsAhead[opponentsAhead.length - 1].id;
@@ -1667,7 +1753,14 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       ? playerStatus.current
       : botsRef.current.find(b => b.id === targetId)?.status;
     const isHostileEffect = sourceId !== targetId && !CARD_CATEGORIES.DEFENSE_BUFF.includes(effect as any);
-    if (isHostileEffect && targetStatus?.isGhost) return;
+    if (isHostileEffect && targetStatus?.isGhost) {
+      registerSuccessfulDefense(targetId, sourceId);
+      return;
+    }
+
+    if (isHostileEffect) {
+      registerSuccessfulAttack(sourceId, targetId);
+    }
 
     if (effect === 'swap') {
       const sourceBot = botsRef.current.find(b => b.id === sourceId);
@@ -1828,18 +1921,20 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   }
 
   /* ================= DANO, PROTEÇÃO E SEGUNDA CHANCE ================= */
-  function applyDamage(racerId: string) {
+  function applyDamage(racerId: string, sourceId?: string) {
     if (racerId === 'player') {
       const status = playerStatus.current;
       if (status.invincibleTimer > 0 || playerIsDead.current) return false;
 
       if (status.isGhost) {
+        registerSuccessfulDefense('player', sourceId);
         triggerDefenseVisual('player', 'ghost_evade');
         return false;
       }
 
       // Escudo bloqueia completamente o ataque e também o empurrão.
       if (status.shieldCharges > 0) {
+        registerSuccessfulDefense('player', sourceId);
         status.shieldCharges -= 1;
         status.invincibleTimer = 20;
         triggerDefenseVisual('player', 'shield_break');
@@ -1848,6 +1943,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
       // Blindagem segura o coração, mas o impacto físico continua acontecendo.
       if (status.armorCharges > 0) {
+        registerSuccessfulDefense('player', sourceId);
         status.armorCharges -= 1;
         status.invincibleTimer = 90;
         triggerDefenseVisual('player', 'armor_hit');
@@ -1855,6 +1951,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       }
 
       playerLivesRef.current -= 1;
+      racePerformanceRef.current.livesLost += 1;
       status.invincibleTimer = 90;
 
       spawnPieces(playerXRef.current, y.current, 3);
@@ -2053,12 +2150,16 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   }
 
   /* ================= RECEBE O IMPACTO DO TORNADO ================= */
-  function handleTornadoHit(victimId: string) {
+  function handleTornadoHit(victimId: string, sourceId?: string) {
     const JUMP_PENALTY = JUMP_FORCE * 1.5;
-    const hit = applyDamage(victimId);
+    const hit = applyDamage(victimId, sourceId);
 
     // Respeita morte e o período de invencibilidade após outro impacto.
     if (!hit) return;
+
+    if (sourceId) {
+      registerSuccessfulAttack(sourceId, victimId);
+    }
 
     if (victimId === 'player') {
       playerSpeed.current = 0;
@@ -2319,6 +2420,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
                 ...prev,
                 {
                   id: Math.random().toString(36).substring(2, 10),
+                  callerId: activeTornado.callerId,
                   callerX,
                   callerY,
                   victims,
@@ -2710,7 +2812,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
             callerX={tornado.callerX}
             callerY={tornado.callerY}
             victims={tornado.victims}
-            onHitVictim={handleTornadoHit}
+            onHitVictim={(victimId) => handleTornadoHit(victimId, tornado.callerId)}
             onComplete={() => {
               setTornadosToRender(prev => prev.filter(t => t.id !== tornado.id));
             }}

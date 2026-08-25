@@ -1,3 +1,4 @@
+import { useLanguage } from '@/context/LanguageContext';
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
@@ -21,7 +22,6 @@ type CardDefinition = {
   cost: number;
   color: string;
   category: CardCategory;
-  description: string;
   image: ImageSourcePropType;
 };
 
@@ -35,7 +35,6 @@ const ALL_CARDS: CardDefinition[] = [
     cost: 3,
     color: '#AF52DE',
     category: 'attack',
-    description: 'Puxa um adversário e reduz sua vantagem.',
     image: require('@/assets/images/cards/chains.png'),
   },
   {
@@ -44,7 +43,6 @@ const ALL_CARDS: CardDefinition[] = [
     cost: 4,
     color: '#FF4500',
     category: 'attack',
-    description: 'Deixa uma caixa explosiva na pista.',
     image: require('@/assets/images/cards/tnt.png'),
 
   },
@@ -54,7 +52,6 @@ const ALL_CARDS: CardDefinition[] = [
     cost: 4,
     color: '#FF004D',
     category: 'attack',
-    description: 'Troca sua posição com outro corredor.',
     image: require('@/assets/images/cards/swap.png'),
 
   },
@@ -64,7 +61,6 @@ const ALL_CARDS: CardDefinition[] = [
     cost: 5,
     color: '#FF9500',
     category: 'attack',
-    description: 'Reduz temporariamente a velocidade dos rivais.',
     image: require('@/assets/images/cards/slow_slow.png'),
 
   },
@@ -74,7 +70,6 @@ const ALL_CARDS: CardDefinition[] = [
     cost: 5,
     color: '#FFCC80',
     category: 'attack',
-    description: 'Prejudica a visão do adversário.',
     image: require('@/assets/images/cards/blind.png'),
 
   },
@@ -84,7 +79,6 @@ const ALL_CARDS: CardDefinition[] = [
     cost: 3,
     color: '#007AFF',
     category: 'attack',
-    description: 'Dispara um míssil guiado contra um rival.',
     image: require('@/assets/images/cards/bullet.png'),
 
   },
@@ -94,7 +88,6 @@ const ALL_CARDS: CardDefinition[] = [
     cost: 4,
     color: '#03009e',
     category: 'attack',
-    description: 'Lança um tornado contra os oponentes à frente.',
     image: require('@/assets/images/cards/tornado.png'),
 
   },
@@ -104,7 +97,6 @@ const ALL_CARDS: CardDefinition[] = [
     cost: 4,
     color: '#32CD32',
     category: 'attack',
-    description: 'Suspende o adversário e interrompe sua corrida.',
     image: require('@/assets/images/cards/bubble_lift.png'),
 
   },
@@ -116,7 +108,6 @@ const ALL_CARDS: CardDefinition[] = [
     cost: 2,
     color: '#00FFFF',
     category: 'defense',
-    description: 'Aceleração de emergência para escapar de ameaças.',
     image: require('@/assets/images/cards/nitro_power.png'),
 
   },
@@ -126,7 +117,6 @@ const ALL_CARDS: CardDefinition[] = [
     cost: 3,
     color: '#4DA3FF',
     category: 'defense',
-    description: 'Bloqueia completamente o próximo ataque.',
     image: require('@/assets/images/cards/shield.png'),
 
   },
@@ -136,7 +126,6 @@ const ALL_CARDS: CardDefinition[] = [
     cost: 4,
     color: '#9AA0A6',
     category: 'defense',
-    description: 'Absorve dois ataques sem perder vidas.',
     image: require('@/assets/images/cards/armor.png'),
 
   },
@@ -146,7 +135,6 @@ const ALL_CARDS: CardDefinition[] = [
     cost: 4,
     color: '#FFD60A',
     category: 'defense',
-    description: 'Recupera até duas vidas do carro.',
     image: require('@/assets/images/cards/repair_quick.png'),
 
   },
@@ -156,7 +144,6 @@ const ALL_CARDS: CardDefinition[] = [
     cost: 5,
     color: '#B388FF',
     category: 'defense',
-    description: 'Concede imunidade temporária contra ataques.',
     image: require('@/assets/images/cards/ghost.png'),
 
   },
@@ -166,18 +153,17 @@ const ALL_CARDS: CardDefinition[] = [
     cost: 5,
     color: '#FF6B9A',
     category: 'defense',
-    description: 'Evita uma eliminação e devolve uma vida.',
     image: require('@/assets/images/cards/second_chance.png'),
   },
 ];
 
-const CATEGORY_LABELS: Record<CardCategory, string> = {
-  attack: 'ATAQUE',
-  defense: 'DEFESA',
-};
+
 
 export default function DeckSelection() {
   const { width, height } = useWindowDimensions();
+
+  const { t } = useLanguage();
+
   const [activeCategory, setActiveCategory] = useState<CardCategory>('attack');
   const [selectedDeck, setSelectedDeck] = useState<string[]>([]);
   const [openDescriptionId, setOpenDescriptionId] = useState<string | null>(null);
@@ -216,8 +202,10 @@ export default function DeckSelection() {
 
     if (selectedDeck.length >= MAX_DECK_SIZE) {
       Alert.alert(
-        'Deck cheio!',
-        `Só é permitido selecionar ${MAX_DECK_SIZE} cartas para a partida.`,
+        t('deckSelection.fullDeckTitle'),
+        t('deckSelection.fullDeckMessage', {
+          count: MAX_DECK_SIZE,
+        }),
       );
       return;
     }
@@ -228,8 +216,10 @@ export default function DeckSelection() {
   const handleConfirm = () => {
     if (selectedDeck.length !== MAX_DECK_SIZE) {
       Alert.alert(
-        'Deck incompleto!',
-        `É preciso selecionar ${MAX_DECK_SIZE} cartas para a partida.`,
+        t('deckSelection.incompleteDeckTitle'),
+        t('deckSelection.incompleteDeckMessage', {
+          count: MAX_DECK_SIZE,
+        }),
       );
       return;
     }
@@ -250,10 +240,10 @@ export default function DeckSelection() {
         <View style={[styles.header, isCompactLandscape && styles.headerCompact]}>
           <View>
             <Text style={[styles.title, isCompactLandscape && styles.titleCompact]}>
-              MONTE O SEU DECK
+              {t('deckSelection.title')}
             </Text>
             <Text style={styles.subtitle}>
-              Escolha quatro cartas e combine ataque com sobrevivência.
+              {t('deckSelection.subtitle')}
             </Text>
           </View>
 
@@ -261,7 +251,7 @@ export default function DeckSelection() {
             <Text style={styles.headerCounterValue}>
               {selectedDeck.length}/{MAX_DECK_SIZE}
             </Text>
-            <Text style={styles.headerCounterLabel}>CARTAS</Text>
+            <Text style={styles.headerCounterLabel}>{t('deckSelection.cards')}</Text>
           </View>
         </View>
 
@@ -270,8 +260,8 @@ export default function DeckSelection() {
           <View style={styles.availablePane}>
             <View style={styles.availableTopRow}>
               <View>
-                <Text style={styles.sectionTitle}>CARTAS DISPONÍVEIS</Text>
-                <Text style={styles.sectionHint}>Toque em uma carta para adicioná-la.</Text>
+                <Text style={styles.sectionTitle}>{t('deckSelection.availableCards')}</Text>
+                <Text style={styles.sectionHint}>{t('deckSelection.tapCard')}</Text>
               </View>
 
               <View style={styles.categoryTabs}>
@@ -286,10 +276,11 @@ export default function DeckSelection() {
                   <Text
                     style={[
                       styles.categoryTabText,
-                      activeCategory === 'attack' && styles.categoryTabTextActive,
+                      activeCategory === 'attack' &&
+                      styles.categoryTabTextActive,
                     ]}
                   >
-                    ATAQUE {attackCount}
+                    {t('deckSelection.categories.attack')} {attackCount}
                   </Text>
                 </TouchableOpacity>
 
@@ -304,10 +295,11 @@ export default function DeckSelection() {
                   <Text
                     style={[
                       styles.categoryTabText,
-                      activeCategory === 'defense' && styles.categoryTabTextActive,
+                      activeCategory === 'defense' &&
+                      styles.categoryTabTextActive,
                     ]}
                   >
-                    DEFESA {defenseCount}
+                    {t('deckSelection.categories.defense')} {defenseCount}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -389,7 +381,9 @@ export default function DeckSelection() {
                         style={[styles.descriptionBubble, { borderColor: card.color }]}
                       >
                         <Text style={styles.descriptionBubbleText}>
-                          {card.description}
+                          {t(
+                            `deckSelection.cardDescriptions.${card.id}`
+                          )}
                         </Text>
                         <View
                           style={[styles.descriptionBubbleArrow, { borderTopColor: card.color }]}
@@ -406,8 +400,8 @@ export default function DeckSelection() {
           <View style={styles.selectedPane}>
             <View style={styles.selectedHeader}>
               <View>
-                <Text style={styles.sectionTitle}>SEU DECK</Text>
-                <Text style={styles.sectionHint}>Toque para remover.</Text>
+                <Text style={styles.sectionTitle}>{t('deckSelection.yourDeck')}</Text>
+                <Text style={styles.sectionHint}>{t('deckSelection.removeHint')}</Text>
               </View>
 
               <View
@@ -436,7 +430,7 @@ export default function DeckSelection() {
                       ]}
                     >
                       <Text style={styles.slotNumber}>{index + 1}</Text>
-                      <Text style={styles.emptySlotText}>SLOT VAZIO</Text>
+                      <Text style={styles.emptySlotText}>{t('deckSelection.emptySlot')}</Text>
                     </View>
                   );
                 }
@@ -463,8 +457,15 @@ export default function DeckSelection() {
                       <Text style={styles.selectedSlotName} numberOfLines={1}>
                         {card.name}
                       </Text>
-                      <Text style={styles.selectedSlotMeta} numberOfLines={1}>
-                        {CATEGORY_LABELS[card.category]} • 💧 {card.cost}
+                      <Text
+                        style={styles.selectedSlotMeta}
+                        numberOfLines={1}
+                      >
+                        {t(
+                          `deckSelection.categories.${card.category}`
+                        )}
+                        {' • 💧 '}
+                        {card.cost}
                       </Text>
                     </View>
 

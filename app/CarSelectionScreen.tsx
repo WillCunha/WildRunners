@@ -1,8 +1,10 @@
 import { AudioContext } from '@/context/AudioContext';
 import { useCarSelection } from '@/context/CarContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { raceRewardsService } from '@/src/services/raceRewardsService';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { carMaps } from '@/src/utils/carMaps';
+import { getPlayerLevel } from '@/src/utils/progression';
 import { router } from 'expo-router';
 import React, { useContext, useEffect, useMemo, useState } from 'react';
 import {
@@ -42,13 +44,6 @@ const MAX_UPGRADE_LEVEL = 10;
 const ACCENT = '#FFD60A';
 
 const DASHBOARD_MUSIC = require('@/assets/audio/dashboard/audio_one.mp3');
-
-const getPlayerTier = (trophies: number) => {
-    if (trophies >= 600) return 4;
-    if (trophies >= 300) return 3;
-    if (trophies >= 100) return 2;
-    return 1;
-};
 
 const CarCanvas = React.memo(
     ({ carId, width, colorFront, colorBack }: CarCanvasProps) => {
@@ -112,23 +107,47 @@ const StatBar = ({
     label: string;
     progress: number;
     value: number;
-}) => (
-    <View style={styles.statBlock}>
-        <View style={styles.statHeader}>
-            <Text style={styles.statLabel}>{label}</Text>
-            <Text style={styles.statValue}>NÍVEL {value}</Text>
+}) => {
+    const { t } = useLanguage();
+
+    return (
+        <View style={styles.statBlock}>
+            <View style={styles.statHeader}>
+                <Text style={styles.statLabel}>
+                    {label}
+                </Text>
+
+                <Text style={styles.statValue}>
+                    {t('carSelection.level')} {value}
+                </Text>
+            </View>
+
+            <View style={styles.statTrack}>
+                <View
+                    style={[
+                        styles.statFill,
+                        {
+                            width: `${Math.max(
+                                4,
+                                progress,
+                            )}%`,
+                        },
+                    ]}
+                />
+
+                <View style={styles.statMarkerOne} />
+                <View style={styles.statMarkerTwo} />
+            </View>
         </View>
-        <View style={styles.statTrack}>
-            <View style={[styles.statFill, { width: `${Math.max(4, progress)}%` }]} />
-            <View style={styles.statMarkerOne} />
-            <View style={styles.statMarkerTwo} />
-        </View>
-    </View>
-);
+    );
+};
 
 export default function CarSelectionScreen() {
     const { width, height } = useWindowDimensions();
     const isCompactLandscape = height < 430;
+
+    const { t } = useLanguage();
+
     const { playMusic } = useContext(AudioContext);
     const {
         selectedCar,
@@ -174,7 +193,7 @@ export default function CarSelectionScreen() {
         });
     }, [carKeys, profile]);
 
-    const playerTier = getPlayerTier(profile?.trophies ?? 0);
+    const playerTier = getPlayerLevel(profile?.xp ?? 0);
     const currentCarData = previewCar ? carMaps[previewCar] : null;
     const ownedCarData = previewCar ? profile?.garage?.[previewCar] : undefined;
 
@@ -223,8 +242,8 @@ export default function CarSelectionScreen() {
     const handleContinue = () => {
         if (!previewCar || !currentCarData || !ownedCarData) {
             Alert.alert(
-                'Garagem vazia',
-                'Compre um veículo na loja antes de continuar para a corrida.',
+                t('carSelection.emptyGarageAlertTitle'),
+                t('carSelection.emptyGarageAlertMessage'),
             );
             return;
         }
@@ -249,7 +268,15 @@ export default function CarSelectionScreen() {
                 motor: 2,
                 spray: 1,
                 engrenagem: 225,
-                trophies: 1,
+                trophies: 0,
+            },
+            performance: {
+                perfectStart: true,
+                successfulAttacks: 3,
+                successfulDefenses: 2,
+                livesLost: 1,
+                worstPosition: 5,
+                survived: true,
             },
 
             unlocks: [
@@ -273,24 +300,24 @@ export default function CarSelectionScreen() {
                 <View style={styles.header}>
                     <View>
                         <Text style={[styles.title, isCompactLandscape && styles.titleCompact]}>
-                            RACE GARAGE
+                            {t('carSelection.title')}
                         </Text>
-                        <Text style={styles.subtitle}>ESCOLHA E PREPARE SUA MÁQUINA</Text>
+                        <Text style={styles.subtitle}>{t('carSelection.subtitle')}</Text>
                     </View>
 
                     <View style={styles.accountRow}>
                         <View style={styles.accountBadge}>
-                            <Text style={styles.accountLabel}>PILOTO</Text>
+                            <Text style={styles.accountLabel}>{t('carSelection.pilot')}</Text>
                             <Text style={styles.accountValue} numberOfLines={1}>
                                 @{profile?.username ?? 'PLAYER'}
                             </Text>
                         </View>
                         <View style={styles.accountBadge}>
-                            <Text style={styles.accountLabel}>NÍVEL</Text>
+                            <Text style={styles.accountLabel}>{t('carSelection.level')}</Text>
                             <Text style={styles.accountValue}>{playerTier}</Text>
                         </View>
                         <View style={[styles.accountBadge, styles.trophyBadge]}>
-                            <Text style={styles.accountLabel}>TROFÉUS</Text>
+                            <Text style={styles.accountLabel}>{t('carSelection.trophies')}</Text>
                             <Text style={styles.accountValue}>🏆 {profile?.trophies ?? 0}</Text>
                         </View>
                     </View>
@@ -299,8 +326,8 @@ export default function CarSelectionScreen() {
                 <View style={styles.mainRow}>
                     <View style={styles.carSidebar}>
                         <View style={styles.sidebarHeader}>
-                            <Text style={styles.sidebarEyebrow}>SUA GARAGEM</Text>
-                            <Text style={styles.sidebarCount}>{carKeys.length} CARROS</Text>
+                            <Text style={styles.sidebarEyebrow}>{t('carSelection.yourGarage')}</Text>
+                            <Text style={styles.sidebarCount}>{carKeys.length} {t('carSelection.carsCount.other')}</Text>
                         </View>
 
                         <ScrollView
@@ -346,7 +373,7 @@ export default function CarSelectionScreen() {
                                                 {carKey.toUpperCase()}
                                             </Text>
                                             <Text style={styles.sidebarCarMeta}>
-                                                NÍVEL {item.tier} • PRONTO
+                                                {t('carSelection.level')} {item.tier} • {t('carSelection.ready')}
                                             </Text>
                                         </View>
                                     </TouchableOpacity>
@@ -360,8 +387,8 @@ export default function CarSelectionScreen() {
                             >
                                 <Text style={styles.sidebarStoreIcon}>＋</Text>
                                 <View style={styles.sidebarCarInfo}>
-                                    <Text style={styles.sidebarStoreTitle}>NOVO CARRO</Text>
-                                    <Text style={styles.sidebarCarMeta}>ABRIR LOJA</Text>
+                                    <Text style={styles.sidebarStoreTitle}>{t('carSelection.newCar')}</Text>
+                                    <Text style={styles.sidebarCarMeta}>{t('carSelection.openStore')}</Text>
                                 </View>
                             </TouchableOpacity>
                         </ScrollView>
@@ -384,9 +411,9 @@ export default function CarSelectionScreen() {
                                 ) : (
                                     <View style={styles.emptyGarage}>
                                         <Text style={styles.emptyGarageIcon}>🏁</Text>
-                                        <Text style={styles.emptyGarageTitle}>GARAGEM VAZIA</Text>
+                                        <Text style={styles.emptyGarageTitle}>{t('carSelection.emptyGarage')}</Text>
                                         <Text style={styles.emptyGarageText}>
-                                            VISITE A LOJA PARA COMPRAR SEU PRIMEIRO CARRO
+                                            {t('carSelection.emptyGarageMessage')}
                                         </Text>
                                     </View>
                                 )}
@@ -394,7 +421,7 @@ export default function CarSelectionScreen() {
 
                             <View style={styles.paintPanel}>
                                 <View style={styles.paintColumn}>
-                                    <Text style={styles.paintLabel}>COR PRINCIPAL</Text>
+                                    <Text style={styles.paintLabel}>{t('carSelection.primaryColor')}</Text>
                                     <View style={styles.colorRow}>
                                         {AVAILABLE_COLORS.map(color => (
                                             <TouchableOpacity
@@ -412,7 +439,7 @@ export default function CarSelectionScreen() {
                                 </View>
 
                                 <View style={styles.paintColumn}>
-                                    <Text style={styles.paintLabel}>COR SECUNDÁRIA</Text>
+                                    <Text style={styles.paintLabel}>{t('carSelection.secondaryColor')}</Text>
                                     <View style={styles.colorRow}>
                                         {AVAILABLE_COLORS.map(color => (
                                             <TouchableOpacity
@@ -439,71 +466,71 @@ export default function CarSelectionScreen() {
                             showsVerticalScrollIndicator={false}
                             bounces={false}
                         >
-                            <Text style={styles.className}>VEÍCULO EQUIPADO</Text>
+                            <Text style={styles.className}>{t('carSelection.equippedVehicle')}</Text>
                             <Text
                                 style={[styles.selectedCarName, isCompactLandscape && styles.selectedCarNameCompact]}
                                 numberOfLines={1}
                             >
-                                {previewCar?.toUpperCase() ?? 'SEM VEÍCULO'}
+                                {previewCar?.toUpperCase() ?? t('carSelection.noVehicle')}
                             </Text>
 
                             <View style={styles.vehicleMetaRow}>
                                 <View style={styles.infoCell}>
-                                    <Text style={styles.infoCellLabel}>CATEGORIA</Text>
+                                    <Text style={styles.infoCellLabel}>{t('carSelection.category')}</Text>
                                     <Text style={styles.infoCellValue}>
-                                        NÍVEL {currentCarData?.tier ?? '-'}
+                                        {t('carSelection.level')} {currentCarData?.tier ?? '-'}
                                     </Text>
                                 </View>
                                 <View style={styles.infoDivider} />
                                 <View style={styles.infoCell}>
-                                    <Text style={styles.infoCellLabel}>ESTADO</Text>
+                                    <Text style={styles.infoCellLabel}>{t('carSelection.status')}</Text>
                                     <Text style={[styles.infoCellValue, styles.readyText]}>
-                                        {previewCar ? 'PRONTO' : 'INDISPONÍVEL'}
+                                        {previewCar ? t('carSelection.ready') : t('carSelection.unavailable')}
                                     </Text>
                                 </View>
                             </View>
 
                             <View style={styles.performancePanel}>
-                                <Text style={styles.performanceTitle}>UPGRADES INSTALADOS</Text>
+                                <Text style={styles.performanceTitle}>{t('carSelection.installedUpgrades')}</Text>
                                 <StatBar
-                                    label="VELOCIDADE"
+                                    label={t('carSelection.speed')}
                                     value={speedLevel}
                                     progress={calculateProgress(speedLevel)}
                                 />
                                 <StatBar
-                                    label="ACELERAÇÃO"
+                                    label={t('carSelection.acceleration')}
                                     value={accelerationLevel}
                                     progress={calculateProgress(accelerationLevel)}
                                 />
                                 <StatBar
-                                    label="FORÇA DO PULO"
+                                    label={t('carSelection.jumpPower')}
                                     value={jumpLevel}
                                     progress={calculateProgress(jumpLevel)}
                                 />
                                 <StatBar
-                                    label="DEFESA"
+                                    label={t('carSelection.defense')}
                                     value={defenseLevel}
                                     progress={calculateProgress(defenseLevel)}
                                 />
                             </View>
 
                             <View style={styles.partsPanel}>
-                                <Text style={styles.partsTitle}>ESTOQUE DA GARAGEM</Text>
+                                <Text style={styles.partsTitle}>{t('carSelection.garageStock')}</Text>
                                 <View style={styles.partsRow}>
                                     <View style={styles.partBadge}>
                                         <Text style={styles.partIcon}>⚙️</Text>
                                         <Text style={styles.partValue}>{profile?.parts?.engrenagem ?? 0}</Text>
-                                        <Text style={styles.partLabel}>MOTOR</Text>
+                                        <Text style={styles.partLabel}>{t('carSelection.engine')}</Text>
                                     </View>
                                     <View style={styles.partBadge}>
                                         <Text style={styles.partIcon}>🎨</Text>
                                         <Text style={styles.partValue}>{profile?.parts?.spray ?? 0}</Text>
-                                        <Text style={styles.partLabel}>SPRAY</Text>
+                                        <Text style={styles.partLabel}>{t('carSelection.spray')}</Text>
                                     </View>
                                     <View style={styles.partBadge}>
                                         <Text style={styles.partIcon}>🔧</Text>
                                         <Text style={styles.partValue}>{profile?.parts?.motor ?? 0}</Text>
-                                        <Text style={styles.partLabel}>PEÇAS</Text>
+                                        <Text style={styles.partLabel}>{t('carSelection.parts')}</Text>
                                     </View>
                                 </View>
                             </View>
@@ -523,7 +550,7 @@ export default function CarSelectionScreen() {
                                 onPress={handleOpenOficina}
                                 style={styles.secondaryButton}
                             >
-                                <Text style={styles.secondaryButtonText}>OFICINA</Text>
+                                <Text style={styles.secondaryButtonText}> {t('carSelection.workshop')}</Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity
@@ -532,7 +559,7 @@ export default function CarSelectionScreen() {
                                 style={[styles.mainButton, !previewCar && styles.mainButtonDisabled]}
                             >
                                 <Text style={styles.mainButtonText}>
-                                    {previewCar ? 'EQUIPAR E CONTINUAR' : 'COMPRAR UM CARRO'}
+                                    {previewCar ? t('carSelection.equipAndContinue') : t('carSelection.buyACar')}
                                 </Text>
                             </TouchableOpacity>
                         </View>

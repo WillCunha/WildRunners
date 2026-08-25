@@ -3,6 +3,7 @@ import { useRaceResultSfx } from '@/src/audio/raceSfx';
 import { useRaceResultStore } from '@/src/store/raceResultStore';
 import { RaceResult, RewardRarity } from '@/src/types/raceTypes';
 import { carMaps } from '@/src/utils/carMaps';
+import { getLevelProgress } from '@/src/utils/progression';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState, } from 'react';
@@ -395,6 +396,172 @@ const RewardCounter = ({
     );
 };
 
+
+type XpProgressPanelProps = {
+    result: RaceResult;
+    onTick?: () => void;
+};
+
+const XpProgressPanel = ({
+    result,
+    onTick,
+}: XpProgressPanelProps) => {
+    const xpValue = useRef(
+        new Animated.Value(
+            result.progress.xpBefore,
+        ),
+    ).current;
+
+    const lastAudioTickRef = useRef(0);
+    const previousLevelRef = useRef(
+        result.progress.levelBefore,
+    );
+
+    const [displayedXp, setDisplayedXp] =
+        useState(result.progress.xpBefore);
+    const [showLevelUp, setShowLevelUp] =
+        useState(false);
+
+    useEffect(() => {
+        xpValue.stopAnimation();
+        xpValue.setValue(result.progress.xpBefore);
+        setDisplayedXp(result.progress.xpBefore);
+        setShowLevelUp(false);
+        previousLevelRef.current =
+            result.progress.levelBefore;
+
+        const listenerId = xpValue.addListener(
+            ({ value }) => {
+                const safeXp = Math.max(
+                    0,
+                    Math.floor(value),
+                );
+
+                setDisplayedXp(safeXp);
+
+                const currentLevel =
+                    getLevelProgress(safeXp).level;
+
+                if (
+                    currentLevel >
+                    previousLevelRef.current
+                ) {
+                    previousLevelRef.current =
+                        currentLevel;
+                    setShowLevelUp(true);
+                }
+
+                if (value > result.progress.xpBefore && onTick) {
+                    const now = Date.now();
+
+                    if (
+                        now - lastAudioTickRef.current >=
+                        90
+                    ) {
+                        lastAudioTickRef.current = now;
+                        onTick();
+                    }
+                }
+            },
+        );
+
+        Animated.sequence([
+            Animated.delay(2850),
+            Animated.timing(xpValue, {
+                toValue: result.progress.xpAfter,
+                duration: 1800,
+                useNativeDriver: false,
+            }),
+        ]).start();
+
+        return () => {
+            xpValue.stopAnimation();
+            xpValue.removeListener(listenerId);
+        };
+    }, [
+        onTick,
+        result.progress.levelBefore,
+        result.progress.xpAfter,
+        result.progress.xpBefore,
+        xpValue,
+    ]);
+
+    const progress = getLevelProgress(displayedXp);
+    const breakdown = result.xpBreakdown;
+
+    const bonusPills = [
+        { key: 'position', label: '🏁 POSIÇÃO', value: breakdown.position },
+        { key: 'start', label: '⚡ LARGADA', value: breakdown.perfectStart },
+        { key: 'attack', label: '🎯 ATAQUES', value: breakdown.attacks },
+        { key: 'defense', label: '🛡️ DEFESAS', value: breakdown.defenses },
+        { key: 'flawless', label: '❤️ INTACTO', value: breakdown.flawless },
+        { key: 'comeback', label: '🔥 COMEBACK', value: breakdown.comeback },
+        { key: 'survival', label: '🏁 SOBREVIVEU', value: breakdown.survived },
+    ].filter(item => item.value > 0);
+
+    return (
+        <View style={styles.xpPanel}>
+            <View style={styles.xpHeaderRow}>
+                <Text style={styles.xpTitle}>
+                    ⭐ XP DA CORRIDA
+                </Text>
+
+                <Text style={styles.xpEarned}>
+                    +{result.rewards.xp} XP
+                </Text>
+            </View>
+
+            <View style={styles.xpLevelRow}>
+                <Text style={styles.xpLevelText}>
+                    NÍVEL {progress.level}
+                </Text>
+
+                <Text style={styles.xpValueText}>
+                    {progress.xpIntoLevel}
+                    {' / '}
+                    {progress.xpForNextLevel} XP
+                </Text>
+            </View>
+
+            <View style={styles.xpTrack}>
+                <View
+                    style={[
+                        styles.xpFill,
+                        {
+                            width: `${Math.max(
+                                2,
+                                progress.progress * 100,
+                            )}%`,
+                        },
+                    ]}
+                />
+            </View>
+
+            {showLevelUp && (
+                <Text style={styles.levelUpText}>
+                    ✨ LEVEL UP! NÍVEL {progress.level}
+                </Text>
+            )}
+
+            <View style={styles.xpBreakdownRow}>
+                {bonusPills.map(item => (
+                    <View
+                        key={item.key}
+                        style={styles.xpPill}
+                    >
+                        <Text style={styles.xpPillLabel}>
+                            {item.label}
+                        </Text>
+                        <Text style={styles.xpPillValue}>
+                            +{item.value}
+                        </Text>
+                    </View>
+                ))}
+            </View>
+        </View>
+    );
+};
+
 export default function RaceResultScreen() {
 
     const { playCarArrival, playRewardTick, playRewardComplete, playRareUnlock, playVictory } = useRaceResultSfx();
@@ -483,7 +650,7 @@ export default function RaceResultScreen() {
          * em 2450ms e dura aproximadamente
          * 900ms.
          *
-         * 3600ms deixa um pequeno respiro.
+         * 4900ms deixa a animação de XP terminar primeiro.
          */
         const timer =
             setTimeout(() => {
@@ -505,7 +672,7 @@ export default function RaceResultScreen() {
                 ) {
                     playRareUnlock();
                 }
-            }, 3600);
+            }, 4900);
 
         return () =>
             clearTimeout(timer);
@@ -992,19 +1159,11 @@ export default function RaceResultScreen() {
                             />
                         </View>
 
-                        {result.progress && (
-                            <View style={styles.progressBox}>
-                                <Text style={styles.progressLabel}>
-                                    PROGRESSO
-                                </Text>
-
-                                <Text style={styles.progressValue}>
-                                    {result.progress.trophiesBefore}
-                                    {'  →  '}
-                                    {result.progress.trophiesAfter}
-                                    {' 🏆'}
-                                </Text>
-                            </View>
+                        {result.progress && result.xpBreakdown && (
+                            <XpProgressPanel
+                                result={result}
+                                onTick={playRewardTick}
+                            />
                         )}
 
                         {showUnlocks &&
@@ -1225,6 +1384,94 @@ const styles =
         rewardValue: {
             color: '#FFFFFF',
             fontSize: 21,
+            fontWeight: '900',
+        },
+        xpPanel: {
+            marginTop: 12,
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+            backgroundColor: 'rgba(0,0,0,0.28)',
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.12)',
+        },
+        xpHeaderRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+        },
+        xpTitle: {
+            color: 'rgba(255,255,255,0.68)',
+            fontSize: 9,
+            fontWeight: '900',
+            letterSpacing: 1.6,
+        },
+        xpEarned: {
+            color: '#FFD60A',
+            fontSize: 14,
+            fontWeight: '900',
+        },
+        xpLevelRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginTop: 6,
+        },
+        xpLevelText: {
+            color: '#FFFFFF',
+            fontSize: 15,
+            fontWeight: '900',
+            letterSpacing: 0.8,
+        },
+        xpValueText: {
+            color: 'rgba(255,255,255,0.72)',
+            fontSize: 10,
+            fontWeight: '800',
+        },
+        xpTrack: {
+            height: 10,
+            marginTop: 6,
+            overflow: 'hidden',
+            borderRadius: 999,
+            backgroundColor: 'rgba(255,255,255,0.12)',
+        },
+        xpFill: {
+            height: '100%',
+            borderRadius: 999,
+            backgroundColor: '#FFD60A',
+        },
+        levelUpText: {
+            color: '#FFD60A',
+            fontSize: 11,
+            fontWeight: '900',
+            letterSpacing: 1,
+            marginTop: 6,
+            textAlign: 'center',
+        },
+        xpBreakdownRow: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: 5,
+            marginTop: 7,
+        },
+        xpPill: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: 7,
+            paddingVertical: 4,
+            borderRadius: 999,
+            backgroundColor: 'rgba(255,255,255,0.08)',
+        },
+        xpPillLabel: {
+            color: 'rgba(255,255,255,0.62)',
+            fontSize: 7,
+            fontWeight: '900',
+            letterSpacing: 0.4,
+        },
+        xpPillValue: {
+            color: '#FFFFFF',
+            fontSize: 8,
             fontWeight: '900',
         },
         progressBox: {

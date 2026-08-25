@@ -1,205 +1,146 @@
-import {
-    RaceResult,
-    RaceUnlock,
-    RaceUnlockType,
-} from '@/src/types/raceTypes';
-
 import { usePlayerStore } from '@/src/store/playerStore';
 import { useRaceResultStore } from '@/src/store/raceResultStore';
+import type { MatchRewards } from '@/src/types/playerTypes';
+import type { RaceResult, RaceUnlock } from '@/src/types/raceTypes';
+import {
+  calculateRaceXp,
+  getPlayerLevel,
+  type RacePerformanceStats,
+} from '@/src/utils/progression';
 
-type CompleteRaceStatus =
-  | 'completed'
-  | 'already_processed'
-  | 'no_profile'
-  | 'invalid_race';
-
-interface CompleteRaceResponse {
-  status: CompleteRaceStatus;
-
-  result: RaceResult | null;
-
-  newlyUnlocked: RaceUnlock[];
-}
-
-/**
- * Converte os tipos utilizados pela corrida
- * para as categorias existentes no PlayerStore.
- */
-const getUnlockCategory = (
-  type: RaceUnlockType,
-) => {
-  switch (type) {
-    case 'map':
-      return 'maps' as const;
-
-    case 'card':
-      return 'cards' as const;
-
-    case 'achievement':
-      return 'achievements' as const;
-  }
+type CompleteRaceInput = {
+  raceId: string;
+  position: number;
+  totalRacers: number;
+  carId: string;
+  mapId?: string;
+  carVisual?: {
+    colorFront: string;
+    colorBack: string;
+  };
+  rewards: MatchRewards;
+  performance?: RacePerformanceStats;
+  unlocks?: RaceUnlock[];
+  finishedAt?: number;
+  isNewRecord?: boolean;
 };
 
-const completeRace = (
-  raceResult: RaceResult,
-): CompleteRaceResponse => {
-  const raceId =
-    raceResult.raceId.trim();
+type CompleteRaceResult = {
+  status: 'applied' | 'already_processed' | 'no_profile' | 'invalid_race';
+  result: RaceResult | null;
+};
 
-  if (!raceId) {
-    return {
-      status: 'invalid_race',
-      result: null,
-      newlyUnlocked: [],
-    };
-  }
+const getDefaultPerformance = (
+  position: number,
+): RacePerformanceStats => ({
+  perfectStart: false,
+  successfulAttacks: 0,
+  successfulDefenses: 0,
+  livesLost: 1,
+  worstPosition: Math.max(1, Math.floor(position)),
+  survived: true,
+});
 
-  const playerStore =
-    usePlayerStore.getState();
+const applyUnlocks = (unlocks: RaceUnlock[]) => {
+  const store = usePlayerStore.getState();
 
-  if (!playerStore.profile) {
-    return {
-      status: 'no_profile',
-      result: null,
-      newlyUnlocked: [],
-    };
-  }
-
-  /**
-   * Guardamos a quantidade ANTES da recompensa.
-   *
-   * Isso será usado pela UI para animar:
-   *
-   * 295 -> 313 troféus
-   */
-  const trophiesBefore =
-    playerStore.profile.trophies;
-
-  /**
-   * Esta operação é idempotente.
-   *
-   * Se raceId já tiver sido processado,
-   * a recompensa não entra novamente.
-   */
-  const rewardStatus =
-    playerStore.applyMatchRewardsOnce(
-      raceId,
-      raceResult.rewards,
-    );
-
-  if (
-    rewardStatus ===
-    'no_profile'
-  ) {
-    return {
-      status: 'no_profile',
-      result: null,
-      newlyUnlocked: [],
-    };
-  }
-
-  if (
-    rewardStatus ===
-    'invalid_race'
-  ) {
-    return {
-      status: 'invalid_race',
-      result: null,
-      newlyUnlocked: [],
-    };
-  }
-
-  /**
-   * Desbloqueios também são idempotentes.
-   *
-   * unlockItem() retorna false quando
-   * o item já está desbloqueado.
-   */
-  const newlyUnlocked:
-    RaceUnlock[] = [];
-
-  for (
-    const unlock of
-    raceResult.unlocks ?? []
-  ) {
-    const category =
-      getUnlockCategory(
-        unlock.type,
-      );
-
-    const wasUnlocked =
-      usePlayerStore
-        .getState()
-        .unlockItem(
-          category,
-          unlock.itemId,
-        );
-
-    if (wasUnlocked) {
-      newlyUnlocked.push(
-        unlock,
-      );
+  unlocks.forEach(unlock => {
+    if (unlock.type === 'map') {
+      store.unlockItem('maps', unlock.itemId);
     }
-  }
 
-  const updatedProfile =
-    usePlayerStore.getState()
-      .profile;
+    if (unlock.type === 'card') {
+      store.unlockItem('cards', unlock.itemId);
+    }
 
-  const trophiesAfter =
-    updatedProfile?.trophies ??
-    trophiesBefore;
-
-  const completedResult:
-    RaceResult = {
-    ...raceResult,
-
-    /**
-     * Exibimos somente desbloqueios
-     * realmente novos.
-     *
-     * Se a tela abrir novamente,
-     * não vai fingir que desbloqueou
-     * a mesma coisa outra vez.
-     */
-    unlocks:
-      rewardStatus === 'applied'
-        ? newlyUnlocked
-        : [],
-
-    progress: {
-      trophiesBefore:
-        rewardStatus === 'applied'
-          ? trophiesBefore
-          : trophiesAfter,
-
-      trophiesAfter,
-    },
-  };
-
-  /**
-   * Entrega o resultado pronto
-   * para a RaceResultScreen.
-   */
-  useRaceResultStore
-    .getState()
-    .setResult(
-      completedResult,
-    );
-
-  return {
-    status:
-      rewardStatus ===
-      'already_processed'
-        ? 'already_processed'
-        : 'completed',
-
-    result: completedResult,
-
-    newlyUnlocked,
-  };
+    if (unlock.type === 'achievement') {
+      store.unlockItem('achievements', unlock.itemId);
+    }
+  });
 };
 
 export const raceRewardsService = {
-  completeRace,
+  completeRace(input: CompleteRaceInput): CompleteRaceResult {
+    const safeRaceId = input.raceId.trim();
+
+    if (!safeRaceId) {
+      return { status: 'invalid_race', result: null };
+    }
+
+    const beforeProfile = usePlayerStore.getState().profile;
+
+    if (!beforeProfile) {
+      return { status: 'no_profile', result: null };
+    }
+
+    const performance = input.performance ?? getDefaultPerformance(input.position);
+    const xpBreakdown = calculateRaceXp(
+      input.position,
+      input.totalRacers,
+      performance,
+    );
+
+    const rewards: MatchRewards & { xp: number } = {
+      motor: input.rewards.motor,
+      spray: input.rewards.spray,
+      engrenagem: input.rewards.engrenagem,
+      trophies: input.rewards.trophies,
+      xp: xpBreakdown.total,
+    };
+
+    const rewardStatus = usePlayerStore
+      .getState()
+      .applyMatchRewardsOnce(safeRaceId, rewards);
+
+    if (rewardStatus !== 'applied') {
+      return {
+        status: rewardStatus,
+        result: null,
+      };
+    }
+
+    const unlocks = input.unlocks ?? [];
+    applyUnlocks(unlocks);
+
+    const afterProfile = usePlayerStore.getState().profile;
+
+    if (!afterProfile) {
+      return { status: 'no_profile', result: null };
+    }
+
+    const xpBefore = Math.max(0, beforeProfile.xp ?? 0);
+    const xpAfter = Math.max(0, afterProfile.xp ?? 0);
+
+    const result: RaceResult = {
+      raceId: safeRaceId,
+      position: input.position,
+      totalRacers: input.totalRacers,
+      carId: input.carId,
+      mapId: input.mapId,
+      carVisual: input.carVisual ?? {
+        colorFront: '#cc0000',
+        colorBack: '#000000',
+      },
+      rewards,
+      xpBreakdown,
+      unlocks,
+      finishedAt: input.finishedAt ?? Date.now(),
+      isNewRecord: Boolean(input.isNewRecord),
+      progress: {
+        trophiesBefore: beforeProfile.trophies,
+        trophiesAfter: afterProfile.trophies,
+        xpBefore,
+        xpAfter,
+        levelBefore: getPlayerLevel(xpBefore),
+        levelAfter: getPlayerLevel(xpAfter),
+      },
+    };
+
+    useRaceResultStore.getState().setResult(result);
+
+    return {
+      status: 'applied',
+      result,
+    };
+  },
 };
