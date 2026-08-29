@@ -1,4 +1,6 @@
 import PreRaceAssetPreloader from '@/components/PreRaceAssetPreloader';
+import { useLanguage } from '@/context/LanguageContext';
+import { getRandomLoadingTipKey, LOADING_TIP_KEYS, LoadingTipKey } from '@/src/utils/loadingTips';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -10,15 +12,12 @@ import {
   View,
 } from 'react-native';
 
-const TIPS = [
-  'Use suas cartas de corrida no momento certo para virar o jogo!',
-  'Gatos correm mais rápido, mas cachorros têm mais resistência?',
-  'Preparando os motores e embaralhando o deck...',
-  'Dica: Curvas fechadas exigem mais controle!',
-];
+
 
 export default function LoadingScreen() {
   const router = useRouter();
+
+  const { t } = useLanguage();
 
   const params = useLocalSearchParams<{
     next?: string;
@@ -37,7 +36,8 @@ export default function LoadingScreen() {
   );
   const [minimumTimePassed, setMinimumTimePassed] =
     useState(false);
-  const [tip, setTip] = useState('');
+
+  const [tipKey, setTipKey] = useState<LoadingTipKey>(LOADING_TIP_KEYS[0]);
 
   const progress = useRef(
     new Animated.Value(0),
@@ -61,10 +61,9 @@ export default function LoadingScreen() {
    * e avisa via onReady quando as imagens terminaram.
    */
   useEffect(() => {
-    const randomTip =
-      TIPS[Math.floor(Math.random() * TIPS.length)];
-
-    setTip(randomTip);
+    setTipKey(
+      getRandomLoadingTipKey()
+    );
     setAssetsReady(!shouldPreloadPreRace);
     setMinimumTimePassed(false);
     navigationStartedRef.current = false;
@@ -161,12 +160,12 @@ export default function LoadingScreen() {
 
       <View style={styles.cardContainer}>
         <Text style={styles.title}>
-          CARREGANDO...
+           {t('loading.title')}
         </Text>
 
         <View style={styles.tipBox}>
           <Text style={styles.tipText}>
-            {tip}
+             {t(tipKey)}
           </Text>
         </View>
 

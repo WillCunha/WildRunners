@@ -1,4 +1,5 @@
 import Carro from '@/components/Carro';
+import { useLanguage } from '@/context/LanguageContext';
 import { useRaceResultSfx } from '@/src/audio/raceSfx';
 import { useRaceResultStore } from '@/src/store/raceResultStore';
 import { RaceResult, RewardRarity } from '@/src/types/raceTypes';
@@ -190,14 +191,28 @@ const getResultTheme = (
     };
 };
 
-const getPositionLabel = (
-    position: number,
+const getEnglishOrdinalSuffix = (
+    value: number,
 ) => {
-    if (position === 1) {
-        return 'VENCEDOR!';
+    const mod100 = value % 100;
+
+    if (mod100 >= 11 && mod100 <= 13) {
+        return 'TH';
     }
 
-    return `${position}º LUGAR`;
+    switch (value % 10) {
+        case 1:
+            return 'ST';
+
+        case 2:
+            return 'ND';
+
+        case 3:
+            return 'RD';
+
+        default:
+            return 'TH';
+    }
 };
 
 const RewardCounter = ({
@@ -406,6 +421,8 @@ const XpProgressPanel = ({
     result,
     onTick,
 }: XpProgressPanelProps) => {
+    const { t } = useLanguage();
+
     const xpValue = useRef(
         new Animated.Value(
             result.progress.xpBefore,
@@ -490,20 +507,62 @@ const XpProgressPanel = ({
     const breakdown = result.xpBreakdown;
 
     const bonusPills = [
-        { key: 'position', label: '🏁 POSIÇÃO', value: breakdown.position },
-        { key: 'start', label: '⚡ LARGADA', value: breakdown.perfectStart },
-        { key: 'attack', label: '🎯 ATAQUES', value: breakdown.attacks },
-        { key: 'defense', label: '🛡️ DEFESAS', value: breakdown.defenses },
-        { key: 'flawless', label: '❤️ INTACTO', value: breakdown.flawless },
-        { key: 'comeback', label: '🔥 COMEBACK', value: breakdown.comeback },
-        { key: 'survival', label: '🏁 SOBREVIVEU', value: breakdown.survived },
+        {
+            key: 'position',
+            label: t(
+                'raceResult.xpBonus.position',
+            ),
+            value: breakdown.position,
+        },
+        {
+            key: 'start',
+            label: t(
+                'raceResult.xpBonus.perfectStart',
+            ),
+            value: breakdown.perfectStart,
+        },
+        {
+            key: 'attack',
+            label: t(
+                'raceResult.xpBonus.attacks',
+            ),
+            value: breakdown.attacks,
+        },
+        {
+            key: 'defense',
+            label: t(
+                'raceResult.xpBonus.defenses',
+            ),
+            value: breakdown.defenses,
+        },
+        {
+            key: 'flawless',
+            label: t(
+                'raceResult.xpBonus.flawless',
+            ),
+            value: breakdown.flawless,
+        },
+        {
+            key: 'comeback',
+            label: t(
+                'raceResult.xpBonus.comeback',
+            ),
+            value: breakdown.comeback,
+        },
+        {
+            key: 'survival',
+            label: t(
+                'raceResult.xpBonus.survived',
+            ),
+            value: breakdown.survived,
+        },
     ].filter(item => item.value > 0);
 
     return (
         <View style={styles.xpPanel}>
             <View style={styles.xpHeaderRow}>
                 <Text style={styles.xpTitle}>
-                    ⭐ XP DA CORRIDA
+                    {t('raceResult.raceXp')}
                 </Text>
 
                 <Text style={styles.xpEarned}>
@@ -513,7 +572,7 @@ const XpProgressPanel = ({
 
             <View style={styles.xpLevelRow}>
                 <Text style={styles.xpLevelText}>
-                    NÍVEL {progress.level}
+                    {t('raceResult.level')} {progress.level}
                 </Text>
 
                 <Text style={styles.xpValueText}>
@@ -539,7 +598,9 @@ const XpProgressPanel = ({
 
             {showLevelUp && (
                 <Text style={styles.levelUpText}>
-                    ✨ LEVEL UP! NÍVEL {progress.level}
+                    {t('raceResult.levelUp', {
+                        level: progress.level,
+                    })}
                 </Text>
             )}
 
@@ -563,6 +624,8 @@ const XpProgressPanel = ({
 };
 
 export default function RaceResultScreen() {
+    const { t, language, } = useLanguage();
+
 
     const { playCarArrival, playRewardTick, playRewardComplete, playRareUnlock, playVictory } = useRaceResultSfx();
 
@@ -634,6 +697,8 @@ export default function RaceResultScreen() {
 
             [result],
         );
+
+
 
     useEffect(() => {
         setShowUnlocks(false);
@@ -879,34 +944,78 @@ export default function RaceResultScreen() {
         playCarArrival,
     ]);
 
-    if (
-        !result ||
-        !theme
-    ) {
+    const getUnlockTypeLabel = (
+        type: string,
+    ) => {
+        switch (type) {
+            case 'card':
+                return t(
+                    'raceResult.unlockTypes.card',
+                );
+
+            case 'car':
+                return t(
+                    'raceResult.unlockTypes.car',
+                );
+
+            case 'map':
+                return t(
+                    'raceResult.unlockTypes.map',
+                );
+
+            default:
+                return type.toUpperCase();
+        }
+    };
+
+    if (!result || !theme) {
         return (
-            <View
-                style={
-                    styles.emptyContainer
-                }
-            >
-                <Text
-                    style={
-                        styles.emptyTitle
-                    }
-                >
-                    Nenhum resultado
-                    disponível
+            <View style={styles.emptyContainer}>
+                <Text style={styles.emptyTitle}>
+                    {t('raceResult.noResult')}
                 </Text>
 
                 <TouchableOpacity
-                    style={styles.continueButton} onPress={() => router.replace('/CarSelectionScreen')} >
-                    <Text style={styles.buttonText} >
-                        CONTINUAR
+                    style={styles.continueButton}
+                    onPress={() =>
+                        router.replace(
+                            '/CarSelectionScreen',
+                        )
+                    }
+                >
+                    <Text style={styles.buttonText}>
+                        {t(
+                            'raceResult.continueSimple',
+                        )}
                     </Text>
                 </TouchableOpacity>
             </View>
         );
     }
+
+    const positionLabel =
+        result.position === 1
+            ? t('raceResult.winner')
+            : language === 'en'
+                ? t(
+                    'raceResult.positionPlace',
+                    {
+                        position:
+                            result.position,
+
+                        suffix:
+                            getEnglishOrdinalSuffix(
+                                result.position,
+                            ),
+                    },
+                )
+                : t(
+                    'raceResult.positionPlace',
+                    {
+                        position:
+                            result.position,
+                    },
+                );
 
     const carImage =
         getCarImageSource(
@@ -1008,8 +1117,7 @@ export default function RaceResultScreen() {
                                 },
                             ]}
                         >
-                            CORRIDA
-                            CONCLUÍDA
+                            {t('raceResult.raceCompleted')}
                         </Animated.Text>
 
                         <Animated.Text
@@ -1029,9 +1137,7 @@ export default function RaceResultScreen() {
                                 },
                             ]}
                         >
-                            {getPositionLabel(
-                                result.position,
-                            )}
+                            {positionLabel}
                         </Animated.Text>
 
                         <Animated.View
@@ -1091,8 +1197,7 @@ export default function RaceResultScreen() {
                                         styles.recordText
                                     }
                                 >
-                                    ✨ NOVO
-                                    RECORDE!
+                                    {t('raceResult.newRecord')}
                                 </Text>
                             </View>
                         )}
@@ -1102,155 +1207,150 @@ export default function RaceResultScreen() {
 
                     <View style={styles.rightColumn} >
                         <Text style={styles.sectionTitle}>
-                            RECOMPENSAS
+                            {t('raceResult.newRecord')}
                         </Text>
 
-                        <View style={styles.rewardsGrid}>
-                            <RewardCounter
-                                icon="⚙️"
-                                label="ENGRENAGENS"
-                                amount={result.rewards.engrenagem}
-                                delay={1700}
-                                onTick={
-                                    playRewardTick
-                                }
-                                onComplete={
-                                    playRewardComplete
-                                }
-                            />
-
-                            <RewardCounter
-                                icon="🏆"
-                                label="TROFÉUS"
-                                amount={result.rewards.trophies}
-                                delay={1950}
-                                onTick={
-                                    playRewardTick
-                                }
-                                onComplete={
-                                    playRewardComplete
-                                }
-                            />
-
-                            <RewardCounter
-                                icon="🔧"
-                                label="MOTOR"
-                                amount={result.rewards.motor}
-                                delay={2200}
-                                onTick={
-                                    playRewardTick
-                                }
-                                onComplete={
-                                    playRewardComplete
-                                }
-                            />
-
-                            <RewardCounter
-                                icon="🎨"
-                                label="SPRAY"
-                                amount={result.rewards.spray}
-                                delay={2450}
-                                onTick={
-                                    playRewardTick
-                                }
-                                onComplete={
-                                    playRewardComplete
-                                }
-                            />
-                        </View>
-
-                        {result.progress && result.xpBreakdown && (
-                            <XpProgressPanel
-                                result={result}
-                                onTick={playRewardTick}
-                            />
-                        )}
-
-                        {showUnlocks &&
-                            result.unlocks.length >
-                            0 && (
-                                <View
-                                    style={
-                                        styles.unlockArea
-                                    }
-                                >
-                                    <Text
-                                        style={
-                                            styles.unlockTitle
-                                        }
-                                    >
-                                        🔓 NOVO
-                                        DESBLOQUEIO
-                                    </Text>
-
-                                    {result.unlocks.map(
-                                        unlock => (
-                                            <View
-                                                key={
-                                                    unlock.id
-                                                }
-                                                style={
-                                                    styles.unlockCard
-                                                }
-                                            >
-                                                <Text
-                                                    style={
-                                                        styles.unlockName
-                                                    }
-                                                >
-                                                    {
-                                                        unlock.name
-                                                    }
-                                                </Text>
-
-                                                <Text
-                                                    style={
-                                                        styles.unlockType
-                                                    }
-                                                >
-                                                    {unlock.type.toUpperCase()}
-                                                </Text>
-                                            </View>
-                                        ),
-                                    )}
-                                </View>
-                            )}
-
-                        <View
-                            style={
-                                styles.actions
+                        <RewardCounter
+                            icon="⚙️"
+                            label={t('raceResult.gears')}
+                            amount={
+                                result.rewards.engrenagem
                             }
-                        >
-                            <TouchableOpacity
-                                style={
-                                    styles.secondaryButton
-                                }
-                                onPress={
-                                    handleRaceAgain
-                                }
-                            >
-                                <Text style={styles.secondaryButtonText} >
-                                    CORRER NOVAMENTE
-                                </Text>
-                            </TouchableOpacity>
+                            delay={1700}
+                            onTick={playRewardTick}
+                            onComplete={
+                                playRewardComplete
+                            }
+                        />
 
-                            <TouchableOpacity
+                        <RewardCounter
+                            icon="🏆"
+                            label={t('raceResult.trophies')}
+                            amount={
+                                result.rewards.trophies
+                            }
+                            delay={1950}
+                            onTick={playRewardTick}
+                            onComplete={
+                                playRewardComplete
+                            }
+                        />
+
+                        <RewardCounter
+                            icon="🔧"
+                            label={t('raceResult.engine')}
+                            amount={result.rewards.motor}
+                            delay={2200}
+                            onTick={playRewardTick}
+                            onComplete={
+                                playRewardComplete
+                            }
+                        />
+
+                        <RewardCounter
+                            icon="🎨"
+                            label={t('raceResult.spray')}
+                            amount={result.rewards.spray}
+                            delay={2450}
+                            onTick={playRewardTick}
+                            onComplete={
+                                playRewardComplete
+                            }
+                        />
+                    </View>
+
+                    {result.progress && result.xpBreakdown && (
+                        <XpProgressPanel
+                            result={result}
+                            onTick={playRewardTick}
+                        />
+                    )}
+
+                    {showUnlocks &&
+                        result.unlocks.length >
+                        0 && (
+                            <View
                                 style={
-                                    styles.continueButton
-                                }
-                                onPress={
-                                    handleContinue
+                                    styles.unlockArea
                                 }
                             >
                                 <Text
                                     style={
-                                        styles.buttonText
+                                        styles.unlockTitle
                                     }
                                 >
-                                    CONTINUAR →
+                                    {t('raceResult.newUnlock')}
                                 </Text>
-                            </TouchableOpacity>
-                        </View>
+
+                                {result.unlocks.map(
+                                    unlock => (
+                                        <View
+                                            key={
+                                                unlock.id
+                                            }
+                                            style={
+                                                styles.unlockCard
+                                            }
+                                        >
+                                            <Text
+                                                style={
+                                                    styles.unlockName
+                                                }
+                                            >
+                                                {
+                                                    unlock.name
+                                                }
+                                            </Text>
+
+                                            <Text
+                                                style={
+                                                    styles.unlockType
+                                                }
+                                            >
+                                                {getUnlockTypeLabel(
+                                                    unlock.type,
+                                                )}
+                                            </Text>
+                                        </View>
+                                    ),
+                                )}
+                            </View>
+                        )}
+
+                    <View
+                        style={
+                            styles.actions
+                        }
+                    >
+                        <TouchableOpacity
+                            style={
+                                styles.secondaryButton
+                            }
+                            onPress={
+                                handleRaceAgain
+                            }
+                        >
+                            <Text style={styles.secondaryButtonText} >
+                                {t('raceResult.raceAgain')}
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={
+                                styles.continueButton
+                            }
+                            onPress={
+                                handleContinue
+                            }
+                        >
+                            <Text
+                                style={
+                                    styles.buttonText
+                                }
+                            >
+                                {t('raceResult.continue')}
+                            </Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
             </SafeAreaView>

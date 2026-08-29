@@ -4,7 +4,17 @@ const ptBR = {
     subtitle: 'Você poderá alterar o idioma depois nas configurações.',
     portuguese: 'Português',
     english: 'English',
+    spanish: 'Español',
     continue: 'CONTINUAR',
+  },
+  loading: {
+    title: 'CARREGANDO...',
+    tips: {
+      cardsTiming: 'Use suas cartas de corrida no momento certo para virar o jogo!',
+      catsAndDogs: 'Gatos correm mais rápido, mas cachorros têm mais resistência?',
+      preparingRace: 'Preparando os motores e embaralhando o deck...',
+      tightTurns: 'Dica: Curvas fechadas exigem mais controle!',
+    },
   },
   start: {
     pressToStart: 'PRESSIONE PARA COMEÇAR',
@@ -256,6 +266,134 @@ const ptBR = {
 
     raceOnTrack: 'CORRER NESTA PISTA',
     lockedButton: 'BLOQUEADA • NV. %{level}',
+  },
+
+  workshop: {
+    title: 'WILD WORKSHOP',
+    subtitle: 'PERFORMANCE LAB / EVOLUA SUA MÁQUINA',
+
+    level: 'NÍVEL',
+    levelShort: 'NV.',
+    maxLevel: 'NÍVEL MÁXIMO %{level}',
+
+    engine: 'MOTOR',
+    parts: 'PEÇAS',
+    spray: 'SPRAY',
+
+    vehicleInMaintenance: 'VEÍCULO EM MANUTENÇÃO',
+    category: 'CATEGORIA',
+    status: 'STATUS',
+    rarity: 'RARIDADE',
+    onBench: 'NA BANCADA',
+
+    installedConfiguration: 'CONFIGURAÇÃO INSTALADA',
+
+    speed: 'VELOCIDADE',
+    acceleration: 'ACELERAÇÃO',
+    jumpPower: 'FORÇA DO PULO',
+    defense: 'DEFESA',
+
+    technicalBench: 'BANCADA TÉCNICA',
+    upgrades: 'UPGRADES',
+    online: 'ONLINE',
+
+    upgradesDescription:
+      'Instale melhorias permanentes usando as peças coletadas nas corridas.',
+
+    nextLevelCost: 'CUSTO DO PRÓXIMO NÍVEL',
+    balance: 'SALDO',
+    upgradeComplete: 'UPGRADE COMPLETO',
+
+    install: 'INSTALAR',
+    maximum: 'MÁXIMO',
+    noParts: 'SEM PEÇAS',
+
+    insufficientResourcesTitle: 'RECURSOS INSUFICIENTES',
+    insufficientResourcesMessage:
+      'Você precisa de %{cost} %{resource} para este upgrade.',
+
+    resources: {
+      engineParts: 'peças de motor',
+      gears: 'engrenagens',
+      sprays: 'sprays',
+    },
+
+    upgradeItems: {
+      maxSpeed: {
+        title: 'Velocidade Máxima',
+        subtitle: 'Aumenta a velocidade final do veículo',
+      },
+
+      acceleration: {
+        title: 'Aceleração',
+        subtitle: 'Melhora a resposta e retomada de velocidade',
+      },
+
+      jumpPower: {
+        title: 'Força do Pulo',
+        subtitle: 'Aumenta a potência dos saltos',
+      },
+
+      defense: {
+        title: 'Defesa / Resistência',
+        subtitle: 'Fortalece o veículo contra ataques',
+      },
+
+      rarity: {
+        title: 'Estética e Raridade',
+        subtitle: 'Eleva o nível visual e a raridade do carro',
+      },
+    },
+
+    carNotFound: {
+      eyebrow: 'WILD WORKSHOP',
+      title: 'CARRO NÃO ENCONTRADO',
+      message:
+        'Selecione um veículo da sua garagem antes de abrir a oficina.',
+    },
+  },
+  raceResult: {
+    raceCompleted: 'CORRIDA CONCLUÍDA',
+
+    winner: 'VENCEDOR!',
+    positionPlace: '%{position}º LUGAR',
+
+    newRecord: '✨ NOVO RECORDE!',
+
+    rewards: 'RECOMPENSAS',
+
+    gears: 'ENGRENAGENS',
+    trophies: 'TROFÉUS',
+    engine: 'MOTOR',
+    spray: 'SPRAY',
+
+    raceXp: '⭐ XP DA CORRIDA',
+    level: 'NÍVEL',
+    levelUp: '✨ SUBIU DE NÍVEL! NÍVEL %{level}',
+
+    xpBonus: {
+      position: '🏁 POSIÇÃO',
+      perfectStart: '⚡ LARGADA',
+      attacks: '🎯 ATAQUES',
+      defenses: '🛡️ DEFESAS',
+      flawless: '❤️ INTACTO',
+      comeback: '🔥 COMEBACK',
+      survived: '🏁 SOBREVIVEU',
+    },
+
+    newUnlock: '🔓 NOVO DESBLOQUEIO',
+
+    unlockTypes: {
+      card: 'CARTA',
+      car: 'CARRO',
+      map: 'PISTA',
+    },
+
+    raceAgain: 'CORRER NOVAMENTE',
+    continue: 'CONTINUAR →',
+
+    noResult: 'Nenhum resultado disponível',
+    continueSimple: 'CONTINUAR',
   },
 };
 

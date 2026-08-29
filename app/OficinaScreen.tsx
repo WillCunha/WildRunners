@@ -1,4 +1,5 @@
 import { useCarSelection } from '@/context/CarContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { carMaps } from '@/src/utils/carMaps';
 import { StatusBar } from 'expo-status-bar';
@@ -41,6 +42,7 @@ const CarCanvas = React.memo(
         const car = carMaps[carId];
         const scale = width / car.baseSize.width;
         const height = car.baseSize.height * scale;
+        const { t } = useLanguage();
 
         return (
             <View style={{ width, height }}>
@@ -97,29 +99,49 @@ const CarCanvas = React.memo(
     },
 );
 
-const StatBar = ({ label, progress, level }: StatBarProps) => (
-    <View style={styles.statBlock}>
-        <View style={styles.statHeader}>
-            <Text style={styles.statLabel}>{label}</Text>
-            <Text style={styles.statValue}>NV. {level}</Text>
-        </View>
+const StatBar = ({
+    label,
+    progress,
+    level,
+}: StatBarProps) => {
+    const { t } = useLanguage();
 
-        <View style={styles.statTrack}>
-            <View
-                style={[
-                    styles.statFill,
-                    { width: `${Math.max(4, Math.min(100, progress))}%` },
-                ]}
-            />
-            <View style={styles.statMarkerOne} />
-            <View style={styles.statMarkerTwo} />
+    return (
+        <View style={styles.statBlock}>
+            <View style={styles.statHeader}>
+                <Text style={styles.statLabel}>
+                    {label}
+                </Text>
+
+                <Text style={styles.statValue}>
+                    {t('workshop.levelShort')} {level}
+                </Text>
+            </View>
+
+            <View style={styles.statTrack}>
+                <View
+                    style={[
+                        styles.statFill,
+                        {
+                            width: `${Math.max(
+                                4,
+                                Math.min(100, progress),
+                            )}%`,
+                        },
+                    ]}
+                />
+
+                <View style={styles.statMarkerOne} />
+                <View style={styles.statMarkerTwo} />
+            </View>
         </View>
-    </View>
-);
+    );
+};
 
 export default function OficinaScreen() {
     const { width, height } = useWindowDimensions();
     const isCompactLandscape = height < 430;
+    const { t } = useLanguage();
 
     const {
         selectedCar,
@@ -138,11 +160,18 @@ export default function OficinaScreen() {
         return (
             <SafeAreaView style={styles.safeArea}>
                 <StatusBar hidden={true} />
+
                 <View style={styles.errorContainer}>
-                    <Text style={styles.errorEyebrow}>WILD WORKSHOP</Text>
-                    <Text style={styles.errorTitle}>CARRO NÃO ENCONTRADO</Text>
+                    <Text style={styles.errorEyebrow}>
+                        {t('workshop.carNotFound.eyebrow')}
+                    </Text>
+
+                    <Text style={styles.errorTitle}>
+                        {t('workshop.carNotFound.title')}
+                    </Text>
+
                     <Text style={styles.errorText}>
-                        Selecione um veículo da sua garagem antes de abrir a oficina.
+                        {t('workshop.carNotFound.message')}
                     </Text>
                 </View>
             </SafeAreaView>
@@ -172,14 +201,14 @@ export default function OficinaScreen() {
         category: PartCategory,
     ) => {
         if (category === 'motor') {
-            return 'peças de motor';
+            return t('workshop.resources.engineParts');
         }
 
         if (category === 'engrenagem') {
-            return 'engrenagens';
+            return t('workshop.resources.gears');
         }
 
-        return 'sprays';
+        return t('workshop.resources.sprays');
     };
 
     const renderUpgradeItem = (
@@ -206,12 +235,14 @@ export default function OficinaScreen() {
                 upgradeCost,
             );
 
-            if (!success) {
-                Alert.alert(
-                    'RECURSOS INSUFICIENTES',
-                    `Você precisa de ${upgradeCost} ${getResourceName(partCategory)} para este upgrade.`,
-                );
-            }
+            Alert.alert(
+                t('workshop.insufficientResourcesTitle'),
+
+                t('workshop.insufficientResourcesMessage', {
+                    cost: upgradeCost,
+                    resource: getResourceName(partCategory),
+                }),
+            );
         };
 
         return (
@@ -227,7 +258,7 @@ export default function OficinaScreen() {
                     </View>
 
                     <View style={styles.levelBadge}>
-                        <Text style={styles.levelBadgeLabel}>NÍVEL</Text>
+                        <Text style={styles.levelBadgeLabel}> {t('workshop.level')}</Text>
                         <Text style={styles.levelBadgeValue}>
                             {currentLevel}/{MAX_LEVEL}
                         </Text>
@@ -248,7 +279,9 @@ export default function OficinaScreen() {
                 <View style={styles.upgradeFooter}>
                     <View>
                         <Text style={styles.costLabel}>
-                            {isMaxed ? 'STATUS' : 'CUSTO DO PRÓXIMO NÍVEL'}
+                            {isMaxed
+                                ? t('workshop.status')
+                                : t('workshop.nextLevelCost')}
                         </Text>
                         <Text
                             style={[
@@ -257,8 +290,10 @@ export default function OficinaScreen() {
                             ]}
                         >
                             {isMaxed
-                                ? 'UPGRADE COMPLETO'
-                                : `${icon} ${upgradeCost}  •  SALDO ${balance}`}
+                                ? t('workshop.upgradeComplete')
+                                : `${icon} ${upgradeCost}  •  ${t(
+                                    'workshop.balance',
+                                )} ${balance}`}
                         </Text>
                     </View>
 
@@ -275,11 +310,18 @@ export default function OficinaScreen() {
                         <Text
                             style={[
                                 styles.upgradeButtonText,
-                                !canAfford && !isMaxed && styles.upgradeButtonTextLow,
-                                isMaxed && styles.upgradeButtonTextMaxed,
+                                !canAfford &&
+                                !isMaxed &&
+                                styles.upgradeButtonTextLow,
+                                isMaxed &&
+                                styles.upgradeButtonTextMaxed,
                             ]}
                         >
-                            {isMaxed ? 'MÁXIMO' : canAfford ? 'INSTALAR' : 'SEM PEÇAS'}
+                            {isMaxed
+                                ? t('workshop.maximum')
+                                : canAfford
+                                    ? t('workshop.install')
+                                    : t('workshop.noParts')}
                         </Text>
                     </TouchableOpacity>
                 </View>
@@ -303,28 +345,28 @@ export default function OficinaScreen() {
                                 isCompactLandscape && styles.titleCompact,
                             ]}
                         >
-                            WILD WORKSHOP
+                            {t('workshop.title')}
                         </Text>
                         <Text style={styles.subtitle}>
-                            PERFORMANCE LAB / EVOLUA SUA MÁQUINA
+                            {t('workshop.subtitle')}
                         </Text>
                     </View>
 
                     <View style={styles.accountRow}>
                         <View style={styles.accountBadge}>
-                            <Text style={styles.accountLabel}>MOTOR</Text>
+                            <Text style={styles.accountLabel}>{t('workshop.engine')}</Text>
                             <Text style={styles.accountValue}>⚙️ {myParts.engrenagem}</Text>
                         </View>
 
                         <View style={styles.accountBadge}>
-                            <Text style={styles.accountLabel}>PEÇAS</Text>
+                            <Text style={styles.accountLabel}>{t('workshop.parts')}</Text>
                             <Text style={styles.accountValue}>
                                 🔧 {myParts.motor}
                             </Text>
                         </View>
 
                         <View style={styles.accountBadge}>
-                            <Text style={styles.accountLabel}>SPRAY</Text>
+                            <Text style={styles.accountLabel}> {t('workshop.spray')}</Text>
                             <Text style={styles.accountValue}>🎨 {myParts.spray}</Text>
                         </View>
                     </View>
@@ -341,7 +383,7 @@ export default function OficinaScreen() {
                             <View style={styles.vehicleIdentityRow}>
                                 <View>
                                     <Text style={styles.vehicleEyebrow}>
-                                        VEÍCULO EM MANUTENÇÃO
+                                        {t('workshop.vehicleInMaintenance')}
                                     </Text>
                                     <Text
                                         style={[
@@ -356,20 +398,20 @@ export default function OficinaScreen() {
 
                                 <View style={styles.vehicleBadgesRow}>
                                     <View style={styles.vehicleBadge}>
-                                        <Text style={styles.vehicleBadgeLabel}>CATEGORIA</Text>
+                                        <Text style={styles.vehicleBadgeLabel}>   {t('workshop.category')}</Text>
                                         <Text style={styles.vehicleBadgeValue}>
-                                            NÍVEL {carData.tier}
+                                            {t('workshop.level')} {carData.tier}
                                         </Text>
                                     </View>
                                     <View style={[styles.vehicleBadge, styles.readyBadge]}>
-                                        <Text style={styles.vehicleBadgeLabel}>STATUS</Text>
+                                        <Text style={styles.vehicleBadgeLabel}> {t('workshop.status')}</Text>
                                         <Text style={[styles.vehicleBadgeValue, styles.readyText]}>
-                                            NA BANCADA
+                                            {t('workshop.onBench')}
                                         </Text>
                                     </View>
                                     <View style={styles.vehicleBadge}>
-                                        <Text style={styles.vehicleBadgeLabel}>RARIDADE</Text>
-                                        <Text style={styles.vehicleBadgeValue}>NV. {rarityLevel}</Text>
+                                        <Text style={styles.vehicleBadgeLabel}>  {t('workshop.rarity')}</Text>
+                                        <Text style={styles.vehicleBadgeValue}> {t('workshop.levelShort')} {rarityLevel}</Text>
                                     </View>
                                 </View>
                             </View>
@@ -386,38 +428,40 @@ export default function OficinaScreen() {
                             <View style={styles.statsDock}>
                                 <View style={styles.statsDockHeader}>
                                     <Text style={styles.statsDockTitle}>
-                                        CONFIGURAÇÃO INSTALADA
+                                        {t('workshop.installedConfiguration')}
                                     </Text>
                                     <Text style={styles.statsDockMeta}>
-                                        NÍVEL MÁXIMO {MAX_LEVEL}
+                                        {t('workshop.maxLevel', {
+                                            level: MAX_LEVEL,
+                                        })}
                                     </Text>
                                 </View>
 
                                 <View style={styles.statsGrid}>
                                     <View style={styles.statCell}>
                                         <StatBar
-                                            label="VELOCIDADE"
+                                            label={t('workshop.speed')}
                                             level={speedLevel}
                                             progress={calculateProgress(speedLevel)}
                                         />
                                     </View>
                                     <View style={styles.statCell}>
                                         <StatBar
-                                            label="ACELERAÇÃO"
+                                            label={t('workshop.acceleration')}
                                             level={accelerationLevel}
                                             progress={calculateProgress(accelerationLevel)}
                                         />
                                     </View>
                                     <View style={styles.statCell}>
                                         <StatBar
-                                            label="FORÇA DO PULO"
+                                            label={t('workshop.jumpPower')}
                                             level={jumpLevel}
                                             progress={calculateProgress(jumpLevel)}
                                         />
                                     </View>
                                     <View style={styles.statCell}>
                                         <StatBar
-                                            label="DEFESA"
+                                            label={t('workshop.defense')}
                                             level={defenseLevel}
                                             progress={calculateProgress(defenseLevel)}
                                         />
@@ -430,17 +474,17 @@ export default function OficinaScreen() {
                     <View style={styles.upgradesPane}>
                         <View style={styles.upgradesHeader}>
                             <View>
-                                <Text style={styles.upgradesEyebrow}>BANCADA TÉCNICA</Text>
-                                <Text style={styles.upgradesTitle}>UPGRADES</Text>
+                                <Text style={styles.upgradesEyebrow}>{t('workshop.technicalBench')}</Text>
+                                <Text style={styles.upgradesTitle}> {t('workshop.upgrades')}</Text>
                             </View>
                             <View style={styles.workshopStatusBadge}>
                                 <View style={styles.workshopStatusDot} />
-                                <Text style={styles.workshopStatusText}>ONLINE</Text>
+                                <Text style={styles.workshopStatusText}>  {t('workshop.online')}</Text>
                             </View>
                         </View>
 
                         <Text style={styles.upgradesDescription}>
-                            Instale melhorias permanentes usando as peças coletadas nas corridas.
+                            {t('workshop.upgradesDescription')}
                         </Text>
 
                         <ScrollView
@@ -450,40 +494,44 @@ export default function OficinaScreen() {
                             bounces={false}
                         >
                             {renderUpgradeItem(
-                                'Velocidade Máxima',
-                                'Aumenta a velocidade final do veículo',
+                                t('workshop.upgradeItems.maxSpeed.title'),
+                                t('workshop.upgradeItems.maxSpeed.subtitle'),
                                 speedLevel,
                                 'engrenagem',
                                 'speedLevel',
                                 '⚙️',
                             )}
+
                             {renderUpgradeItem(
-                                'Aceleração',
-                                'Melhora a resposta e retomada de velocidade',
+                                t('workshop.upgradeItems.acceleration.title'),
+                                t('workshop.upgradeItems.acceleration.subtitle'),
                                 accelerationLevel,
                                 'motor',
                                 'accelerationLevel',
                                 '🔧',
                             )}
+
                             {renderUpgradeItem(
-                                'Força do Pulo',
-                                'Aumenta a potência dos saltos',
+                                t('workshop.upgradeItems.jumpPower.title'),
+                                t('workshop.upgradeItems.jumpPower.subtitle'),
                                 jumpLevel,
                                 'motor',
                                 'jumpPowerLevel',
                                 '🔧',
                             )}
+
                             {renderUpgradeItem(
-                                'Defesa / Resistência',
-                                'Fortalece o veículo contra ataques',
+                                t('workshop.upgradeItems.defense.title'),
+                                t('workshop.upgradeItems.defense.subtitle'),
                                 defenseLevel,
                                 'engrenagem',
                                 'defenseLevel',
                                 '⚙️',
                             )}
+
                             {renderUpgradeItem(
-                                'Estética e Raridade',
-                                'Eleva o nível visual e a raridade do carro',
+                                t('workshop.upgradeItems.rarity.title'),
+                                t('workshop.upgradeItems.rarity.subtitle'),
                                 rarityLevel,
                                 'spray',
                                 'rarityLevel',

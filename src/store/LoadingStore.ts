@@ -1,25 +1,40 @@
+import {
+  getRandomLoadingTipKey,
+  LOADING_TIP_KEYS,
+  LoadingTipKey,
+} from '@/src/utils/loadingTips';
+
 import { create } from 'zustand';
 
 interface LoadingState {
   isLoading: boolean;
-  tip: string;
-  showLoading: (tip?: string) => void;
+
+  tipKey: LoadingTipKey;
+
+  showLoading: (
+    tipKey?: LoadingTipKey
+  ) => void;
+
   hideLoading: () => void;
 }
 
-const TIPS = [
-  "Use suas cartas de corrida no momento certo para virar o jogo!",
-  "Gatos correm mais rápido, mas cachorros têm mais resistência?",
-  "Preparando os motores e embaralhando o deck...",
-  "Dica: Curvas fechadas exigem mais controle!",
-];
+export const useLoadingStore =
+  create<LoadingState>((set) => ({
+    isLoading: true,
 
-export const useLoadingStore = create<LoadingState>((set) => ({
-  isLoading: true,
-  tip: TIPS[0],
-  showLoading: () => set({ 
-    isLoading: true, 
-    tip: TIPS[Math.floor(Math.random() * TIPS.length)] 
-  }),
-  hideLoading: () => set({ isLoading: false }),
-}));
+    tipKey: LOADING_TIP_KEYS[0],
+
+    showLoading: (tipKey) =>
+      set({
+        isLoading: true,
+
+        tipKey:
+          tipKey ??
+          getRandomLoadingTipKey(),
+      }),
+
+    hideLoading: () =>
+      set({
+        isLoading: false,
+      }),
+  }));
