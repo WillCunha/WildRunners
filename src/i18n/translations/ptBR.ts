@@ -395,6 +395,38 @@ const ptBR = {
     noResult: 'Nenhum resultado disponível',
     continueSimple: 'CONTINUAR',
   },
+  registration: {
+    heroEyebrow: 'WILD RUNNERS // ID DO PILOTO',
+    heroTitle: 'ENTRE NO GRID.',
+    heroText:
+      'Escolha o nome que os outros pilotos verão nas ruas e vincule um e-mail ao seu perfil.',
+    localProfile: 'PERFIL LOCAL // MVP',
+
+    newDriver: 'NOVO PILOTO',
+    createIdentity: 'CRIE SUA IDENTIDADE',
+
+    usernameLabel: 'NOME DE PILOTO',
+    usernamePlaceholder: 'seu_nome',
+    usernameError:
+      'Use 3–12 caracteres: letras, números, _ ou -.',
+    usernameHint:
+      'Esse será seu nome dentro das corridas.',
+
+    emailLabel: 'E-MAIL',
+    emailPlaceholder: 'voce@email.com',
+    validated: 'VALIDADO',
+    account: 'CONTA',
+    emailError:
+      'Digite um endereço de e-mail válido.',
+    emailHint:
+      'No MVP ele fica salvo localmente. Depois será migrado para sua conta no servidor.',
+
+    driverReady: 'PILOTO PRONTO',
+    startAdventure: 'COMEÇAR AVENTURA',
+
+    localNote:
+      'Seus dados e progresso permanecem neste dispositivo durante o MVP.',
+  },
 };
 
 export default ptBR;

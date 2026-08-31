@@ -30,6 +30,7 @@ export interface PlayerUnlocks {
 export interface PlayerProfile {
   id: string;
   username: string;
+  email: string;
   trophies: number;
   xp: number;
   parts: PlayerParts;

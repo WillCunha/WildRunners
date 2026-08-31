@@ -14,6 +14,7 @@ import {
   ImageBackground,
   Pressable,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -26,6 +27,7 @@ export default function LanguageSelectionScreen() {
   const { width, height } = useWindowDimensions();
 
   const isCompactLandscape = height < 430;
+  const isVeryCompactLandscape = height < 380;
 
   const params =
     useLocalSearchParams<{
@@ -34,6 +36,7 @@ export default function LanguageSelectionScreen() {
 
   const {
     language,
+    previewLanguage,
     setLanguage,
     isLoading,
     t,
@@ -52,6 +55,14 @@ export default function LanguageSelectionScreen() {
   useEffect(() => {
     setSelectedLanguage(language);
   }, [language]);
+
+  const handleSelectLanguage = (
+    newLanguage: SupportedLanguage,
+  ) => {
+    setSelectedLanguage(newLanguage);
+
+    previewLanguage(newLanguage);
+  };
 
   async function handleContinue() {
     if (saving) {
@@ -258,144 +269,178 @@ export default function LanguageSelectionScreen() {
               </View>
             </View>
 
+
             {/* PAINEL DIREITO */}
             <View
-              style={styles.selectionPane}
+              style={[
+                styles.selectionPane,
+
+                isCompactLandscape &&
+                styles.selectionPaneCompact,
+
+                isVeryCompactLandscape &&
+                styles.selectionPaneVeryCompact,
+              ]}
             >
-              <View
-                style={styles.selectionHeader}
-              >
-                <View>
-                  <Text
-                    style={
-                      styles.selectionEyebrow
-                    }
-                  >
-                    PLAYER SETUP
-                  </Text>
+              {/* CONTEÚDO QUE PODE ENCOLHER / ROLAR */}
+              <ScrollView
+                style={styles.selectionScroll}
+                contentContainerStyle={[
+                  styles.selectionScrollContent,
 
-                  <Text
-                    style={
-                      styles.selectionTitle
-                    }
+                  isCompactLandscape &&
+                  styles.selectionScrollContentCompact,
+                ]}
+                showsVerticalScrollIndicator={false}
+                bounces={false}
+              >
+                <View
+                  style={[
+                    styles.selectionHeader,
+
+                    isCompactLandscape &&
+                    styles.selectionHeaderCompact,
+                  ]}
+                >
+                  <View>
+                    <Text
+                      style={
+                        styles.selectionEyebrow
+                      }
+                    >
+                      PLAYER SETUP
+                    </Text>
+
+                    {!isVeryCompactLandscape && (
+                      <Text
+                        style={
+                          styles.selectionTitle
+                        }
+                      >
+                        {t('language.title')}
+                      </Text>
+                    )}
+                  </View>
+
+                  <View
+                    style={styles.stepBadge}
                   >
-                    {t('language.title')}
-                  </Text>
+                    <Text
+                      style={
+                        styles.stepBadgeLabel
+                      }
+                    >
+                      STEP
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.stepBadgeValue
+                      }
+                    >
+                      01
+                    </Text>
+                  </View>
                 </View>
 
                 <View
-                  style={styles.stepBadge}
+                  style={styles.languages}
                 >
-                  <Text
-                    style={
-                      styles.stepBadgeLabel
+                  <LanguageOption
+                    flag="🇧🇷"
+                    code="PT-BR"
+                    label={t(
+                      'language.portuguese',
+                    )}
+                    selected={
+                      selectedLanguage ===
+                      'pt-BR'
                     }
-                  >
-                    STEP
-                  </Text>
+                    compact={
+                      isCompactLandscape
+                    }
+                    onPress={() =>
+                      handleSelectLanguage(
+                        'pt-BR',
+                      )
+                    }
+                  />
 
-                  <Text
-                    style={
-                      styles.stepBadgeValue
+                  <LanguageOption
+                    flag="🇺🇸"
+                    code="EN"
+                    label={t(
+                      'language.english',
+                    )}
+                    selected={
+                      selectedLanguage ===
+                      'en'
                     }
-                  >
-                    01
-                  </Text>
+                    compact={
+                      isCompactLandscape
+                    }
+                    onPress={() =>
+                      handleSelectLanguage(
+                        'en',
+                      )
+                    }
+                  />
+
+                  <LanguageOption
+                    flag="🌎"
+                    code="ES"
+                    label={t(
+                      'language.spanish',
+                    )}
+                    selected={
+                      selectedLanguage ===
+                      'es'
+                    }
+                    compact={
+                      isCompactLandscape
+                    }
+                    onPress={() =>
+                      handleSelectLanguage(
+                        'es',
+                      )
+                    }
+                  />
                 </View>
-              </View>
 
-              <View
-                style={
-                  styles.languages
-                }
-              >
-                <LanguageOption
-                  flag="🇧🇷"
-                  code="PT-BR"
-                  label={t(
-                    'language.portuguese',
-                  )}
-                  selected={
-                    selectedLanguage ===
-                    'pt-BR'
-                  }
-                  compact={
-                    isCompactLandscape
-                  }
-                  onPress={() =>
-                    setSelectedLanguage(
-                      'pt-BR',
-                    )
-                  }
-                />
+                {!isVeryCompactLandscape && (
+                  <View style={styles.infoBox}>
+                    <View
+                      style={styles.infoDot}
+                    />
 
-                <LanguageOption
-                  flag="🇺🇸"
-                  code="EN"
-                  label={t(
-                    'language.english',
-                  )}
-                  selected={
-                    selectedLanguage ===
-                    'en'
-                  }
-                  compact={
-                    isCompactLandscape
-                  }
-                  onPress={() =>
-                    setSelectedLanguage(
-                      'en',
-                    )
-                  }
-                />
+                    <Text
+                      style={styles.infoText}
+                    >
+                      {t(
+                        'language.subtitle',
+                      )}
+                    </Text>
+                  </View>
+                )}
+              </ScrollView>
 
-                <LanguageOption
-                  flag="🇪🇸"
-                  code="ES"
-                  label={t(
-                    'language.spanish',
-                  )}
-                  selected={
-                    selectedLanguage === 'es'
-                  }
-                  compact={
-                    isCompactLandscape
-                  }
-                  onPress={() =>
-                    setSelectedLanguage('es')
-                  }
-                />
-              </View>
-
-              <View style={styles.infoBox}>
-                <View
-                  style={styles.infoDot}
-                />
-
-                <Text
-                  style={styles.infoText}
-                >
-                  {t(
-                    'language.subtitle',
-                  )}
-                </Text>
-              </View>
-
+              {/* BOTÃO FICA SEMPRE PRESO EMBAIXO */}
               <Pressable
                 onPress={handleContinue}
                 disabled={saving}
-                style={({
-                  pressed,
-                }) => [
-                    styles.continueButton,
+                style={({ pressed }) => [
+                  styles.continueButton,
 
-                    saving &&
-                    styles.continueButtonDisabled,
+                  isCompactLandscape &&
+                  styles.continueButtonCompact,
 
-                    pressed &&
-                    !saving &&
-                    styles.buttonPressed,
-                  ]}
+                  saving &&
+                  styles.continueButtonDisabled,
+
+                  pressed &&
+                  !saving &&
+                  styles.buttonPressed,
+                ]}
               >
                 {saving ? (
                   <ActivityIndicator
@@ -564,19 +609,39 @@ const styles =
     /*
      * HEADER
      */
-
     header: {
-      minHeight: 72,
-
+      minHeight: 54,
       flexDirection: 'row',
-
       alignItems: 'center',
       justifyContent:
         'space-between',
-
-      marginBottom: 10,
-
+      marginBottom: 6,
       paddingHorizontal: 5,
+    },
+
+    selectionPaneCompact: {
+      paddingVertical: 10,
+      paddingHorizontal: 18,
+    },
+
+    selectionPaneVeryCompact: {
+      paddingVertical: 7,
+    },
+
+    selectionHeaderCompact: {
+      marginBottom: 8,
+    },
+
+    infoBoxVeryCompact: {
+      minHeight: 28,
+      marginTop: 6,
+      paddingVertical: 4,
+    },
+
+    continueButtonCompact: {
+      minHeight: 38,
+      marginTop: 6,
+      paddingVertical: 5,
     },
 
     eyebrow: {
@@ -594,18 +659,15 @@ const styles =
 
     headerTitle: {
       color: '#FFFFFF',
-
-      fontSize: 29,
+      fontSize: 25,
       fontWeight: '900',
       fontStyle: 'italic',
-
       letterSpacing: 1,
-
       marginTop: -1,
     },
 
     headerTitleCompact: {
-      fontSize: 23,
+      fontSize: 19,
     },
 
     headerSubtitle: {
@@ -620,28 +682,22 @@ const styles =
     },
 
     headerLogoBox: {
-      width: 52,
-      height: 52,
-
-      borderRadius: 13,
-
+      width: 44,
+      height: 44,
+      borderRadius: 11,
       borderWidth: 1,
-
       borderColor:
         'rgba(255,214,10,0.35)',
-
       backgroundColor:
         'rgba(255,214,10,0.06)',
-
       alignItems: 'center',
       justifyContent: 'center',
     },
 
     headerLogo: {
-      width: 38,
-      height: 38,
+      width: 32,
+      height: 32,
     },
-
     /*
      * CONTEÚDO
      */
@@ -820,16 +876,27 @@ const styles =
 
     selectionPane: {
       flex: 4.3,
-
       minWidth: 0,
-
+      minHeight: 0,
       paddingHorizontal: 22,
-      paddingVertical: 18,
-
-      justifyContent: 'center',
-
+      paddingVertical: 14,
       backgroundColor:
         'rgba(18,18,20,0.96)',
+    },
+
+    selectionScroll: {
+      flex: 1,
+      minHeight: 0,
+    },
+
+    selectionScrollContent: {
+      flexGrow: 1,
+      justifyContent: 'center',
+      paddingBottom: 4,
+    },
+
+    selectionScrollContentCompact: {
+      justifyContent: 'flex-start',
     },
 
     selectionHeader: {
@@ -927,29 +994,22 @@ const styles =
     },
 
     languageOptionCompact: {
-      minHeight: 62,
-
-      paddingVertical: 7,
+      minHeight: 50,
+      paddingVertical: 4,
     },
-
     languageOptionSelected: {
       borderWidth: 2,
-
       borderColor: ACCENT,
-
       backgroundColor:
         'rgba(255,214,10,0.09)',
     },
 
     languageAccent: {
       position: 'absolute',
-
       left: 0,
       top: 0,
       bottom: 0,
-
       width: 4,
-
       backgroundColor: ACCENT,
     },
 
@@ -958,27 +1018,21 @@ const styles =
     },
 
     flagBox: {
-      width: 48,
-      height: 48,
-
-      borderRadius: 12,
-
+      width: 42,
+      height: 42,
+      borderRadius: 10,
       borderWidth: 1,
-
       borderColor:
         'rgba(255,255,255,0.11)',
-
       backgroundColor:
         'rgba(0,0,0,0.17)',
-
       alignItems: 'center',
       justifyContent: 'center',
-
-      marginRight: 12,
+      marginRight: 10,
     },
 
     flag: {
-      fontSize: 27,
+      fontSize: 23,
     },
 
     languageInfo: {
@@ -1088,22 +1142,16 @@ const styles =
      */
 
     continueButton: {
-      minHeight: 48,
-
+      flexShrink: 0,
+      minHeight: 46,
       flexDirection: 'row',
-
       alignItems: 'center',
       justifyContent: 'center',
-
       borderRadius: 11,
-
       borderWidth: 2,
       borderColor: ACCENT,
-
       backgroundColor: ACCENT,
-
-      marginTop: 14,
-
+      marginTop: 8,
       paddingHorizontal: 16,
     },
 

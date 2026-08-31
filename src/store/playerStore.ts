@@ -39,7 +39,7 @@ type PlayerState = {
 
   resetProfile: () => void;
 
-  createProfile: (username: string) => void;
+  createProfile: (username: string, email: string) => void;
 
   addTrophies: (amount: number) => void;
 
@@ -117,8 +117,11 @@ export const usePlayerStore = create<PlayerState>()(
 
       processedRaceIds: [],
 
-      createProfile: username => {
+      createProfile: (username, email) => {
         const now = Date.now();
+
+        const safeUsername = username.trim();
+        const safeEmail = email.trim().toLowerCase();
 
         set({
           profile: {
@@ -126,7 +129,8 @@ export const usePlayerStore = create<PlayerState>()(
               .toString(36)
               .substring(2, 15),
 
-            username,
+            username: safeUsername,
+            email: safeEmail,
 
             trophies: 0,
             xp: 0,
@@ -169,6 +173,10 @@ export const usePlayerStore = create<PlayerState>()(
             username:
               currentProfile?.username ??
               'PLAYER',
+
+            email:
+              currentProfile?.email ??
+              '',
 
             trophies: 0,
             xp: 0,
@@ -722,7 +730,7 @@ export const usePlayerStore = create<PlayerState>()(
       /**
        * Começamos a versionar o save.
        */
-      version: 3,
+      version: 4,
 
       storage:
         createJSONStorage(
@@ -761,6 +769,11 @@ export const usePlayerStore = create<PlayerState>()(
 
           profile: {
             ...profile,
+
+            email:
+              typeof profile.email === 'string'
+                ? profile.email.trim().toLowerCase()
+                : '',
 
             xp: Math.max(
               0,

@@ -1,20 +1,20 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, {
-    createContext,
-    ReactNode,
-    useCallback,
-    useContext,
-    useEffect,
-    useMemo,
-    useState,
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
 } from 'react';
 
 import {
-    detectDeviceLanguage,
-    i18n,
-    isSupportedLanguage,
-    setI18nLanguage,
-    SupportedLanguage,
+  detectDeviceLanguage,
+  i18n,
+  isSupportedLanguage,
+  setI18nLanguage,
+  SupportedLanguage,
 } from '@/src/i18n';
 
 const LANGUAGE_STORAGE_KEY =
@@ -22,32 +22,17 @@ const LANGUAGE_STORAGE_KEY =
 
 interface LanguageContextData {
   language: SupportedLanguage;
-
-  /**
-   * true quando estamos lendo o idioma salvo
-   * no AsyncStorage.
-   */
   isLoading: boolean;
-
-  /**
-   * false significa que o jogador nunca
-   * confirmou um idioma.
-   */
   hasSelectedLanguage: boolean;
 
-  /**
-   * Salva e aplica um novo idioma.
-   */
+  previewLanguage: (
+    language: SupportedLanguage
+  ) => void;
+
   setLanguage: (
     language: SupportedLanguage
   ) => Promise<void>;
 
-  /**
-   * Função utilizada pelas telas.
-   *
-   * Ex:
-   * t('common.play')
-   */
   t: (
     key: string,
     options?: Record<string, unknown>
@@ -75,6 +60,14 @@ export function LanguageProvider({
     hasSelectedLanguage,
     setHasSelectedLanguage,
   ] = useState(false);
+
+  const previewLanguage = useCallback(
+    (newLanguage: SupportedLanguage) => {
+      setI18nLanguage(newLanguage);
+      setLanguageState(newLanguage);
+    },
+    [],
+  );
 
   const [isLoading, setIsLoading] =
     useState(true);
@@ -140,7 +133,7 @@ export function LanguageProvider({
       try {
         await AsyncStorage.setItem(
           LANGUAGE_STORAGE_KEY,
-          newLanguage
+          newLanguage,
         );
 
         setI18nLanguage(newLanguage);
@@ -149,12 +142,14 @@ export function LanguageProvider({
       } catch (error) {
         console.error(
           'Erro ao salvar idioma:',
-          error
+          error,
         );
       }
     },
-    []
+    [],
   );
+
+
 
   const t = useCallback(
     (
@@ -170,12 +165,14 @@ export function LanguageProvider({
     [language]
   );
 
+
   const value =
     useMemo<LanguageContextData>(
       () => ({
         language,
         isLoading,
         hasSelectedLanguage,
+        previewLanguage,
         setLanguage,
         t,
       }),
@@ -183,9 +180,10 @@ export function LanguageProvider({
         language,
         isLoading,
         hasSelectedLanguage,
+        previewLanguage,
         setLanguage,
         t,
-      ]
+      ],
     );
 
   return (

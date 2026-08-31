@@ -261,7 +261,7 @@ export default function DeckSelection() {
             <View style={styles.availableTopRow}>
               <View>
                 <Text style={styles.sectionTitle}>{t('deckSelection.availableCards')}</Text>
-                <Text style={styles.sectionHint}>{t('deckSelection.tapCard')}</Text>
+                <Text style={styles.sectionHint}>{t('deckSelection.availableHint')}</Text>
               </View>
 
               <View style={styles.categoryTabs}>
@@ -485,7 +485,7 @@ export default function DeckSelection() {
               ]}
             >
               <Text style={styles.playButtonText}>
-                {isDeckComplete ? 'CORRER!' : `ESCOLHA MAIS ${MAX_DECK_SIZE - selectedDeck.length}`}
+                {isDeckComplete ? t('deckSelection.race') : t('deckSelection.chooseMore', { count: MAX_DECK_SIZE - selectedDeck.length, })}
               </Text>
             </TouchableOpacity>
           </View>

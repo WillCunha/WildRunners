@@ -327,7 +327,7 @@ export default function CarSelectionScreen() {
                     <View style={styles.carSidebar}>
                         <View style={styles.sidebarHeader}>
                             <Text style={styles.sidebarEyebrow}>{t('carSelection.yourGarage')}</Text>
-                            <Text style={styles.sidebarCount}>{carKeys.length} {t('carSelection.carsCount.other')}</Text>
+                            <Text style={styles.sidebarCount}>{carKeys.length} {t('carSelection.carsCount', { count: carKeys.length, })}</Text>
                         </View>
 
                         <ScrollView

@@ -396,6 +396,38 @@ const en = {
     noResult: 'No race result available',
     continueSimple: 'CONTINUE',
   },
+  registration: {
+    heroEyebrow: 'WILD RUNNERS // DRIVER ID',
+    heroTitle: 'JOIN THE GRID.',
+    heroText:
+      'Choose the name other drivers will see on the streets and link an email to your profile.',
+    localProfile: 'LOCAL PROFILE // MVP',
+
+    newDriver: 'NEW DRIVER',
+    createIdentity: 'CREATE YOUR IDENTITY',
+
+    usernameLabel: 'DRIVER NAME',
+    usernamePlaceholder: 'your_name',
+    usernameError:
+      'Use 3–12 characters: letters, numbers, _ or -.',
+    usernameHint:
+      'This will be your name during races.',
+
+    emailLabel: 'EMAIL',
+    emailPlaceholder: 'you@email.com',
+    validated: 'VALIDATED',
+    account: 'ACCOUNT',
+    emailError:
+      'Enter a valid email address.',
+    emailHint:
+      'For the MVP it is saved locally. Later it will be migrated to your server account.',
+
+    driverReady: 'DRIVER READY',
+    startAdventure: 'START ADVENTURE',
+
+    localNote:
+      'Your data and progress remain on this device during the MVP.',
+  },
 };
 
 export default en;
