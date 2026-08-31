@@ -2555,7 +2555,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
           >
             <View style={{ width: '200%', alignItems: 'center' }}>
               <Carro
-                carType={"ferrari"}
+                carType={"fusca"}
                 carColorFront={selectedColorFront}
                 carColorBack={selectedColorBack}
                 speed={playerSpeed.current}

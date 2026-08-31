@@ -54,7 +54,7 @@ export default function MapSelectionScreen() {
 
     pauseMusic();
     router.navigate({
-      pathname: '/mapa',
+      pathname: '/testes',
       params: {
         deck: params.deck,
         mapImage: item.background,

@@ -179,6 +179,35 @@ const ptBR = {
     carNotPurchasedTitle: 'Carro não comprado',
     carNotPurchasedMessage:
       'Compre o veículo antes de abrir a oficina.',
+
+    carDescriptions: {
+      buggy:
+        'O primeiro carro da garagem: leve, simples e pronto para correr.',
+
+      kombi:
+        'Resistente, carismática e com presença forte nas ruas.',
+
+      uno:
+        'Leve e rápido nas retomadas. Um ótimo primeiro upgrade.',
+
+      fusca:
+        'Um clássico equilibrado, confiável e fácil de controlar.',
+
+      astor:
+        'Entrega velocidade alta e mantém boa aceleração.',
+
+      ferrari:
+        'Velocidade máxima para quem chegou ao topo da competição.',
+
+      monster:
+        'Aceleração brutal e visual dominante para o endgame.',
+
+      lamborghini:
+        'Poder de aceleração e design icônico para os mais exigentes.',
+
+      caravana:
+        'Espaço e conforto para a jornada com amigos.',
+    },
   },
 
   deckSelection: {

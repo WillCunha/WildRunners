@@ -214,6 +214,34 @@ const es = {
 
     carNotPurchasedMessage:
       'Compra el vehículo antes de abrir el taller.',
+    carDescriptions: {
+      buggy:
+        'El primer coche del garaje: ligero, sencillo y listo para correr.',
+
+      kombi:
+        'Resistente, carismática y con una gran presencia en las calles.',
+
+      uno:
+        'Ligero y rápido en las recuperaciones. Una excelente primera mejora.',
+
+      fusca:
+        'Un clásico equilibrado, fiable y fácil de controlar.',
+
+      astor:
+        'Ofrece alta velocidad y mantiene una buena aceleración.',
+
+      ferrari:
+        'Velocidad máxima para quienes han llegado a lo más alto de la competición.',
+
+      monster:
+        'Aceleración brutal y una presencia dominante para el endgame.',
+
+      lamborghini:
+        'Potencia de aceleración y diseño icónico para los pilotos más exigentes.',
+
+      caravana:
+        'Espacio y comodidad para el viaje con amigos.',
+    },
   },
 
   deckSelection: {
@@ -520,7 +548,7 @@ const es = {
     continueSimple:
       'CONTINUAR',
   },
-   registration: {
+  registration: {
     heroEyebrow: 'WILD RUNNERS // ID DEL PILOTO',
     heroTitle: 'ENTRA EN LA PARRILLA.',
     heroText:

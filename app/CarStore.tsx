@@ -580,7 +580,9 @@ export default function SelectionCar() {
                 ]}
                 numberOfLines={isCompactLandscape ? 2 : 3}
               >
-                {shopData.description}
+                {t(
+                  `carStore.carDescriptions.${previewCar}`
+                )}
               </Text>
 
               <View style={styles.tierPriceRow}>

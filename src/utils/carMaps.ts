@@ -11,8 +11,8 @@ export const carMaps = {
         wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
         wheels: {
             mapa: {
-                rodaFrente: { x: 129, y: 11 },
-                rodaTras: { x: 48, y: 11 },
+                rodaFrente: { x: 129, y: 12 },
+                rodaTras: { x: 47, y: 12 },
                 size: { width: 50, height: 50 },
             },
 
@@ -151,9 +151,9 @@ export const carMaps = {
 
         wheels: {
             mapa: {
-                rodaFrente: { x: 126, y: 10 },
-                rodaTras: { x: 47.5, y: 12 },
-                size: { width: 50, height: 50 },
+                rodaFrente: { x: 123, y: 12 },
+                rodaTras: { x: 43, y: 13 },
+                size: { width: 48, height: 48 },
             },
 
             oficina: {
@@ -163,12 +163,12 @@ export const carMaps = {
             },
 
             loja: {
-                rodaFrente: { x: 228, y: -14 },
-                rodaTras: { x: 65, y: -14 },
+                rodaFrente: { x: 219, y: -14 },
+                rodaTras: { x: 62, y: -14 },
                 size: { width: 50, height: 50 },
             },
         },
-        tier: 1,
+        tier: 5,
         stats: {
             speed: { base: 170, maxUpgrade: 230 },
             acceleration: { base: 100, maxUpgrade: 150 }
@@ -218,9 +218,9 @@ export const carMaps = {
 
         wheels: {
             mapa: {
-                rodaFrente: { x: 135.5, y: 17 },
-                rodaTras: { x: 32.5, y: 19 },
-                size: { width: 55, height: 55 },
+                rodaFrente: { x: 134, y: 8 },
+                rodaTras: { x: 33, y: 10 },
+                size: { width: 50, height: 50 },
             },
 
             oficina: {
@@ -230,9 +230,9 @@ export const carMaps = {
             },
 
             loja: {
-                rodaFrente: { x: 236, y: 0 },
-                rodaTras: { x: 28.5, y: 0 },
-                size: { width: 65, height: 65 },
+                rodaFrente: { x: 242, y: -10 },
+                rodaTras: { x: 42, y: -10 },
+                size: { width: 50, height: 50 },
             },
         },
         tier: 8,
@@ -251,9 +251,9 @@ export const carMaps = {
 
         wheels: {
             mapa: {
-                rodaFrente: { x: 130, y: 20 },
+                rodaFrente: { x: 129.5, y: 20 },
                 rodaTras: { x: 38, y: 22 },
-                size: { width: 50, height: 50 },
+                size: { width: 47, height: 47 },
             },
 
             oficina: {

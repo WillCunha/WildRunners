@@ -15,9 +15,9 @@
       "package": "com.wfsoft.wildrunners",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/logo512v1.png",
-        "backgroundImage": "./assets/images/logo512v1.png",
-        "monochromeImage": "./assets/images/logo512v1.png"
+        "foregroundImage": "./assets/images/gameLogo512.png",
+        "backgroundImage": "./assets/images/gameLogo512.png",
+        "monochromeImage": "./assets/images/gameLogo512.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,

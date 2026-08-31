@@ -179,6 +179,35 @@ const en = {
     carNotPurchasedTitle: 'Car not purchased',
     carNotPurchasedMessage:
       'Buy the vehicle before opening the workshop.',
+
+    carDescriptions: {
+      buggy:
+        'Your first garage car: light, simple, and ready to race.',
+
+      kombi:
+        'Tough, charismatic, and impossible to ignore on the streets.',
+
+      uno:
+        'Light and quick off the line. A great first upgrade.',
+
+      fusca:
+        'A balanced classic that is reliable and easy to control.',
+
+      astor:
+        'Delivers high speed while maintaining strong acceleration.',
+
+      ferrari:
+        'Top speed for racers who have reached the highest level of competition.',
+
+      monster:
+        'Brutal acceleration and a dominant look built for the endgame.',
+
+      lamborghini:
+        'Powerful acceleration and iconic design for the most demanding racers.',
+
+      caravana:
+        'Space and comfort for the journey with friends.',
+    },
   },
 
   deckSelection: {
