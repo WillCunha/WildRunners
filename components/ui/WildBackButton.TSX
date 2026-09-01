@@ -1,13 +1,15 @@
 import { router } from 'expo-router';
 import {
-    Pressable,
-    StyleSheet,
-    Text,
+  Pressable,
+  StyleSheet,
+  Text,
 } from 'react-native';
 
 interface WildBackButtonProps {
   onPress?: () => void;
 }
+
+//
 
 export default function WildBackButton({
   onPress,
