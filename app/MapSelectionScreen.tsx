@@ -1,3 +1,4 @@
+import WildBackButton from '@/components/ui/WildBackButton';
 import { AudioContext } from '@/context/AudioContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { usePlayerStore } from '@/src/store/playerStore';
@@ -53,8 +54,8 @@ export default function MapSelectionScreen() {
     if (playerLevel < requiredLevel) return;
 
     pauseMusic();
-    router.navigate({
-      pathname: '/testes',
+    router.replace({
+      pathname: '/mapa',
       params: {
         deck: params.deck,
         mapImage: item.background,
@@ -178,6 +179,7 @@ export default function MapSelectionScreen() {
       <SafeAreaView style={styles.safeArea}>
         <View style={[styles.container, isCompactLandscape && styles.containerCompact]}>
           <View style={styles.header}>
+            <WildBackButton />
             <View>
               <Text style={[styles.headerTitle, isCompactLandscape && styles.headerTitleCompact]}>
                 {t('mapSelection.title')}

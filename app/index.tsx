@@ -110,8 +110,13 @@ export default function StartScreen() {
       ? '/RegistrationScreen'
       : '/CarSelectionScreen';
 
+    /*
+     * INDEX NÃO PODE PERMANECER NA STACK.
+     *
+     * A partir daqui o usuário entrou no game.
+     */
     if (!hasSelectedLanguage) {
-      router.push({
+      router.replace({
         pathname: '/LanguageSelectionScreen',
         params: {
           next: nextScreen,
@@ -121,7 +126,7 @@ export default function StartScreen() {
       return;
     }
 
-    router.push({
+    router.replace({
       pathname: '/LoadingScreen',
       params: {
         next: nextScreen,

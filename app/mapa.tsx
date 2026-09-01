@@ -21,7 +21,7 @@ import { usePlayerStore } from '@/src/store/playerStore';
 import { carMaps } from '@/src/utils/carMaps';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Animated, Image, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { Animated, BackHandler, Image, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 
 type CarKey = keyof typeof carMaps;
 
@@ -106,6 +106,26 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     useCallback(() => {
       showLoading();
     }, [showLoading])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      const subscription =
+        BackHandler.addEventListener(
+          'hardwareBackPress',
+          () => {
+            /*
+             * Uma corrida em andamento NÃO
+             * pode ser abandonada acidentalmente.
+             */
+            return true;
+          }
+        );
+
+      return () => {
+        subscription.remove();
+      };
+    }, [])
   );
 
 

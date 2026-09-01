@@ -2,7 +2,7 @@
   "expo": {
     "name": "Wild Runners",
     "slug": "wild-runners",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "landscape",
     "icon": "./assets/images/logo1024v1.png",
     "scheme": "runnergame",
@@ -62,7 +62,11 @@
     },
     "androidStatusBar": {
       "hidden": true,
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#000000"
+    },
+    "androidNavigationBar": {
+      "visible": "sticky-immersive",
+      "barStyle": "light-content"
     },
     "extra": {
       "router": {},

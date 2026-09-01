@@ -2,6 +2,7 @@ const ptBR = {
   language: {
     title: 'Escolha seu idioma',
     subtitle: 'Você poderá alterar o idioma depois nas configurações.',
+    setup: 'Configuração do idioma.',
     portuguese: 'Português',
     english: 'English',
     spanish: 'Español',

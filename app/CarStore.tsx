@@ -1,3 +1,4 @@
+import WildBackButton from '@/components/ui/WildBackButton';
 import { useCarSelection } from '@/context/CarContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { usePlayerStore } from '@/src/store/playerStore';
@@ -362,6 +363,7 @@ export default function SelectionCar() {
         ]}
       >
         <View style={styles.header}>
+          <WildBackButton />
           <View>
             <Text
               style={[

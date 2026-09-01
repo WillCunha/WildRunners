@@ -5,10 +5,11 @@ import { raceRewardsService } from '@/src/services/raceRewardsService';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { carMaps } from '@/src/utils/carMaps';
 import { getPlayerLevel } from '@/src/utils/progression';
-import { router } from 'expo-router';
-import React, { useContext, useEffect, useMemo, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
     Alert,
+    BackHandler,
     Image,
     ImageSourcePropType,
     SafeAreaView,
@@ -178,6 +179,26 @@ export default function CarSelectionScreen() {
     );
     const [previewColorBack, setPreviewColorBack] = useState(
         selectedColorBack || AVAILABLE_COLORS[2],
+    );
+
+    useFocusEffect(
+        useCallback(() => {
+            const subscription =
+                BackHandler.addEventListener(
+                    'hardwareBackPress',
+                    () => {
+                        /*
+                         * CarSelection é a raiz interna.
+                         * Nunca volta para index/cadastro/loading.
+                         */
+                        return true;
+                    }
+                );
+
+            return () => {
+                subscription.remove();
+            };
+        }, [])
     );
 
     useEffect(() => {

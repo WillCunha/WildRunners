@@ -1,3 +1,4 @@
+import WildBackButton from '@/components/ui/WildBackButton';
 import { useCarSelection } from '@/context/CarContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { usePlayerStore } from '@/src/store/playerStore';
@@ -226,7 +227,9 @@ export default function OficinaScreen() {
         const progress = calculateProgress(currentLevel);
 
         const handleUpgrade = () => {
-            if (isMaxed) return;
+            if (isMaxed) {
+                return;
+            }
 
             const success = upgradeCar(
                 selectedCar,
@@ -235,14 +238,15 @@ export default function OficinaScreen() {
                 upgradeCost,
             );
 
-            Alert.alert(
-                t('workshop.insufficientResourcesTitle'),
-
-                t('workshop.insufficientResourcesMessage', {
-                    cost: upgradeCost,
-                    resource: getResourceName(partCategory),
-                }),
-            );
+            if (!success) {
+                Alert.alert(
+                    t('workshop.insufficientResourcesTitle'),
+                    t('workshop.insufficientResourcesMessage', {
+                        cost: upgradeCost,
+                        resource: getResourceName(partCategory),
+                    }),
+                );
+            }
         };
 
         return (
@@ -338,6 +342,7 @@ export default function OficinaScreen() {
                 ]}
             >
                 <View style={styles.header}>
+                    <WildBackButton />
                     <View>
                         <Text
                             style={[
@@ -497,9 +502,9 @@ export default function OficinaScreen() {
                                 t('workshop.upgradeItems.maxSpeed.title'),
                                 t('workshop.upgradeItems.maxSpeed.subtitle'),
                                 speedLevel,
-                                'engrenagem',
+                                'motor',
                                 'speedLevel',
-                                '⚙️',
+                                '🔧',
                             )}
 
                             {renderUpgradeItem(

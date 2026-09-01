@@ -1,3 +1,4 @@
+import WildBackButton from '@/components/ui/WildBackButton';
 import { useLanguage } from '@/context/LanguageContext';
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
@@ -238,6 +239,7 @@ export default function DeckSelection() {
     <SafeAreaView style={styles.safeArea}>
       <View style={[styles.container, isCompactLandscape && styles.containerCompact]}>
         <View style={[styles.header, isCompactLandscape && styles.headerCompact]}>
+          <WildBackButton />
           <View>
             <Text style={[styles.title, isCompactLandscape && styles.titleCompact]}>
               {t('deckSelection.title')}

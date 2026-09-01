@@ -224,7 +224,7 @@ export default function LanguageSelectionScreen() {
                     styles.introLabel
                   }
                 >
-                  LANGUAGE SETUP
+                 {t('language.setup')}
                 </Text>
 
                 <Text
@@ -263,6 +263,19 @@ export default function LanguageSelectionScreen() {
                       }
                     >
                       EN
+                    </Text>
+                  </View>
+                  <View
+                    style={
+                      styles.languageMark
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.languageMarkText
+                      }
+                    >
+                      ES
                     </Text>
                   </View>
                 </View>
@@ -387,7 +400,7 @@ export default function LanguageSelectionScreen() {
                   />
 
                   <LanguageOption
-                    flag="🌎"
+                    flag="es"
                     code="ES"
                     label={t(
                       'language.spanish',
