@@ -400,7 +400,7 @@ export default function LanguageSelectionScreen() {
                   />
 
                   <LanguageOption
-                    flag="es"
+                    flag="🇪🇸"
                     code="ES"
                     label={t(
                       'language.spanish',
