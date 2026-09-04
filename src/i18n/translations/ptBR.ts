@@ -11,10 +11,16 @@ const ptBR = {
   loading: {
     title: 'CARREGANDO...',
     tips: {
-      cardsTiming: 'Use suas cartas de corrida no momento certo para virar o jogo!',
-      catsAndDogs: 'Gatos correm mais rápido, mas cachorros têm mais resistência?',
-      preparingRace: 'Preparando os motores e embaralhando o deck...',
-      tightTurns: 'Dica: Curvas fechadas exigem mais controle!',
+      cardsTiming: 'Use suas cartas no momento certo para virar a corrida!',
+      raceStrategy: 'Velocidade não é tudo — uma boa estratégia pode mudar a corrida!',
+      preparingRace: 'Aquecendo os motores e embaralhando o deck...',
+      tightTurns: 'Cuidado nas rampas! Um bom controle pode fazer toda a diferença.',
+
+      saveYourCards: 'Não gaste todas as cartas cedo demais — o fim da corrida pode reservar surpresas!',
+      defendYourself: 'Uma boa defesa no momento certo pode valer tanto quanto um ataque.',
+      watchYourRivals: 'Fique de olho nos adversários — o melhor momento para atacar pode surgir a qualquer instante!',
+      finalSeconds: 'Nos últimos segundos, qualquer carta pode decidir a corrida!',
+      comeback: 'Nunca desista! Uma única jogada pode mudar completamente a sua posição.',
     },
   },
   start: {

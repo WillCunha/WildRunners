@@ -424,7 +424,7 @@ export default function RaceFinishTransition({
                         },
                     ]}
                 >
-                    (t{"mapa.finishRace"})
+                    {t('mapa.finishRace')}
                 </Animated.Text>
 
                 <View
@@ -443,7 +443,9 @@ export default function RaceFinishTransition({
                         },
                     ]}
                 >
-                    (t{"mapa.computingResults"})
+
+                    {t('mapa.computingResults')}
+
                 </Animated.Text>
 
 
@@ -480,7 +482,8 @@ export default function RaceFinishTransition({
                         },
                     ]}
                 >
-                    (t{"mapa.preparingRewards"})
+                    {t('mapa.preparingRewards')}
+                
                 </Animated.Text>
             </View>
 

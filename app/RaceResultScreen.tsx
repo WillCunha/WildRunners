@@ -13,7 +13,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState, } from 'react';
-import { Animated, ImageSourcePropType, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, } from 'react-native';
+import { Animated, ImageSourcePropType, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, } from 'react-native';
 
 
 type ResultTheme = {
@@ -1347,7 +1347,12 @@ export default function RaceResultScreen() {
 
                     {/* COLUNA DIREITA */}
 
-                    <View style={styles.rightColumn}>
+                    <ScrollView
+                        style={styles.rightColumn}
+                        contentContainerStyle={styles.rightColumnContent}
+                        showsVerticalScrollIndicator={false}
+                        bounces={false}
+                    >
                         <Text style={styles.sectionTitle}>
                             {t('raceResult.rewards')}
                         </Text>
@@ -1439,7 +1444,7 @@ export default function RaceResultScreen() {
                                 </Text>
                             </TouchableOpacity>
                         </View>
-                    </View>
+                    </ScrollView>
                 </View>
             </SafeAreaView>
         </LinearGradient>
@@ -1465,6 +1470,7 @@ const styles =
         },
         content: {
             flex: 1,
+            minHeight: 0,
             flexDirection: 'row',
             paddingHorizontal: 42,
             paddingVertical: 24,
@@ -1480,7 +1486,13 @@ const styles =
         },
         rightColumn: {
             flex: 1,
+            minWidth: 0,
+            minHeight: 0,
+        },
+        rightColumnContent: {
+            flexGrow: 1,
             justifyContent: 'center',
+            paddingBottom: 8,
         },
         completedText: {
             color: 'rgba(255,255,255,0.72)',

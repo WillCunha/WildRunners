@@ -1,8 +1,13 @@
 export const LOADING_TIP_KEYS = [
   'loading.tips.cardsTiming',
-  'loading.tips.catsAndDogs',
+  'loading.tips.raceStrategy',
   'loading.tips.preparingRace',
   'loading.tips.tightTurns',
+  'loading.tips.saveYourCards',
+  'loading.tips.defendYourself',
+  'loading.tips.watchYourRivals',
+  'loading.tips.finalSeconds',
+  'loading.tips.comeback',
 ] as const;
 
 export type LoadingTipKey =

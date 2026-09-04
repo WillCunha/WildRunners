@@ -2445,45 +2445,17 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         ]}
       />
 
-      <View style={styles.leaderboardContainer} pointerEvents="none">
-        <Text style={styles.leaderboardTitle}>RANKING</Text>
-        {leaderboard.map((racer, index) => {
-          // Resgata a quantidade de vidas de acordo com o ID
-          const currentLives = racer.id === 'player'
-            ? playerLives
-            : bots.find(b => b.id === racer.id)?.lives || 0;
-
-          return (
-            <View
-              key={racer.id}
-              style={[
-                styles.leaderboardItem,
-                racer.id === 'player' && styles.leaderboardItemPlayer,
-                currentLives <= 0 && { opacity: 0.5 } // Deixa o corredor apagadinho se for eliminado
-              ]}
-            >
-              <Text style={styles.leaderboardRank}>{index + 1}º</Text>
-              <Text style={styles.leaderboardName} numberOfLines={1}>{racer.name}</Text>
-
-              {/* Ícone e número de vidas com cor dinâmica */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 4 }}>
-                <Text style={{ fontSize: 10, marginRight: 2 }}>❤️</Text>
-                <Text
-                  style={{
-                    color: getLifeColor(currentLives), // <--- A mágica acontece aqui
-                    fontSize: 12,
-                    fontWeight: '900',
-                    textShadowColor: 'rgba(0,0,0,0.5)', // Um sombreado leve ajuda a leitura da cor
-                    textShadowOffset: { width: 1, height: 1 },
-                    textShadowRadius: 1
-                  }}
-                >
-                  {currentLives}
-                </Text>
-              </View>
-            </View>
-          );
-        })}
+      {/* HUD LIMPO: posição instantânea substitui o ranking de 6 linhas.
+          O mini-mapa já mostra a ordem completa dos corredores. */}
+      <View style={styles.positionBadge} pointerEvents="none">
+        <Text style={styles.positionBadgeValue}>
+          {Math.max(
+            1,
+            leaderboard.findIndex(racer => racer.id === 'player') + 1 ||
+              raceObjectivesLive.position,
+          )}º
+        </Text>
+        <Text style={styles.positionBadgeTotal}>/ {TOTAL_RACERS}</Text>
       </View>
 
       <RaceObjectivesHUD
@@ -2586,6 +2558,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         )}
       </View>
 
+      {/* STATUS DO PLAYER: tempo + vida + buffs em um único bloco compacto. */}
       <View style={styles.hud}>
         <Animated.View
           style={[
@@ -2602,34 +2575,30 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
               timeRemaining <= 10 && styles.scoreTextCritical,
             ]}
           >
-            ⏱️ {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}
+            ⏱ {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}
           </Text>
         </Animated.View>
-        <View
-          style={{ flexDirection: 'row', marginTop: 10, alignSelf: 'flex-end', gap: 2 }}
-        >
-          {Array.from({ length: INITIAL_LIVES }, (_, index) => index + 1).map((life) => (
-            <Text key={life}
-              style={{
-                fontSize: 20,
-                opacity: life <= playerLives ? 1 : 0.3,
-                textShadowColor: '#000',
-                textShadowOffset: { width: 1, height: 1 },
-                textShadowRadius: 2
-              }} >
-              ❤️
+
+        <View style={styles.playerStatusRow}>
+          <View style={styles.lifeCompact}>
+            <Text style={styles.lifeCompactIcon}>❤️</Text>
+            <Text style={[styles.lifeCompactValue, { color: getLifeColor(playerLives) }]}>
+              {playerLives}
             </Text>
-          ))}
-        </View>
-        <View style={{ flexDirection: 'row', alignSelf: 'flex-end', gap: 6, marginTop: 4 }}>
-          {playerStatus.current.shieldCharges > 0 && <Text style={{ color: '#00E5FF', fontWeight: '900' }}>🛡️ ESCUDO</Text>}
-          {playerStatus.current.armorCharges > 0 && <Text style={{ color: '#FFD700', fontWeight: '900' }}>🛡️ {playerStatus.current.armorCharges}</Text>}
-          {playerStatus.current.secondChanceReady && <Text style={{ color: '#FFFFFF', fontWeight: '900' }}>↻ 2ª CHANCE</Text>}
-          {playerStatus.current.isGhost && <Text style={{ color: '#D9B3FF', fontWeight: '900' }}>👻</Text>}
-        </View>
-        <View style={styles.nitroBarContainer}>
-          <View style={[styles.nitroBarFill, { width: `${nitroPercent}%`, backgroundColor: isNitroReady ? '#00FFFF' : '#FFD700' }]} />
-          <Text style={styles.nitroBarText}>VÁCUO</Text>
+          </View>
+
+          {playerStatus.current.shieldCharges > 0 && (
+            <Text style={styles.statusEffectIcon}>🛡️{playerStatus.current.shieldCharges}</Text>
+          )}
+          {playerStatus.current.armorCharges > 0 && (
+            <Text style={styles.statusEffectIcon}>🧱{playerStatus.current.armorCharges}</Text>
+          )}
+          {playerStatus.current.secondChanceReady && (
+            <Text style={styles.statusEffectIcon}>↻</Text>
+          )}
+          {playerStatus.current.isGhost && (
+            <Text style={styles.statusEffectIcon}>👻</Text>
+          )}
         </View>
       </View>
 
@@ -2874,7 +2843,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
               position: 'absolute', left: tnt.x, top: tnt.y,
               width: PLAYER_SIZE, height: PLAYER_SIZE,
               backgroundColor: '#B22222',
-              borderWidth: 3, borderColor: '#8B0000',
+              borderWidth: 2, borderColor: '#8B0000',
               justifyContent: 'center', alignItems: 'center',
               zIndex: 3,
             }}>
@@ -2945,7 +2914,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
       <View style={styles.boostBarContainer}>
         <View style={[styles.boostBarFill, { width: `${(boost / MAX_BOOST) * 100}%` }]} />
-        <Text style={styles.boostBarText}>💧 boost: {boost}/{MAX_BOOST}</Text>
+        <Text style={styles.boostBarText}>💧 {boost}/{MAX_BOOST}</Text>
       </View>
 
 
@@ -3004,12 +2973,29 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       </View>
 
       {started && !gameOver && (
-        <View style={styles.drivingControls}>
-          {isNitroReady && (
-            <View style={styles.nitroBtn} onTouchStart={handleActivateNitro}><Text style={styles.nitroBtnText}>NITRO</Text></View>
-          )}
-          <View style={styles.throttleBtn} onTouchStart={handleAddImpulse}>
-            <Text style={styles.throttleBtnText}>Acelerar</Text>
+        <View style={styles.drivingCluster}>
+          <View style={styles.nitroBarContainer}>
+            <View
+              style={[
+                styles.nitroBarFill,
+                {
+                  width: `${nitroPercent}%`,
+                  backgroundColor: isNitroReady ? '#00FFFF' : '#FFD700',
+                },
+              ]}
+            />
+            <Text style={styles.nitroBarText}>VÁCUO</Text>
+          </View>
+
+          <View style={styles.drivingControls}>
+            {isNitroReady && (
+              <View style={styles.nitroBtn} onTouchStart={handleActivateNitro}>
+                <Text style={styles.nitroBtnText}>NITRO</Text>
+              </View>
+            )}
+            <View style={styles.throttleBtn} onTouchStart={handleAddImpulse}>
+              <Text style={styles.throttleBtnText}>ACELERAR</Text>
+            </View>
           </View>
         </View>
       )}
@@ -3060,14 +3046,14 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#05ebfc', overflow: 'hidden' },
   flatGround: { position: 'absolute', left: 0, right: 0, zIndex: 1, backgroundColor: '#2e8b565b', borderTopWidth: 5, borderTopColor: '#34C759', },
-  miniMapContainer: { position: 'absolute', top: 20, alignSelf: 'center', width: '60%', height: 20, justifyContent: 'center', zIndex: 20 },
+  miniMapContainer: { position: 'absolute', top: 15, left: '25%', right: '25%', height: 16, justifyContent: 'center', zIndex: 20 },
   miniMapLine: { position: 'absolute', left: 0, right: 0, height: 4, backgroundColor: 'rgba(255, 255, 255, 0.4)', borderRadius: 2 },
   miniMapDot: { position: 'absolute', top: '50%', marginTop: -5 },
-  hud: { position: 'absolute', top: 60, right: 50, zIndex: 20, alignItems: 'flex-end' },
+  hud: { position: 'absolute', top: 12, right: 20, zIndex: 30, alignItems: 'flex-end' },
   timerBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 11,
     borderWidth: 2,
     borderColor: 'transparent',
   },
@@ -3086,7 +3072,7 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     elevation: 12,
   },
-  scoreText: { fontSize: 32, fontWeight: '900', color: '#FFF', zIndex: 20 },
+  scoreText: { fontSize: 22, fontWeight: '900', color: '#FFF', zIndex: 20 },
   scoreTextDanger: {
     color: '#FFF',
     textShadowColor: '#FF3B30',
@@ -3099,21 +3085,24 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 2 },
     textShadowRadius: 3,
   },
-  leaderboardContainer: { position: 'absolute', top: 60, left: 20, backgroundColor: 'rgba(0, 0, 0, 0.5)', padding: 10, borderRadius: 10, zIndex: 20, width: 150 },
-  leaderboardTitle: { color: '#FFD700', fontWeight: '900', fontStyle: 'italic', marginBottom: 5, textAlign: 'center', fontSize: 12 },
-  leaderboardItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 255, 255, 0.1)', marginBottom: 4, paddingVertical: 4, paddingHorizontal: 8, borderRadius: 5 },
-  leaderboardItemPlayer: { backgroundColor: 'rgba(0, 208, 132, 0.4)', borderWidth: 1, borderColor: '#00D084' },
-  leaderboardRank: { color: '#FFF', fontWeight: 'bold', width: 25, fontSize: 12 },
-  leaderboardName: { color: '#FFF', fontSize: 12, flex: 1 },
-  nitroBarContainer: { marginTop: '3%', alignSelf: 'center', width: '100%', height: 20, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 10, borderWidth: 2, borderColor: '#FFF', overflow: 'hidden', zIndex: 20, justifyContent: 'center', alignItems: 'center' },
+  positionBadge: { position: 'absolute', top: 12, left: 20, zIndex: 30, minWidth: 78, height: 42, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: 'rgba(8,8,12,0.62)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)' },
+  positionBadgeValue: { color: '#FFD60A', fontSize: 23, fontWeight: '900', fontStyle: 'italic' },
+  positionBadgeTotal: { color: 'rgba(255,255,255,0.72)', fontSize: 11, fontWeight: '900', marginLeft: 4 },
+  playerStatusRow: { marginTop: 5, minHeight: 25, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 5 },
+  lifeCompact: { height: 24, paddingHorizontal: 7, flexDirection: 'row', alignItems: 'center', borderRadius: 8, backgroundColor: 'rgba(8,8,12,0.55)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)' },
+  lifeCompactIcon: { fontSize: 13, marginRight: 3 },
+  lifeCompactValue: { fontSize: 13, fontWeight: '900' },
+  statusEffectIcon: { minWidth: 24, height: 24, textAlign: 'center', textAlignVertical: 'center', color: '#FFF', fontSize: 11, fontWeight: '900', borderRadius: 8, backgroundColor: 'rgba(8,8,12,0.55)', overflow: 'hidden' },
+  nitroBarContainer: { width: 150, height: 12, marginBottom: 7, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.72)', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
   nitroBarFill: { position: 'absolute', left: 0, top: 0, bottom: 0 },
-  nitroBarText: { color: '#FFF', fontWeight: 'bold', fontSize: 10, fontStyle: 'italic', zIndex: 2 },
+  nitroBarText: { color: '#FFF', fontWeight: '900', fontSize: 8, fontStyle: 'italic', letterSpacing: 0.8, zIndex: 2 },
   jumpArea: { position: 'absolute', backgroundColor: '#fff', left: 40, bottom: 30, height: 90, width: 90, borderRadius: 45, zIndex: 30, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 5 },
-  drivingControls: { position: 'absolute', bottom: 30, right: 40, flexDirection: 'row', alignItems: 'center', gap: 20, zIndex: 20 },
-  throttleBtn: { width: 90, height: 90, borderRadius: 45, backgroundColor: 'rgba(0, 208, 132, 0.8)', borderWidth: 4, borderColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 5, zIndex: 20 },
-  throttleBtnText: { color: '#FFF', fontWeight: '900', fontSize: 14, fontStyle: 'italic' },
-  nitroBtn: { width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(0, 255, 255, 0.9)', borderWidth: 3, borderColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 5, zIndex: 20 },
-  nitroBtnText: { color: '#000', fontWeight: '900', fontSize: 14, fontStyle: 'italic' },
+  drivingCluster: { position: 'absolute', bottom: 14, right: 20, zIndex: 30, alignItems: 'flex-end' },
+  drivingControls: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  throttleBtn: { width: 76, height: 76, borderRadius: 38, backgroundColor: 'rgba(0, 208, 132, 0.82)', borderWidth: 3, borderColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 4, zIndex: 20 },
+  throttleBtnText: { color: '#FFF', fontWeight: '900', fontSize: 11, fontStyle: 'italic' },
+  nitroBtn: { width: 58, height: 58, borderRadius: 29, backgroundColor: 'rgba(0, 255, 255, 0.9)', borderWidth: 2, borderColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 5, zIndex: 20 },
+  nitroBtnText: { color: '#000', fontWeight: '900', fontSize: 11, fontStyle: 'italic' },
   block: { position: 'absolute', zIndex: 3 },
   miniGameBtn: { position: 'absolute', width: 64, height: 64, backgroundColor: '#FFCC00', borderWidth: 4, borderColor: '#1C1C1E', borderRadius: 20, justifyContent: 'center', alignItems: 'center', zIndex: 9999, elevation: 10, shadowColor: '#000', shadowOffset: { width: 2, height: 4 }, shadowOpacity: 0.4, shadowRadius: 3, },
   miniGameBtnText: { fontSize: 28, },
@@ -3172,25 +3161,25 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: 'rgba(0,0,0,0.4)',
   }, blindEffect: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgb(255, 255, 255)', zIndex: 15 },
-  boostBarContainer: { position: 'absolute', bottom: 95, left: 20, width: 360, height: 16, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 8, borderWidth: 2, borderColor: '#FFF', overflow: 'hidden', justifyContent: 'center', alignItems: 'center', zIndex: 30 },
+  boostBarContainer: { position: 'absolute', bottom: 78, left: 20, width: 110, height: 14, backgroundColor: 'rgba(0,0,0,0.58)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.72)', overflow: 'hidden', justifyContent: 'center', alignItems: 'center', zIndex: 30 },
   boostBarFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#FF007A' },
   boostBarText: { color: '#FFF', fontWeight: '900', fontSize: 10, zIndex: 5 },
   deckHandContainer: {
     position: 'absolute',
-    bottom: 5,
-    left: 0,
-    right: 0,
-    height: 90,
+    bottom: 7,
+    left: 140,
+    right: 190,
+    height: 72,
     zIndex: 20,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 10
+    gap: 7
   },
   dynamicCardBtn: {
-    width: 85,
-    height: 82,
-    borderRadius: 16,
+    width: 72,
+    height: 68,
+    borderRadius: 13,
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',

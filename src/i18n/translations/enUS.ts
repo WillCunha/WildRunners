@@ -11,9 +11,15 @@ const en = {
     title: 'LOADING...',
     tips: {
       cardsTiming: 'Use your racing cards at the right moment to turn the race around!',
-      catsAndDogs: 'Cats run faster, but do dogs have more stamina?',
+      raceStrategy: 'Speed isn’t everything — the right strategy can change the race!',
       preparingRace: 'Revving the engines and shuffling the deck...',
-      tightTurns: 'Tip: Tight turns require more control!',
+      tightTurns: 'Watch the ramps! Good control can make all the difference.',
+
+      saveYourCards: 'Don’t use all your cards too early — the end of the race may bring surprises!',
+      defendYourself: 'A well-timed defense can be just as powerful as an attack.',
+      watchYourRivals: 'Keep an eye on your rivals — the perfect moment to strike can come at any time!',
+      finalSeconds: 'In the final seconds, a single card can decide the race!',
+      comeback: 'Never give up! One good move can completely change your position.',
     },
   },
   start: {
@@ -462,7 +468,7 @@ const en = {
   },
   mapa: {
     finishRace: "RACE IS OVER",
-    computingResults: "CALCULANDO RESULTADO...",
+    computingResults: "COMPUTING RESULTS...",
     preparingRewards: "PREPARING YOUR REWARDS",
   },
   raceObjectives: {

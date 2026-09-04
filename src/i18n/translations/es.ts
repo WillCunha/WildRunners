@@ -10,19 +10,17 @@ const es = {
 
   loading: {
     title: 'CARGANDO...',
-
     tips: {
-      cardsTiming:
-        '¡Usa tus cartas de carrera en el momento justo para darle la vuelta a la partida!',
+      cardsTiming: '¡Usa tus cartas en el momento adecuado para darle la vuelta a la carrera!',
+      raceStrategy: 'La velocidad no lo es todo — ¡una buena estrategia puede cambiar la carrera!',
+      preparingRace: 'Calentando motores y barajando el mazo...',
+      tightTurns: '¡Cuidado con las rampas! Un buen control puede marcar la diferencia.',
 
-      catsAndDogs:
-        '¿Los gatos corren más rápido, pero los perros tienen más resistencia?',
-
-      preparingRace:
-        'Preparando los motores y barajando el mazo...',
-
-      tightTurns:
-        'Consejo: ¡Las curvas cerradas exigen más control!',
+      saveYourCards: 'No uses todas tus cartas demasiado pronto — ¡el final de la carrera puede traer sorpresas!',
+      defendYourself: 'Una buena defensa en el momento adecuado puede ser tan poderosa como un ataque.',
+      watchYourRivals: 'Vigila a tus rivales — ¡el momento perfecto para atacar puede aparecer en cualquier instante!',
+      finalSeconds: '¡En los últimos segundos, una sola carta puede decidir la carrera!',
+      comeback: '¡Nunca te rindas! Una buena jugada puede cambiar completamente tu posición.',
     },
   },
 
