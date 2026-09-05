@@ -58,7 +58,8 @@ export default function MapSelectionScreen() {
       pathname: '/mapa',
       params: {
         deck: params.deck,
-        mapImage: item.background,
+        mapId: item.id,
+        skyTheme: 'day',
       },
     });
   };

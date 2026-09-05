@@ -1,6 +1,6 @@
 // PARA TESTES REMOVA SEMPRE O "USE EFFECT DE PREPARAÇÃO DO INICIO"
 import Carro from '@/components/Carro';
-import CenarioBackground from '@/components/Cenarios/CenarioBackground';
+import CenarioBackground, { CenarioId, SkyTheme, } from '@/components/Cenarios/CenarioBackground';
 import BubbleLiftVisual from '@/components/Decks/BubbleLiftVisual';
 import ChainsEffect from '@/components/Decks/ChainsEffect';
 import DefenseCardVisual, { DefenseVisualEvent, DefenseVisualKind } from '@/components/Decks/DefenseCardVisual';
@@ -131,6 +131,9 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
 
   const params = useLocalSearchParams<{ deck?: string; mapId?: string; skyTheme?: string; }>();
+  const selectedMapId = (params.mapId as CenarioId) || 'sao_paulo';
+  const selectedSkyTheme = (params.skyTheme as SkyTheme) || 'day';
+
   const { selectedCar, selectedColorFront, selectedColorBack } = useCarSelection();
 
   const fallbackDeck = ['swap', 'bullet', 'chains', 'tnt'];
@@ -976,13 +979,13 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
           const overtakes = racePerformanceRef.current.overtakes;
           setRaceObjectivesLive(prev =>
             prev.position === sampledPlayerPosition &&
-            prev.overtakes === overtakes
+              prev.overtakes === overtakes
               ? prev
               : {
-                  ...prev,
-                  position: sampledPlayerPosition,
-                  overtakes,
-                },
+                ...prev,
+                position: sampledPlayerPosition,
+                overtakes,
+              },
           );
         }
         const currentOrder = allRacers.map(r => r.id).join(',');
@@ -2427,8 +2430,8 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     <View style={styles.container}>
       <MemoCenarioBackground
         isMoving={started && !gameOver}
-        mapId="sao_paulo"
-        skyTheme="day"
+        mapId={selectedMapId}
+        skyTheme={selectedSkyTheme}
         groundY={GROUND_Y}
       />
       <View style={StyleSheet.absoluteFillObject} />
@@ -2452,7 +2455,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
           {Math.max(
             1,
             leaderboard.findIndex(racer => racer.id === 'player') + 1 ||
-              raceObjectivesLive.position,
+            raceObjectivesLive.position,
           )}º
         </Text>
         <Text style={styles.positionBadgeTotal}>/ {TOTAL_RACERS}</Text>

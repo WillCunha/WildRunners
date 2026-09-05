@@ -2,7 +2,7 @@
   "expo": {
     "name": "Wild Runners",
     "slug": "wild-runners",
-    "version": "1.2.2",
+    "version": "1.3.2",
     "orientation": "landscape",
     "icon": "./assets/images/icon512px.png",
     "scheme": "runnergame",

@@ -10,7 +10,11 @@ import {
 
 export type CenarioId =
   | 'sao_paulo'
-  | 'rio';
+  | 'rio'
+  | 'salvador'
+  | 'manaus'
+  | 'brasilia'
+  | 'balneario_camboriu';
 
 export type SkyTheme =
   | 'day'
@@ -39,44 +43,174 @@ interface CenarioBackgroundProps {
 ========================================================= */
 
 const CENARIOS: Partial<Record<CenarioId, CenarioAssets>> = {
-
   sao_paulo: {
-
     skies: {
       day: require(
         '@/assets/images/components/cenarios/sao_paulo/sky_day.png'
       ),
-
       /*
       Depois:
-
       night: require(
         '@/assets/images/components/cenarios/sao_paulo/sky_night.png'
       ),
-
       sunset: require(
         '@/assets/images/components/cenarios/sao_paulo/sky_sunset.png'
       ),
-
       cloudy: require(
         '@/assets/images/components/cenarios/sao_paulo/sky_cloudy.png'
       ),
       */
     },
-
     farCity: require(
       '@/assets/images/components/cenarios/sao_paulo/city_far.png'
     ),
-
     landmarks: require(
       '@/assets/images/components/cenarios/sao_paulo/landmarks.png'
     ),
-
     nearCity: require(
       '@/assets/images/components/cenarios/sao_paulo/city_near.png'
     ),
   },
-
+  rio: {
+    skies: {
+      day: require(
+        '@/assets/images/components/cenarios/rio/sky_day.png'
+      ),
+      /*
+      Depois:
+      night: require(
+        '@/assets/images/components/cenarios/rio/sky_night.png'
+      ),
+      sunset: require(
+        '@/assets/images/components/cenarios/rio/sky_sunset.png'
+      ),
+      cloudy: require(
+        '@/assets/images/components/cenarios/rio/sky_cloudy.png'
+      ),
+      */
+    },
+    farCity: require(
+      '@/assets/images/components/cenarios/rio/city_far.png'
+    ),
+    landmarks: require(
+      '@/assets/images/components/cenarios/rio/landmarks.png'
+    ),
+    nearCity: require(
+      '@/assets/images/components/cenarios/rio/city_near.png'
+    ),
+  },
+  salvador: {
+    skies: {
+      day: require(
+        '@/assets/images/components/cenarios/salvador/sky_day.png'
+      ),
+      /*
+      Depois:
+      night: require(
+        '@/assets/images/components/cenarios/salvador/sky_night.png'
+      ),
+      sunset: require(
+        '@/assets/images/components/cenarios/salvador/sky_sunset.png'
+      ),
+      cloudy: require(
+        '@/assets/images/components/cenarios/salvador/sky_cloudy.png'
+      ),
+      */
+    },
+    farCity: require(
+      '@/assets/images/components/cenarios/salvador/city_far.png'
+    ),
+    landmarks: require(
+      '@/assets/images/components/cenarios/salvador/landmarks.png'
+    ),
+    nearCity: require(
+      '@/assets/images/components/cenarios/salvador/city_near.png'
+    ),
+  },
+  balneario_camboriu: {
+    skies: {
+      day: require(
+        '@/assets/images/components/cenarios/balneario_camboriu/sky_day.png'
+      ),
+      /*
+      Depois:
+      night: require(
+        '@/assets/images/components/cenarios/balneario_camboriu/sky_night.png'
+      ),
+      sunset: require(
+        '@/assets/images/components/cenarios/balneario_camboriu/sky_sunset.png'
+      ),
+      cloudy: require(
+        '@/assets/images/components/cenarios/balneario_camboriu/sky_cloudy.png'
+      ),
+      */
+    },
+    farCity: require(
+      '@/assets/images/components/cenarios/balneario_camboriu/city_far.png'
+    ),
+    landmarks: require(
+      '@/assets/images/components/cenarios/balneario_camboriu/landmarks.png'
+    ),
+    nearCity: require(
+      '@/assets/images/components/cenarios/balneario_camboriu/city_near.png'
+    ),
+  },
+  brasilia: {
+    skies: {
+      day: require(
+        '@/assets/images/components/cenarios/brasilia/sky_day.png'
+      ),
+      /*
+      Depois:
+      night: require(
+        '@/assets/images/components/cenarios/brasilia/sky_night.png'
+      ),
+      sunset: require(
+        '@/assets/images/components/cenarios/brasilia/sky_sunset.png'
+      ),
+      cloudy: require(
+        '@/assets/images/components/cenarios/brasilia/sky_cloudy.png'
+      ),
+      */
+    },
+    farCity: require(
+      '@/assets/images/components/cenarios/brasilia/city_far.png'
+    ),
+    landmarks: require(
+      '@/assets/images/components/cenarios/brasilia/landmarks.png'
+    ),
+    nearCity: require(
+      '@/assets/images/components/cenarios/brasilia/city_near.png'
+    ),
+  },
+  manaus: {
+    skies: {
+      day: require(
+        '@/assets/images/components/cenarios/manaus/sky_day.png'
+      ),
+      /*
+      Depois:
+      night: require(
+        '@/assets/images/components/cenarios/manaus/sky_night.png'
+      ),
+      sunset: require(
+        '@/assets/images/components/cenarios/manaus/sky_sunset.png'
+      ),
+      cloudy: require(
+        '@/assets/images/components/cenarios/manaus/sky_cloudy.png'
+      ),
+      */
+    },
+    farCity: require(
+      '@/assets/images/components/cenarios/manaus/city_far.png'
+    ),
+    landmarks: require(
+      '@/assets/images/components/cenarios/manaus/landmarks.png'
+    ),
+    nearCity: require(
+      '@/assets/images/components/cenarios/manaus/city_near.png'
+    ),
+  },
 };
 
 
@@ -86,7 +220,7 @@ const CENARIOS: Partial<Record<CenarioId, CenarioAssets>> = {
 
 const CenarioBackground: React.FC<CenarioBackgroundProps> = ({
   isMoving,
-  mapId = 'sao_paulo',
+  mapId = 'manaus',
   skyTheme = 'day',
   groundY,
 }) => {
@@ -256,57 +390,57 @@ const CenarioBackground: React.FC<CenarioBackgroundProps> = ({
   ]);
 
 
-return (
-  <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-    {/* CÉU */}
-    <Animated.Image
-      source={skySource}
-      resizeMode="cover"
-      style={[
-        styles.fullScreen,
-        {
-          width: SCREEN_WIDTH,
-          height: SCREEN_HEIGHT,
-        },
-      ]}
-    />
-
-    {/* ÁREA RECORTADA: nada passa da linha da pista */}
-    <View
-      pointerEvents="none"
-      style={[
-        styles.cityClip,
-        {
-          height: groundY,
-        },
-      ]}
-    >
-      <ParallaxLayer
-        source={cenario.farCity}
-        translateX={farX}
-        width={SCREEN_WIDTH}
-        height={SCREEN_HEIGHT}
-        opacity={0.72}
+  return (
+    <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+      {/* CÉU */}
+      <Animated.Image
+        source={skySource}
+        resizeMode="cover"
+        style={[
+          styles.fullScreen,
+          {
+            width: SCREEN_WIDTH,
+            height: SCREEN_HEIGHT,
+          },
+        ]}
       />
 
-      <ParallaxLayer
-        source={cenario.landmarks}
-        translateX={landmarkX}
-        width={SCREEN_WIDTH}
-        height={SCREEN_HEIGHT}
-        opacity={1}
-      />
+      {/* ÁREA RECORTADA: nada passa da linha da pista */}
+      <View
+        pointerEvents="none"
+        style={[
+          styles.cityClip,
+          {
+            height: groundY,
+          },
+        ]}
+      >
+        <ParallaxLayer
+          source={cenario.farCity}
+          translateX={farX}
+          width={SCREEN_WIDTH}
+          height={SCREEN_HEIGHT}
+          opacity={0.72}
+        />
 
-      <ParallaxLayer
-        source={cenario.nearCity}
-        translateX={nearX}
-        width={SCREEN_WIDTH}
-        height={SCREEN_HEIGHT}
-        opacity={1}
-      />
+        <ParallaxLayer
+          source={cenario.landmarks}
+          translateX={landmarkX}
+          width={SCREEN_WIDTH}
+          height={SCREEN_HEIGHT}
+          opacity={1}
+        />
+
+        <ParallaxLayer
+          source={cenario.nearCity}
+          translateX={nearX}
+          width={SCREEN_WIDTH}
+          height={SCREEN_HEIGHT}
+          opacity={1}
+        />
+      </View>
     </View>
-  </View>
-);
+  );
 };
 
 

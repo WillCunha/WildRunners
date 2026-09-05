@@ -10,7 +10,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import {
   AppState,
@@ -23,6 +23,8 @@ export default function Layout() {
   const isLoading = useLoadingStore(
     state => state.isLoading
   );
+
+  const [timePassed, setTimePassed] = useState(false);
 
   const [fontsLoaded, error] = useFonts({
     'Fredoka-Regular':
@@ -64,6 +66,8 @@ export default function Layout() {
       }
     }, []);
 
+
+
   useEffect(() => {
     enterImmersiveMode();
 
@@ -83,10 +87,18 @@ export default function Layout() {
   }, [enterImmersiveMode]);
 
   useEffect(() => {
-    if (fontsLoaded || error) {
+    const timer = setTimeout(() => {
+      setTimePassed(true);
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if ((fontsLoaded || error) && timePassed) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, error]);
+  }, [fontsLoaded, error, timePassed]);
 
   if (!fontsLoaded && !error) {
     return null;

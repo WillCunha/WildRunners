@@ -15,7 +15,7 @@ export const CITY_MAPS = [
   {
     id: 'rio',
     city: 'Rio de Janeiro',
-    levelRequired: 5,
+    levelRequired: 4,
     icon: require('@/assets/images/components/cityMaps/rio.png'),
     iconGRAY: require('@/assets/images/components/cityMaps/rioGRAY.png'),
     background: require('@/assets/images/components/cenarios/rioV1.png'),
@@ -29,7 +29,7 @@ export const CITY_MAPS = [
   {
     id: 'salvador',
     city: 'Salvador', 
-    levelRequired: 9,
+    levelRequired: 8,
     icon: require('@/assets/images/components/cityMaps/salvador.png'),
     iconGRAY: require('@/assets/images/components/cityMaps/salvadorGRAY.png'),
     background: require('@/assets/images/components/cenarios/salvadorV1.png'),
@@ -41,9 +41,9 @@ export const CITY_MAPS = [
     }
   },
   {
-    id: 'Manaus',
+    id: 'manaus',
     city: 'Manaus',
-    levelRequired: 15,
+    levelRequired: 10,
     icon: require('@/assets/images/components/cityMaps/manaus.png'),
     iconGRAY: require('@/assets/images/components/cityMaps/manausGRAY.png'),
     background: require('@/assets/images/components/cenarios/manausV1.png'),
@@ -57,7 +57,7 @@ export const CITY_MAPS = [
   {
     id: 'brasilia',
     city: 'Brasília',
-    levelRequired: 20,
+    levelRequired: 15,
     icon: require('@/assets/images/components/cityMaps/brasilia.png'),
     iconGRAY: require('@/assets/images/components/cityMaps/brasiliaGRAY.png'),
     background: require('@/assets/images/components/cenarios/brasiliaV1.png'),
@@ -69,9 +69,9 @@ export const CITY_MAPS = [
     }
   },
   {
-    id: 'balenario',
+    id: 'balneario_camboriu',
     city: 'Balneário Camboriú',
-    levelRequired: 30,
+    levelRequired: 20,
     icon: require('@/assets/images/components/cityMaps/balneario_camburiu.png'),
     iconGRAY: require('@/assets/images/components/cityMaps/balneario_camburiuGRAY.png'),
     background: require('@/assets/images/components/cenarios/balnearioV1.png'),
