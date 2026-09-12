@@ -1,6 +1,7 @@
 import { carMaps } from '@/src/utils/carMaps';
 import React, { useEffect, useRef } from 'react';
-import { Animated, Image, StyleSheet, View } from 'react-native';
+import { Animated, StyleSheet, View } from 'react-native';
+import SkiaCarBody from './Game/SkiaCarBody';
 
 type CarKey = keyof typeof carMaps;
 
@@ -73,23 +74,13 @@ export default function Carro({
   return (
     <View style={[styles.carWrapper, { width: RENDER_WIDTH, height: RENDER_HEIGHT }]}>
 
-      {/* Corpo */}
-      <Image
-        source={car.corpoBrancoFrente}
-        style={[styles.carBase, { tintColor: carColorFront }]}
-        resizeMode="contain"
-      />
-      <Image
-        source={car.corpoBrancoTras}
-        style={[styles.carBase, { tintColor: carColorBack }]}
-        resizeMode="contain"
-      />
-
-      {/* Overlay */}
-      <Image
-        source={car.corpoTransparente}
-        style={styles.carOverlay}
-        resizeMode="contain"
+      {/* Corpo 2.5D recolorido via Skia; componentes/vidros ficam intactos. */}
+      <SkiaCarBody
+        carId={carType}
+        width={RENDER_WIDTH}
+        primaryColor={carColorFront}
+        secondaryColor={carColorBack}
+        style={styles.carBase}
       />
 
       {/* Roda Traseira */}
@@ -136,23 +127,15 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   carBase: {
-    width: '100%',
-    height: '100%',
-    bottom: 0,
     position: 'absolute',
-    zIndex: 10,
-  },
-  carOverlay: {
-    width: '100%',
-    height: '100%',
-    position: 'absolute',
-    bottom: 0,
     left: 0,
+    bottom: 0,
     zIndex: 10,
   },
   wheel: {
     width: 55,
     height: 55,
     position: 'absolute',
+    zIndex: 30
   },
 });

@@ -1,3 +1,4 @@
+import SkiaCarBody from '@/components/Game/SkiaCarBody';
 import { AudioContext } from '@/context/AudioContext';
 import { useCarSelection } from '@/context/CarContext';
 import { useLanguage } from '@/context/LanguageContext';
@@ -31,14 +32,14 @@ type CarCanvasProps = {
 };
 
 const AVAILABLE_COLORS = [
-    '#FF453A',
-    '#32D74B',
-    '#0A84FF',
-    '#FFD60A',
-    '#FF9F0A',
-    '#BF5AF2',
-    '#F2F2F7',
-    '#2C2C2E',
+    '#C8423A', // vermelho
+    '#3F8F5B', // verde
+    '#3478B8', // azul
+    '#D6AD32', // amarelo
+    '#C97830', // laranja
+    '#8057A3', // roxo
+    '#E4E4E2', // branco/prata
+    '#29292B', // grafite
 ];
 
 const MAX_UPGRADE_LEVEL = 10;
@@ -54,20 +55,12 @@ const CarCanvas = React.memo(
 
         return (
             <View style={{ width, height }}>
-                <Image
-                    source={car.corpoBrancoFrente as ImageSourcePropType}
-                    resizeMode="contain"
-                    style={[styles.carLayer, { width, height, tintColor: colorBack }]}
-                />
-                <Image
-                    source={car.corpoBrancoTras as ImageSourcePropType}
-                    resizeMode="contain"
-                    style={[styles.carLayer, { width, height, tintColor: colorFront }]}
-                />
-                <Image
-                    source={car.corpoTransparente as ImageSourcePropType}
-                    resizeMode="contain"
-                    style={[styles.carLayer, { width, height }]}
+                <SkiaCarBody
+                    carId={carId}
+                    width={width}
+                    primaryColor={colorFront}
+                    secondaryColor={colorBack}
+                    style={styles.carLayer}
                 />
                 <Image
                     source={car.wheelImage as ImageSourcePropType}
@@ -791,7 +784,7 @@ const styles = StyleSheet.create({
     },
     previewArea: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 4 },
     carLayer: { position: 'absolute', left: 0, top: 0, zIndex: 2 },
-    wheel: { position: 'absolute', zIndex: 1 },
+    wheel: { position: 'absolute', zIndex: 30 },
     emptyGarage: { alignItems: 'center', maxWidth: 290 },
     emptyGarageIcon: { fontSize: 30 },
     emptyGarageTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '900', marginTop: 6 },

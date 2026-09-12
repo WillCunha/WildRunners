@@ -1,3 +1,4 @@
+import SkiaCarBody from '@/components/Game/SkiaCarBody';
 import WildBackButton from '@/components/ui/WildBackButton';
 import { useCarSelection } from '@/context/CarContext';
 import { useLanguage } from '@/context/LanguageContext';
@@ -42,14 +43,14 @@ type CarCanvasProps = {
 };
 
 const AVAILABLE_COLORS = [
-  '#FF453A',
-  '#32D74B',
-  '#0A84FF',
-  '#FFD60A',
-  '#FF9F0A',
-  '#BF5AF2',
-  '#F2F2F7',
-  '#2C2C2E',
+  '#C8423A', // vermelho
+  '#3F8F5B', // verde
+  '#3478B8', // azul
+  '#D6AD32', // amarelo
+  '#C97830', // laranja
+  '#8057A3', // roxo
+  '#E4E4E2', // branco/prata
+  '#29292B', // grafite
 ];
 
 const MAX_BASE_SPEED = Math.max(
@@ -72,21 +73,14 @@ const CarCanvas = React.memo(
     const height = car.baseSize.height * scale;
 
     return (
-      <View style={{ width, height, opacity }}>
-        <Image
-          source={car.corpoBrancoFrente as ImageSourcePropType}
-          resizeMode="contain"
-          style={[styles.carLayer, { width, height, tintColor: colorBack }]}
-        />
-        <Image
-          source={car.corpoBrancoTras as ImageSourcePropType}
-          resizeMode="contain"
-          style={[styles.carLayer, { width, height, tintColor: colorFront }]}
-        />
-        <Image
-          source={car.corpoTransparente as ImageSourcePropType}
-          resizeMode="contain"
-          style={[styles.carLayer, { width, height }]}
+      <View style={{ width, height }}>
+        <SkiaCarBody
+          carId={carId}
+          width={width}
+          primaryColor={colorFront}
+          secondaryColor={colorBack}
+          opacity={opacity}
+          style={styles.carLayer}
         />
 
         <Image

@@ -4,28 +4,28 @@ export const carMaps = {
     // ==========================================
     buggy: {
         icone: require('@/assets/images/cars/carroceria/buggy/icon.png'),
-        corpoBrancoFrente: require('@/assets/images/cars/carroceria/buggy/brancoFrente.png'),
-        corpoBrancoTras: require('@/assets/images/cars/carroceria/buggy/brancoTras.png'),
-        corpoTransparente: require('@/assets/images/cars/carroceria/buggy/transparent.png'),
+        corpoBrancoFrente: require('@/assets/images/cars/carroceria/buggy/primary.png'),
+        corpoBrancoTras: require('@/assets/images/cars/carroceria/buggy/secondary.png'),
+        corpoTransparente: require('@/assets/images/cars/carroceria/buggy/components.png'),
         baseSize: { width: 350, height: 120 },
         wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
         wheels: {
             mapa: {
-                rodaFrente: { x: 129, y: 12 },
-                rodaTras: { x: 47, y: 12 },
-                size: { width: 50, height: 50 },
+                rodaFrente: { x: 114, y: 7 },
+                rodaTras: { x: 53, y: 7 },
+                size: { width: 40, height: 40 },
             },
 
             oficina: {
-                rodaFrente: { x: 231.5, y: -5 },
-                rodaTras: { x: 70, y: -3 },
-                size: { width: 55, height: 50 },
+                 rodaFrente: { x: 210, y: -5 },
+                rodaTras: { x: 88, y: -3 },
+                size: { width: 40, height: 40 },
             },
 
             loja: {
-                rodaFrente: { x: 231.5, y: -5 },
-                rodaTras: { x: 70, y: -3 },
-                size: { width: 55, height: 50 },
+                rodaFrente: { x: 210, y: -5 },
+                rodaTras: { x: 88, y: -3 },
+                size: { width: 40, height: 40 },
             },
         },
         tier: 1,
@@ -36,28 +36,28 @@ export const carMaps = {
     },
     kombi: {
         icone: require('@/assets/images/cars/carroceria/kombi/icon.png'),
-        corpoBrancoFrente: require('@/assets/images/cars/carroceria/kombi/brancoCima.png'),
-        corpoBrancoTras: require('@/assets/images/cars/carroceria/kombi/brancoBaixo.png'),
-        corpoTransparente: require('@/assets/images/cars/carroceria/kombi/transparent.png'),
+        corpoBrancoFrente: require('@/assets/images/cars/carroceria/kombi/primary.png'),
+        corpoBrancoTras: require('@/assets/images/cars/carroceria/kombi/secondary.png'),
+        corpoTransparente: require('@/assets/images/cars/carroceria/kombi/components.png'),
         baseSize: { width: 350, height: 120 },
         wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
 
         wheels: {
             mapa: {
-                rodaFrente: { x: 129, y: 3 },
-                rodaTras: { x: 43, y: 3 },
-                size: { width: 45, height: 45 },
+                rodaFrente: { x: 125, y: 3 },
+                rodaTras: { x: 39, y: 3 },
+                size: { width: 50, height: 55 },
             },
 
             oficina: {
-                rodaFrente: { x: 237, y: -17 },
-                rodaTras: { x: 63, y: -17 },
+                 rodaFrente: { x: 227, y: -15 },
+                rodaTras: { x: 57, y: -15 },
                 size: { width: 45, height: 45 },
             },
 
             loja: {
-                rodaFrente: { x: 237, y: -17 },
-                rodaTras: { x: 63, y: -17 },
+                rodaFrente: { x: 227, y: -15 },
+                rodaTras: { x: 57, y: -15 },
                 size: { width: 45, height: 45 },
             },
         },
@@ -73,32 +73,32 @@ export const carMaps = {
     // ==========================================
     uno: {
         icone: require('@/assets/images/cars/carroceria/uno/icon.png'),
-        corpoBrancoFrente: require('@/assets/images/cars/carroceria/uno/brancoFrente.png'),
-        corpoBrancoTras: require('@/assets/images/cars/carroceria/uno/brancoTras.png'),
-        corpoTransparente: require('@/assets/images/cars/carroceria/uno/transparent.png'),
+        corpoBrancoFrente: require('@/assets/images/cars/carroceria/uno/primary.png'),
+        corpoBrancoTras: require('@/assets/images/cars/carroceria/uno/secondary.png'),
+        corpoTransparente: require('@/assets/images/cars/carroceria/uno/components.png'),
         baseSize: { width: 350, height: 120 },
         wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
 
         wheels: {
             mapa: {
-                rodaFrente: { x: 131, y: 11 },
-                rodaTras: { x: 44.7, y: 11 },
+                rodaFrente: { x: 133, y: 7 },
+                rodaTras: { x: 40.5, y: 7 },
                 size: { width: 50, height: 50 },
             },
 
             oficina: {
-                rodaFrente: { x: 234, y: -5 },
-                rodaTras: { x: 62, y: -5 },
-                size: { width: 55, height: 50 },
+                rodaFrente: { x: 243, y: -8 },
+                rodaTras: { x: 59, y: -8 },
+                size: { width: 45, height: 45 },
             },
 
             loja: {
-                rodaFrente: { x: 234, y: -5 },
-                rodaTras: { x: 62, y: -5 },
-                size: { width: 55, height: 50 },
+                rodaFrente: { x: 243, y: -8 },
+                rodaTras: { x: 59, y: -8 },
+                size: { width: 45, height: 45 },
             },
         },
-        tier: 1,
+        tier: 3,
         stats: {
             speed: { base: 130, maxUpgrade: 180 },
             acceleration: { base: 75, maxUpgrade: 110 }
@@ -106,29 +106,29 @@ export const carMaps = {
     },
     fusca: {
         icone: require('@/assets/images/cars/carroceria/fusca/icon.png'),
-        corpoBrancoFrente: require('@/assets/images/cars/carroceria/fusca/brancoFrente.png'),
-        corpoBrancoTras: require('@/assets/images/cars/carroceria/fusca/brancoTras.png'),
-        corpoTransparente: require('@/assets/images/cars/carroceria/fusca/transparent.png'),
+        corpoBrancoFrente: require('@/assets/images/cars/carroceria/fusca/primary.png'),
+        corpoBrancoTras: require('@/assets/images/cars/carroceria/fusca/secondary.png'),
+        corpoTransparente: require('@/assets/images/cars/carroceria/fusca/components.png'),
         baseSize: { width: 350, height: 120 },
         wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
 
         wheels: {
             mapa: {
-                rodaFrente: { x: 141, y: 8 },
-                rodaTras: { x: 41, y: 8 },
-                size: { width: 57, height: 57 },
+                rodaFrente: { x: 139, y: 8 },
+                rodaTras: { x: 40, y: 8 },
+                size: { width: 55, height: 55 },
             },
 
             oficina: {
-                rodaFrente: { x: 168, y: -3.5 },
-                rodaTras: { x: 37.5, y: -3.5 },
-                size: { width: 65, height: 65 },
+                rodaFrente: { x: 255, y: -7 },
+                rodaTras: { x: 55, y: -7 },
+                size: { width: 50, height: 50 },
             },
 
             loja: {
-                rodaFrente: { x: 252, y: -14 },
-                rodaTras: { x: 52, y: -14 },
-                size: { width: 60, height: 60 },
+                rodaFrente: { x: 255, y: -7 },
+                rodaTras: { x: 55, y: -7 },
+                size: { width: 50, height: 50 },
             },
         },
         tier: 3,
@@ -143,29 +143,29 @@ export const carMaps = {
     // ==========================================
     astor: {
         icone: require('@/assets/images/cars/carroceria/astor/icon.png'),
-        corpoBrancoFrente: require('@/assets/images/cars/carroceria/astor/brancoFrente.png'),
-        corpoBrancoTras: require('@/assets/images/cars/carroceria/astor/brancoTras.png'),
-        corpoTransparente: require('@/assets/images/cars/carroceria/astor/transparent.png'),
+        corpoBrancoFrente: require('@/assets/images/cars/carroceria/astor/primary.png'),
+        corpoBrancoTras: require('@/assets/images/cars/carroceria/astor/secondary.png'),
+        corpoTransparente: require('@/assets/images/cars/carroceria/astor/components.png'),
         baseSize: { width: 350, height: 120 },
         wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
 
         wheels: {
             mapa: {
-                rodaFrente: { x: 123, y: 12 },
-                rodaTras: { x: 43, y: 13 },
-                size: { width: 48, height: 48 },
+                rodaFrente: { x: 122, y: 4 },
+                rodaTras: { x: 44, y: 5 },
+                size: { width: 45, height: 45 },
             },
 
             oficina: {
-                rodaFrente: { x: 185, y: 1 },
-                rodaTras: { x: 60, y: 1 },
-                size: { width: 65, height: 65 },
+                rodaFrente: { x: 219.5, y: -14 },
+                rodaTras: { x: 65.5, y: -14 },
+                size: { width: 45, height: 45 },
             },
 
             loja: {
-                rodaFrente: { x: 219, y: -14 },
-                rodaTras: { x: 62, y: -14 },
-                size: { width: 50, height: 50 },
+                rodaFrente: { x: 219.5, y: -14 },
+                rodaTras: { x: 65.5, y: -14 },
+                size: { width: 45, height: 45 },
             },
         },
         tier: 5,
@@ -176,29 +176,29 @@ export const carMaps = {
     },
     caravana: {
         icone: require('@/assets/images/cars/carroceria/caravana/icon.png'),
-        corpoBrancoFrente: require('@/assets/images/cars/carroceria/caravana/brancoFrente.png'),
-        corpoBrancoTras: require('@/assets/images/cars/carroceria/caravana/brancoTras.png'),
-        corpoTransparente: require('@/assets/images/cars/carroceria/caravana/transparent.png'),
+        corpoBrancoFrente: require('@/assets/images/cars/carroceria/caravana/primary.png'),
+        corpoBrancoTras: require('@/assets/images/cars/carroceria/caravana/secondary.png'),
+        corpoTransparente: require('@/assets/images/cars/carroceria/caravana/components.png'),
         baseSize: { width: 350, height: 120 },
         wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
         wheels: {
             mapa: {
-                rodaFrente: { x: 137, y: 9 },
-                rodaTras: { x: 51, y: 9 },
+                rodaFrente: { x: 133, y: 11 },
+                rodaTras: { x: 40.5, y: 11 },
                 size: { width: 50, height: 50 },
             },
             oficina: {
-                rodaFrente: { x: 250, y: -9 },
-                rodaTras: { x: 77, y: -9 },
-                size: { width: 50, height: 50 },
+                rodaFrente: { x: 242, y: -3 },
+                rodaTras: { x: 57.5, y: -3 },
+                size: { width: 48, height: 48 },
             },
             loja: {
-                rodaFrente: { x: 250, y: -9 },
-                rodaTras: { x: 77, y: -9 },
-                size: { width: 50, height: 50 },
+                rodaFrente: { x: 242, y: -3 },
+                rodaTras: { x: 57.5, y: -3 },
+                size: { width: 48, height: 48 },
             }
         },
-        tier: 3,
+        tier: 5,
         stats: {
             speed: { base: 165, maxUpgrade: 225 },
             acceleration: { base: 105, maxUpgrade: 155 }
@@ -210,29 +210,29 @@ export const carMaps = {
     // ==========================================
     ferrari: {
         icone: require('@/assets/images/cars/carroceria/ferrari/icon.png'),
-        corpoBrancoFrente: require('@/assets/images/cars/carroceria/ferrari/brancoFrente.png'),
-        corpoBrancoTras: require('@/assets/images/cars/carroceria/ferrari/brancoTras.png'),
-        corpoTransparente: require('@/assets/images/cars/carroceria/ferrari/transparent.png'),
+        corpoBrancoFrente: require('@/assets/images/cars/carroceria/ferrari/primary.png'),
+        corpoBrancoTras: require('@/assets/images/cars/carroceria/ferrari/secondary.png'),
+        corpoTransparente: require('@/assets/images/cars/carroceria/ferrari/components.png'),
         baseSize: { width: 350, height: 120 },
         wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
 
         wheels: {
             mapa: {
-                rodaFrente: { x: 134, y: 8 },
-                rodaTras: { x: 33, y: 10 },
-                size: { width: 50, height: 50 },
+                rodaFrente: { x: 125, y: 7 },
+                rodaTras: { x: 37, y: 7 },
+                size: { width: 45, height: 45 },
             },
 
             oficina: {
-                rodaFrente: { x: 171, y: 0 },
-                rodaTras: { x: 19, y: 0 },
-                size: { width: 65, height: 65 },
+                 rodaFrente: { x: 225, y: -10 },
+                rodaTras: { x: 51, y: -9 },
+                size: { width: 45, height: 45 },
             },
 
             loja: {
-                rodaFrente: { x: 242, y: -10 },
-                rodaTras: { x: 42, y: -10 },
-                size: { width: 50, height: 50 },
+                rodaFrente: { x: 225, y: -10 },
+                rodaTras: { x: 51, y: -9 },
+                size: { width: 45, height: 45 },
             },
         },
         tier: 8,
@@ -243,29 +243,29 @@ export const carMaps = {
     },
     lamborghini: {
         icone: require('@/assets/images/cars/carroceria/lamborghini/icon.png'),
-        corpoBrancoFrente: require('@/assets/images/cars/carroceria/lamborghini/brancoFrente.png'),
-        corpoBrancoTras: require('@/assets/images/cars/carroceria/lamborghini/brancoTras.png'),
-        corpoTransparente: require('@/assets/images/cars/carroceria/lamborghini/transparent.png'),
+        corpoBrancoFrente: require('@/assets/images/cars/carroceria/lamborghini/primary.png'),
+        corpoBrancoTras: require('@/assets/images/cars/carroceria/lamborghini/secondary.png'),
+        corpoTransparente: require('@/assets/images/cars/carroceria/lamborghini/components.png'),
         baseSize: { width: 350, height: 120 },
         wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
 
         wheels: {
             mapa: {
-                rodaFrente: { x: 129.5, y: 20 },
-                rodaTras: { x: 38, y: 22 },
-                size: { width: 47, height: 47 },
+                rodaFrente: { x: 126.5, y: 7 },
+                rodaTras: { x: 42, y: 9 },
+                size: { width: 43, height: 43 },
             },
 
             oficina: {
-                rodaFrente: { x: 232.5, y: 10 },
-                rodaTras: { x: 48.5, y: 12 },
-                size: { width: 50, height: 50 },
+                rodaFrente: { x: 230, y: -10 },
+                rodaTras: { x: 60, y: -10 },
+                size: { width: 45, height: 45 },
             },
 
             loja: {
-                rodaFrente: { x: 232.5, y: 10 },
-                rodaTras: { x: 50, y: 12 },
-                size: { width: 50, height: 50 },
+                rodaFrente: { x: 230, y: -10 },
+                rodaTras: { x: 60, y: -10 },
+                size: { width: 45, height: 45 },
             },
         },
         tier: 8,
@@ -276,27 +276,27 @@ export const carMaps = {
     },
     monster: {
         icone: require('@/assets/images/cars/carroceria/monster/icon.png'),
-        corpoBrancoFrente: require('@/assets/images/cars/carroceria/monster/brancoFrente.png'),
-        corpoBrancoTras: require('@/assets/images/cars/carroceria/monster/brancoTras.png'),
-        corpoTransparente: require('@/assets/images/cars/carroceria/monster/transparent.png'),
+        corpoBrancoFrente: require('@/assets/images/cars/carroceria/monster/primary.png'),
+        corpoBrancoTras: require('@/assets/images/cars/carroceria/monster/secondary.png'),
+        corpoTransparente: require('@/assets/images/cars/carroceria/monster/components.png'),
         baseSize: { width: 350, height: 120 },
         wheelImage: require('@/assets/images/cars/rodas/rodas_padrao.png'),
         wheels: {
             mapa: {
-                rodaFrente: { x: 131, y: 10 },
-                rodaTras: { x: 43, y:  10 },
+                rodaFrente: { x: 137, y: 8 },
+                rodaTras: { x: 40, y:  10 },
                 size: { width: 55, height: 55 },
             },
 
             oficina: {
-                rodaFrente: { x: 140, y: -30 },
-                rodaTras: { x: 60, y: -30 },
-                size: { width: 65, height: 65 },
+                rodaFrente: { x: 247, y: -14 },
+                rodaTras: { x: 54, y: -14 },
+                size: { width: 55, height: 55 },
             },
 
             loja: {
-                rodaFrente: { x: 234, y: -14 },
-                rodaTras: { x: 58, y: -14 },
+                rodaFrente: { x: 247, y: -14 },
+                rodaTras: { x: 54, y: -14 },
                 size: { width: 55, height: 55 },
             },
         },

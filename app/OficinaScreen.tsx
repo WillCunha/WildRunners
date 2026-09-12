@@ -1,3 +1,4 @@
+import SkiaCarBody from '@/components/Game/SkiaCarBody';
 import WildBackButton from '@/components/ui/WildBackButton';
 import { useCarSelection } from '@/context/CarContext';
 import { useLanguage } from '@/context/LanguageContext';
@@ -47,26 +48,12 @@ const CarCanvas = React.memo(
 
         return (
             <View style={{ width, height }}>
-                <Image
-                    source={car.corpoBrancoFrente as ImageSourcePropType}
-                    resizeMode="contain"
-                    style={[
-                        styles.carLayer,
-                        { width, height, tintColor: colorBack },
-                    ]}
-                />
-                <Image
-                    source={car.corpoBrancoTras as ImageSourcePropType}
-                    resizeMode="contain"
-                    style={[
-                        styles.carLayer,
-                        { width, height, tintColor: colorFront },
-                    ]}
-                />
-                <Image
-                    source={car.corpoTransparente as ImageSourcePropType}
-                    resizeMode="contain"
-                    style={[styles.carLayer, { width, height }]}
+                <SkiaCarBody
+                    carId={carId}
+                    width={width}
+                    primaryColor={colorFront}
+                    secondaryColor={colorBack}
+                    style={styles.carLayer}
                 />
 
                 <Image
