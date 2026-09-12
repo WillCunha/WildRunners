@@ -12,6 +12,7 @@ import { StyleProp, ViewStyle } from 'react-native';
 
 type CarKey = keyof typeof carMaps;
 
+
 type SkiaCarBodyProps = {
   carId: CarKey;
   width: number;
