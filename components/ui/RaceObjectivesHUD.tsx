@@ -23,11 +23,7 @@ const difficultyBorder: Record<RaceObjectiveDifficulty, string> = {
   hard: '#FF5A5F',
 };
 
-/**
- * HUD das 3 missões sorteadas para a corrida.
- * O mapa entrega somente os snapshots quando alguma métrica muda;
- * este componente não participa do loop de física.
- */
+
 export default function RaceObjectivesHUD({ objectives }: Props) {
   const { language } = useLanguage();
 
