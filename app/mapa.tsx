@@ -20,6 +20,15 @@ import { raceRewardsService } from '@/src/services/raceRewardsService';
 import { useLoadingStore } from '@/src/store/LoadingStore';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { carMaps } from '@/src/utils/carMaps';
+import {
+  evaluateRaceObjectivesLive,
+  isDefensiveRaceCard,
+  isOffensiveRaceCard,
+  selectRaceObjectives,
+  type RaceObjectiveId,
+  type RaceObjectiveResult,
+  type RacePerformanceStats,
+} from '@/src/utils/progression';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Animated, BackHandler, Image, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
@@ -502,43 +511,113 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   // Evita creditar a mesma partida mais de uma vez.
   const gameOverHandledRef = useRef(false);
 
-  // Métricas objetivas usadas pelo sistema de XP e pelas missões da corrida.
+  // Métricas objetivas usadas pelo XP e pelo catálogo dinâmico de missões.
+  // Recursos coletados são cumulativos: perder loot ao tomar dano NÃO desfaz
+  // progresso de uma missão de coleta.
   const racePerformanceRef = useRef({
     successfulAttacks: 0,
     successfulDefenses: 0,
     overtakes: 0,
     livesLost: 0,
     worstPosition: 1,
+    bestPosition: TOTAL_RACERS,
+    timeInTop3Seconds: 0,
+    timeInFirstSeconds: 0,
+    cardsUsed: 0,
+    offensiveCardsUsed: 0,
+    defensiveCardsUsed: 0,
+    uniqueCardsUsed: [] as string[],
+    uniqueOffensiveCardsUsed: [] as string[],
+    opponentsEliminated: 0,
+    collectedMotor: 0,
+    collectedSpray: 0,
+    collectedGears: 0,
+    collectedTotal: 0,
   });
 
   // A posição é amostrada junto do leaderboard. Quando ela melhora,
   // contabilizamos quantas posições o player ganhou naquele intervalo.
   const lastSampledPlayerPositionRef = useRef<number | null>(null);
+  const currentPlayerPositionRef = useRef(TOTAL_RACERS);
 
-  // Snapshot leve para o HUD das missões.
-  // Só atualiza quando ataque/posição/ultrapassagem realmente mudam.
-  const [raceObjectivesLive, setRaceObjectivesLive] = useState({
-    position: TOTAL_RACERS,
-    attacks: 0,
-    overtakes: 0,
+  // Os 3 IDs são sorteados UMA VEZ por corrida e ficam congelados até o resultado.
+  const selectedObjectiveIdsRef = useRef<RaceObjectiveId[]>([]);
+  const [raceObjectivesHud, setRaceObjectivesHud] = useState<RaceObjectiveResult[]>([]);
+
+  const buildObjectivePerformanceSnapshot = (): RacePerformanceStats => ({
+    perfectStart: miniGameClicksRef.current >= 3,
+    successfulAttacks: racePerformanceRef.current.successfulAttacks,
+    successfulDefenses: racePerformanceRef.current.successfulDefenses,
+    overtakes: racePerformanceRef.current.overtakes,
+    livesLost: racePerformanceRef.current.livesLost,
+    worstPosition: racePerformanceRef.current.worstPosition,
+    survived: !playerIsDead.current,
+    bestPosition: racePerformanceRef.current.bestPosition,
+    timeInTop3Seconds: racePerformanceRef.current.timeInTop3Seconds,
+    timeInFirstSeconds: racePerformanceRef.current.timeInFirstSeconds,
+    cardsUsed: racePerformanceRef.current.cardsUsed,
+    offensiveCardsUsed: racePerformanceRef.current.offensiveCardsUsed,
+    defensiveCardsUsed: racePerformanceRef.current.defensiveCardsUsed,
+    uniqueCardsUsed: [...racePerformanceRef.current.uniqueCardsUsed],
+    uniqueOffensiveCardsUsed: [...racePerformanceRef.current.uniqueOffensiveCardsUsed],
+    opponentsEliminated: racePerformanceRef.current.opponentsEliminated,
+    collectedMotor: racePerformanceRef.current.collectedMotor,
+    collectedSpray: racePerformanceRef.current.collectedSpray,
+    collectedGears: racePerformanceRef.current.collectedGears,
+    collectedTotal: racePerformanceRef.current.collectedTotal,
+    selectedObjectiveIds: [...selectedObjectiveIdsRef.current],
   });
+
+  const syncRaceObjectivesHud = (position = currentPlayerPositionRef.current) => {
+    currentPlayerPositionRef.current = position;
+
+    const next = evaluateRaceObjectivesLive(
+      position,
+      TOTAL_RACERS,
+      buildObjectivePerformanceSnapshot(),
+      selectedObjectiveIdsRef.current,
+    );
+
+    setRaceObjectivesHud(prev => {
+      const signature = (items: RaceObjectiveResult[]) =>
+        items.map(item => `${item.id}:${item.current}:${item.completed}:${item.progressText}`).join('|');
+
+      return signature(prev) === signature(next) ? prev : next;
+    });
+  };
+
+  const registerPlayerCardUse = (effect: string) => {
+    racePerformanceRef.current.cardsUsed += 1;
+
+    if (!racePerformanceRef.current.uniqueCardsUsed.includes(effect)) {
+      racePerformanceRef.current.uniqueCardsUsed.push(effect);
+    }
+
+    if (isOffensiveRaceCard(effect)) {
+      racePerformanceRef.current.offensiveCardsUsed += 1;
+      if (!racePerformanceRef.current.uniqueOffensiveCardsUsed.includes(effect)) {
+        racePerformanceRef.current.uniqueOffensiveCardsUsed.push(effect);
+      }
+    }
+
+    if (isDefensiveRaceCard(effect)) {
+      racePerformanceRef.current.defensiveCardsUsed += 1;
+    }
+
+    syncRaceObjectivesHud();
+  };
 
   const registerSuccessfulAttack = (sourceId: string, targetId: string) => {
     if (sourceId === 'player' && targetId !== 'player') {
       racePerformanceRef.current.successfulAttacks += 1;
-
-      const attacks = racePerformanceRef.current.successfulAttacks;
-      setRaceObjectivesLive(prev =>
-        prev.attacks === attacks
-          ? prev
-          : { ...prev, attacks },
-      );
+      syncRaceObjectivesHud();
     }
   };
 
   const registerSuccessfulDefense = (racerId: string, sourceId?: string) => {
     if (racerId === 'player' && sourceId && sourceId !== 'player') {
       racePerformanceRef.current.successfulDefenses += 1;
+      syncRaceObjectivesHud();
     }
   };
 
@@ -628,17 +707,42 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       overtakes: 0,
       livesLost: 0,
       worstPosition: 1,
+      bestPosition: TOTAL_RACERS,
+      timeInTop3Seconds: 0,
+      timeInFirstSeconds: 0,
+      cardsUsed: 0,
+      offensiveCardsUsed: 0,
+      defensiveCardsUsed: 0,
+      uniqueCardsUsed: [],
+      uniqueOffensiveCardsUsed: [],
+      opponentsEliminated: 0,
+      collectedMotor: 0,
+      collectedSpray: 0,
+      collectedGears: 0,
+      collectedTotal: 0,
     };
 
     const initialPlayerPosition =
       1 + positions.filter(position => position > positions[0]).length;
 
     lastSampledPlayerPositionRef.current = initialPlayerPosition;
-    setRaceObjectivesLive({
-      position: initialPlayerPosition,
-      attacks: 0,
-      overtakes: 0,
+    currentPlayerPositionRef.current = initialPlayerPosition;
+    racePerformanceRef.current.bestPosition = initialPlayerPosition;
+    racePerformanceRef.current.worstPosition = initialPlayerPosition;
+
+    selectedObjectiveIdsRef.current = selectRaceObjectives({
+      deck: finalDeck,
+      totalRacers: TOTAL_RACERS,
     });
+
+    setRaceObjectivesHud(
+      evaluateRaceObjectivesLive(
+        initialPlayerPosition,
+        TOTAL_RACERS,
+        buildObjectivePerformanceSnapshot(),
+        selectedObjectiveIdsRef.current,
+      ),
+    );
 
     final30WarningPlayedRef.current = false;
     timerPulseAnim.setValue(1);
@@ -778,14 +882,10 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       playerPosition,
     );
 
-    const performance = {
-      perfectStart: miniGameClicksRef.current >= 3,
-      successfulAttacks: racePerformanceRef.current.successfulAttacks,
-      successfulDefenses: racePerformanceRef.current.successfulDefenses,
-      overtakes: racePerformanceRef.current.overtakes,
-      livesLost: racePerformanceRef.current.livesLost,
-      worstPosition: racePerformanceRef.current.worstPosition,
+    const performance: RacePerformanceStats = {
+      ...buildObjectivePerformanceSnapshot(),
       survived: !playerIsDead.current,
+      selectedObjectiveIds: [...selectedObjectiveIdsRef.current],
     };
 
     /* ================================
@@ -1030,6 +1130,10 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
             racePerformanceRef.current.worstPosition,
             sampledPlayerPosition,
           );
+          racePerformanceRef.current.bestPosition = Math.min(
+            racePerformanceRef.current.bestPosition,
+            sampledPlayerPosition,
+          );
 
           const previousPosition = lastSampledPlayerPositionRef.current;
 
@@ -1042,24 +1146,22 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
           }
 
           lastSampledPlayerPositionRef.current = sampledPlayerPosition;
-
-          const overtakes = racePerformanceRef.current.overtakes;
-          setRaceObjectivesLive(prev =>
-            prev.position === sampledPlayerPosition &&
-              prev.overtakes === overtakes
-              ? prev
-              : {
-                ...prev,
-                position: sampledPlayerPosition,
-                overtakes,
-              },
-          );
+          currentPlayerPositionRef.current = sampledPlayerPosition;
+          syncRaceObjectivesHud(sampledPlayerPosition);
         }
         const currentOrder = allRacers.map(r => r.id).join(',');
         if (currentOrder !== lastOrderRef.current) {
           setLeaderboard(allRacers.map(r => ({ id: r.id, name: r.name })));
           lastOrderRef.current = currentOrder;
         }
+      }
+
+      // Tempo de domínio é contado uma vez por segundo, fora do render.
+      if (gameTime.current % 60 === 0 && !playerIsDead.current) {
+        const sampledPosition = currentPlayerPositionRef.current;
+        if (sampledPosition <= 3) racePerformanceRef.current.timeInTop3Seconds += 1;
+        if (sampledPosition === 1) racePerformanceRef.current.timeInFirstSeconds += 1;
+        syncRaceObjectivesHud(sampledPosition);
       }
 
       for (const [effect, timeLeft] of Object.entries(activeEffectsTimers.current)) {
@@ -1530,7 +1632,14 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
         if (pieceDistanceSq < PLAYER_SIZE * PLAYER_SIZE) {
           sessionPartsRef.current[piece.type] += 1;
+
+          racePerformanceRef.current.collectedTotal += 1;
+          if (piece.type === 'motor') racePerformanceRef.current.collectedMotor += 1;
+          if (piece.type === 'spray') racePerformanceRef.current.collectedSpray += 1;
+          if (piece.type === 'engrenagem') racePerformanceRef.current.collectedGears += 1;
+
           setSessionPartsHud({ ...sessionPartsRef.current });
+          syncRaceObjectivesHud();
         } else {
           if (piece.x > -100) {
             remainingPieces.push(piece);
@@ -1663,6 +1772,12 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     if (effect === 'ghost' && playerStatus.current.isGhost) return;
     if (effect === 'second_chance' && playerStatus.current.secondChanceReady) return;
 
+    // Efeitos visuais globais ainda podem estar resolvendo uma carta anterior.
+    // Não contamos a missão, não cobramos boost e não iniciamos cooldown se a carta não puder nascer.
+    if (effect === 'chains' && activeChains) return;
+    if (effect === 'bullet' && activeBulletEffect) return;
+    if (effect === 'tornado' && activeTornado) return;
+
     // Não gasta boost/cooldown se o jogador já estiver em primeiro
     // ou se outro Swap ainda estiver resolvendo.
     if (effect === 'swap' && (activeSwapRef.current || !hasOpponentAhead('player'))) return;
@@ -1674,10 +1789,12 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
       setBoost(prev => prev - cost);
       setBubbleCooldown(BUBBLE_COOLDOWN);
+      registerPlayerCardUse(effect);
       return;
     }
 
     setBoost(prev => prev - cost);
+    registerPlayerCardUse(effect);
 
     if (effect === 'swap') {
       if (triggerSwap('player')) setSwapCooldown(SWAP_COOLDOWN);
@@ -2347,6 +2464,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       }
 
       setPlayerLives(playerLivesRef.current);
+      syncRaceObjectivesHud();
 
       if (playerLivesRef.current <= 0) {
         playerIsDead.current = true;
@@ -2396,6 +2514,11 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       bot.isDead = true;
       bot.speed = 0;
       spawnPieces(bot.x, bot.y, 10);
+
+      if (sourceId === 'player') {
+        racePerformanceRef.current.opponentsEliminated += 1;
+        syncRaceObjectivesHud();
+      }
     }
 
     return true;
@@ -2947,11 +3070,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         </Animated.View>
 
         <View style={styles.objectivesSlot}>
-          <RaceObjectivesHUD
-            position={raceObjectivesLive.position}
-            attacks={raceObjectivesLive.attacks}
-            overtakes={raceObjectivesLive.overtakes}
-          />
+          <RaceObjectivesHUD objectives={raceObjectivesHud} />
         </View>
 
         {hasActiveProtection && (

@@ -1,26 +1,28 @@
-export type RacePerformanceStats = {
-  perfectStart: boolean;
-  successfulAttacks: number;
-  successfulDefenses: number;
-  overtakes?: number;
-  livesLost: number;
-  worstPosition: number;
-  survived: boolean;
-};
+import {
+  evaluateSelectedRaceObjectives,
+  type RacePerformanceStats,
+  type RaceObjectiveId,
+  type RaceObjectiveResult,
+} from './raceObjectives';
 
-export type RaceObjectiveId =
-  | 'top3'
-  | 'attacks'
-  | 'overtakes';
+export type {
+  RacePerformanceStats,
+  RaceObjectiveId,
+  RaceObjectiveResult,
+  RaceObjectiveDifficulty,
+  RaceObjectiveCategory,
+} from './raceObjectives';
 
-export type RaceObjectiveResult = {
-  id: RaceObjectiveId;
-  icon: string;
-  current: number;
-  target: number;
-  completed: boolean;
-  xpReward: number;
-};
+export {
+  DEFAULT_RACE_OBJECTIVE_IDS,
+  RACE_OBJECTIVES,
+  evaluateRaceObjectivesLive,
+  getRaceObjectiveDefinition,
+  getRaceObjectiveLabel,
+  isDefensiveRaceCard,
+  isOffensiveRaceCard,
+  selectRaceObjectives,
+} from './raceObjectives';
 
 export type XpBreakdown = {
   position: number;
@@ -52,12 +54,6 @@ export const FLAWLESS_XP = 10;
 export const COMEBACK_XP = 10;
 export const SURVIVAL_XP = 5;
 
-export const RACE_OBJECTIVE_REWARDS = {
-  top3: 12,
-  attacks: 10,
-  overtakes: 12,
-} as const;
-
 /**
  * XP TOTAL necessário para ENTRAR em determinado nível.
  *
@@ -67,9 +63,6 @@ export const RACE_OBJECTIVE_REWARDS = {
  * LV.4 = 4.500 XP
  * LV.5 = 7.000 XP
  * LV.6 = 10.000 XP
- *
- * Mantemos o primeiro avanço perceptível sem permitir que o jogador
- * atravesse vários níveis em poucas corridas.
  */
 const BASE_LEVEL_XP = 1000;
 const LEVEL_GROWTH_XP = 250;
@@ -79,7 +72,6 @@ export function getXpForLevel(level: number) {
   if (safeLevel <= 1) return 0;
 
   const n = safeLevel - 1;
-
   return (
     n * BASE_LEVEL_XP +
     LEVEL_GROWTH_XP * n * (n - 1)
@@ -113,46 +105,23 @@ export function getLevelProgress(totalXp: number) {
   };
 }
 
+/**
+ * Mantém a assinatura que raceRewardsService já utiliza.
+ * A diferença é que agora avaliamos SOMENTE os 3 IDs sorteados no início da corrida.
+ * Em chamadas antigas sem selectedObjectiveIds, usamos 3 objetivos padrão determinísticos.
+ */
 export function evaluateRaceObjectives(
   position: number,
   totalRacers: number,
   performance: RacePerformanceStats,
 ): RaceObjectiveResult[] {
-  const safeTotalRacers = Math.max(1, Math.floor(totalRacers));
-  const safePosition = Math.max(1, Math.min(safeTotalRacers, Math.floor(position)));
-  const safeAttacks = Math.max(0, Math.floor(performance.successfulAttacks));
-  const safeOvertakes = Math.max(0, Math.floor(performance.overtakes ?? 0));
-
-  const top3Completed = safePosition <= 3;
-  const attacksCompleted = safeAttacks >= 2;
-  const overtakesCompleted = safeOvertakes >= 3;
-
-  return [
-    {
-      id: 'top3',
-      icon: '🏁',
-      current: safePosition,
-      target: 3,
-      completed: top3Completed,
-      xpReward: top3Completed ? RACE_OBJECTIVE_REWARDS.top3 : 0,
-    },
-    {
-      id: 'attacks',
-      icon: '🎯',
-      current: Math.min(safeAttacks, 2),
-      target: 2,
-      completed: attacksCompleted,
-      xpReward: attacksCompleted ? RACE_OBJECTIVE_REWARDS.attacks : 0,
-    },
-    {
-      id: 'overtakes',
-      icon: '⚡',
-      current: Math.min(safeOvertakes, 3),
-      target: 3,
-      completed: overtakesCompleted,
-      xpReward: overtakesCompleted ? RACE_OBJECTIVE_REWARDS.overtakes : 0,
-    },
-  ];
+  return evaluateSelectedRaceObjectives(
+    position,
+    totalRacers,
+    performance,
+    performance.selectedObjectiveIds,
+    true,
+  );
 }
 
 export function calculateRaceXp(
@@ -176,8 +145,16 @@ export function calculateRaceXp(
   const flawlessXp = performance.survived && performance.livesLost === 0 ? FLAWLESS_XP : 0;
   const comebackXp = performance.worstPosition >= 5 && safePosition <= 3 ? COMEBACK_XP : 0;
   const survivalXp = performance.survived ? SURVIVAL_XP : 0;
-  const objectives = evaluateRaceObjectives(safePosition, safeTotalRacers, performance);
-  const objectivesXp = objectives.reduce((sum, objective) => sum + objective.xpReward, 0);
+
+  const objectives = evaluateRaceObjectives(
+    safePosition,
+    safeTotalRacers,
+    performance,
+  );
+  const objectivesXp = objectives.reduce(
+    (sum, objective) => sum + objective.xpReward,
+    0,
+  );
 
   const total =
     positionXp +

@@ -7,6 +7,7 @@ import { carMaps } from '@/src/utils/carMaps';
 import { CITY_MAPS } from '@/src/utils/cityMaps';
 import {
     getLevelProgress,
+    getRaceObjectiveLabel,
     getXpForLevel,
     normalizeLegacyLevelRequirement,
 } from '@/src/utils/progression';
@@ -484,7 +485,7 @@ const XpProgressPanel = ({
     result,
     onTick,
 }: XpProgressPanelProps) => {
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
 
     const xpValue = useRef(
         new Animated.Value(
@@ -666,12 +667,10 @@ const XpProgressPanel = ({
                                     style={styles.objectiveResultLabel}
                                     numberOfLines={1}
                                 >
-                                    {t(`raceObjectives.${objective.id}`)}
+                                    {getRaceObjectiveLabel(objective.id, language)}
                                 </Text>
                                 <Text style={styles.objectiveResultProgress}>
-                                    {objective.id === 'top3'
-                                        ? `#${result.position}`
-                                        : `${objective.current}/${objective.target}`}
+                                    {(objective as any).progressText ?? `${objective.current}/${objective.target}`}
                                 </Text>
                             </View>
 

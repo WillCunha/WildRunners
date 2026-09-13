@@ -1,43 +1,35 @@
+import { useLanguage } from '@/context/LanguageContext';
+import {
+  getRaceObjectiveLabel,
+  type RaceObjectiveDifficulty,
+  type RaceObjectiveResult,
+} from '@/src/utils/progression';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 type Props = {
-  position: number;
-  attacks: number;
-  overtakes: number;
+  objectives: RaceObjectiveResult[];
+};
+
+const difficultyLabel: Record<RaceObjectiveDifficulty, string> = {
+  easy: 'F',
+  medium: 'M',
+  hard: 'D',
+};
+
+const difficultyBorder: Record<RaceObjectiveDifficulty, string> = {
+  easy: '#52D273',
+  medium: '#FFD60A',
+  hard: '#FF5A5F',
 };
 
 /**
- * HUD compacto das missões.
- *
- * Durante a corrida o jogador precisa enxergar progresso, não ler descrição.
- * Os nomes completos + XP continuam na RaceResultScreen.
+ * HUD das 3 missões sorteadas para a corrida.
+ * O mapa entrega somente os snapshots quando alguma métrica muda;
+ * este componente não participa do loop de física.
  */
-export default function RaceObjectivesHUD({
-  position,
-  attacks,
-  overtakes,
-}: Props) {
-  const objectives = [
-    {
-      id: 'top3',
-      icon: '🏁',
-      progress: `#${Math.max(1, position)}`,
-      done: position <= 3,
-    },
-    {
-      id: 'attacks',
-      icon: '🎯',
-      progress: `${Math.min(Math.max(0, attacks), 2)}/2`,
-      done: attacks >= 2,
-    },
-    {
-      id: 'overtakes',
-      icon: '⚡',
-      progress: `${Math.min(Math.max(0, overtakes), 3)}/3`,
-      done: overtakes >= 3,
-    },
-  ];
+export default function RaceObjectivesHUD({ objectives }: Props) {
+  const { language } = useLanguage();
 
   return (
     <View style={styles.container} pointerEvents="none">
@@ -46,18 +38,37 @@ export default function RaceObjectivesHUD({
           key={objective.id}
           style={[
             styles.chip,
-            objective.done && styles.chipDone,
+            {
+              borderLeftColor: difficultyBorder[objective.difficulty],
+            },
+            objective.completed && styles.chipDone,
           ]}
         >
-          <Text style={styles.icon}>{objective.icon}</Text>
-          <Text
-            style={[
-              styles.progress,
-              objective.done && styles.progressDone,
-            ]}
-          >
-            {objective.done ? '✓' : objective.progress}
-          </Text>
+          <View style={styles.mainRow}>
+            <Text style={styles.icon}>{objective.icon}</Text>
+
+            <View style={styles.textArea}>
+              <Text style={styles.label} numberOfLines={1}>
+                {getRaceObjectiveLabel(objective.id, language, true)}
+              </Text>
+
+              <View style={styles.metaRow}>
+                <Text style={styles.difficulty}>
+                  {difficultyLabel[objective.difficulty]}
+                </Text>
+                <Text
+                  style={[
+                    styles.progress,
+                    objective.completed && styles.progressDone,
+                  ]}
+                >
+                  {objective.completed ? '✓' : objective.progressText}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.xp}>+{objective.xpPossible}</Text>
+          </View>
         </View>
       ))}
     </View>
@@ -66,37 +77,66 @@ export default function RaceObjectivesHUD({
 
 const styles = StyleSheet.create({
   container: {
-    width: '100%',
-    alignItems: 'flex-end',
+    width: 154,
+    alignItems: 'stretch',
     gap: 4,
   },
   chip: {
-    minWidth: 82,
-    height: 23,
-    paddingHorizontal: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    minHeight: 31,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: 'rgba(8,8,12,0.52)',
+    backgroundColor: 'rgba(8,8,12,0.56)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.16)',
+    borderLeftWidth: 3,
   },
   chipDone: {
-    backgroundColor: 'rgba(0,208,132,0.38)',
-    borderColor: 'rgba(0,208,132,0.82)',
+    backgroundColor: 'rgba(0,208,132,0.30)',
+    borderColor: 'rgba(0,208,132,0.72)',
+  },
+  mainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   icon: {
-    fontSize: 11,
+    width: 20,
+    fontSize: 12,
     marginRight: 4,
   },
-  progress: {
+  textArea: {
+    flex: 1,
+    minWidth: 0,
+  },
+  label: {
     color: '#FFFFFF',
-    fontSize: 9,
+    fontSize: 8.5,
+    fontWeight: '900',
+  },
+  metaRow: {
+    marginTop: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  difficulty: {
+    color: 'rgba(255,255,255,0.62)',
+    fontSize: 7,
+    fontWeight: '900',
+  },
+  progress: {
+    color: 'rgba(255,255,255,0.82)',
+    fontSize: 8,
     fontWeight: '900',
   },
   progressDone: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 10,
+  },
+  xp: {
+    marginLeft: 5,
+    color: '#FFD60A',
+    fontSize: 8,
+    fontWeight: '900',
   },
 });
