@@ -10,6 +10,10 @@ const es = {
 
   loading: {
     title: 'CARGANDO...',
+    preloadTimeoutTitle: 'Problema al cargar',
+    preloadTimeoutMessage:
+      'Algunos archivos del juego tardaron más de lo esperado en cargar. Inténtalo de nuevo.',
+    retry: 'INTENTAR DE NUEVO',
     tips: {
       cardsTiming: '¡Usa tus cartas en el momento adecuado para darle la vuelta a la carrera!',
       raceStrategy: 'La velocidad no lo es todo — ¡una buena estrategia puede cambiar la carrera!',

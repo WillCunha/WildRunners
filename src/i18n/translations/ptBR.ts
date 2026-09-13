@@ -10,6 +10,10 @@ const ptBR = {
   },
   loading: {
     title: 'CARREGANDO...',
+    preloadTimeoutTitle: 'Problema ao carregar',
+    preloadTimeoutMessage:
+      'Alguns arquivos do jogo demoraram mais que o esperado para carregar. Tente novamente.',
+    retry: 'TENTAR NOVAMENTE',
     tips: {
       cardsTiming: 'Use suas cartas no momento certo para virar a corrida!',
       raceStrategy: 'Velocidade não é tudo — uma boa estratégia pode mudar a corrida!',

@@ -92,6 +92,9 @@ const BOT_DIFFICULTIES: BotDifficulty[] = ['easy', 'easy', 'balanced', 'balanced
 const BOT_CATCHUP_DISTANCE = 180;
 const BOT_CATCHUP_MULTIPLIER = 1.10;
 const BOT_PLAYER_TARGET_CHANCE = 0.35;
+const BOT_LEADER_TARGET_CHANCE = 0.72;
+const BOT_CLOSE_LEADER_DISTANCE = 420;
+const BOT_TNT_REAR_RANGE = 360;
 const BOT_DEFENSE_REACTION_CHANCE = 0.75;
 const NITRO_POWER_MULTIPLIER = 1.25;
 
@@ -258,6 +261,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         speed: 0,
         targetSpeed: bStats.maxSpeed,
         stats: bStats,
+        difficulty: BOT_DIFFICULTIES[index] ?? 'balanced',
         skin: skins[index],
         isCrouching: false,
         velocity: 0,
@@ -331,6 +335,14 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
   const [leaderboard, setLeaderboard] = useState<{ id: string, name: string }[]>([]);
   const lastOrderRef = useRef('');
+
+  // Roster fixo da corrida para o HUD continuar mostrando quem foi eliminado.
+  const [raceRoster, setRaceRoster] = useState<Array<{
+    id: string;
+    name: string;
+    color: string;
+    isPlayer: boolean;
+  }>>([]);
 
   const [isBlindActive, setIsBlindActive] = useState(false);
 
@@ -418,6 +430,34 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const [secondChanceCooldown, setSecondChanceCooldown] = useState(0);
   const [armorCooldown, setArmorCooldown] = useState(0);
 
+  // Snapshot leve do estado defensivo usado somente pelo HUD.
+  // Atualiza apenas quando uma proteção realmente muda.
+  const [playerProtectionHud, setPlayerProtectionHud] = useState({
+    shieldCharges: 0,
+    armorCharges: 0,
+    secondChanceReady: false,
+    isGhost: false,
+  });
+
+  const syncPlayerProtectionHud = useCallback(() => {
+    const status = playerStatus.current;
+    const next = {
+      shieldCharges: status.shieldCharges,
+      armorCharges: status.armorCharges,
+      secondChanceReady: status.secondChanceReady,
+      isGhost: status.isGhost,
+    };
+
+    setPlayerProtectionHud(prev =>
+      prev.shieldCharges === next.shieldCharges &&
+      prev.armorCharges === next.armorCharges &&
+      prev.secondChanceReady === next.secondChanceReady &&
+      prev.isGhost === next.isGhost
+        ? prev
+        : next
+    );
+  }, []);
+
   // EVENTOS VISUAIS DAS CARTAS DEFENSIVAS.
   // Um único evento por corredor é suficiente: o componente executa a animação
   // quando o ID muda, sem adicionar animações ao game loop.
@@ -451,6 +491,11 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
   // Caixa da partida: motor = peças, spray = pinturas e engrenagem = engrenagens.
   const sessionPartsRef = useRef({ motor: 0, spray: 0, engrenagem: 0 });
+  const [sessionPartsHud, setSessionPartsHud] = useState({
+    motor: 0,
+    spray: 0,
+    engrenagem: 0,
+  });
 
   // ID da partida
   const raceIdRef = useRef('');
@@ -567,6 +612,12 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     playerIsDead.current = false;
     playerStatus.current = { ...defaultStatus };
     activeEffectsTimers.current = {};
+    setPlayerProtectionHud({
+      shieldCharges: 0,
+      armorCharges: 0,
+      secondChanceReady: false,
+      isGhost: false,
+    });
     setDefenseVisualEvents({});
     setIsSlowActive(false);
     playerSpeed.current = MIN_SPEED;
@@ -608,6 +659,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       newBots[i].velocity = 0;
       newBots[i].speed = MIN_SPEED;
       newBots[i].stats = refreshedStats;
+      newBots[i].difficulty = raceDifficulties[i] ?? 'balanced';
       newBots[i].maxLives = refreshedStats.maxLives;
       newBots[i].lives = refreshedStats.maxLives;
       newBots[i].isDead = false;
@@ -621,6 +673,20 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     }
     botsRef.current = newBots;
     setBots(newBots);
+    setRaceRoster([
+      {
+        id: 'player',
+        name: 'Você',
+        color: selectedColorFront || '#00D084',
+        isPlayer: true,
+      },
+      ...newBots.map(bot => ({
+        id: bot.id,
+        name: bot.name,
+        color: bot.carColorFront,
+        isPlayer: false,
+      })),
+    ]);
 
     const randomSeconds = Math.floor(Math.random() * (180 - 60 + 1)) + 60;
     raceTimeRef.current = randomSeconds;
@@ -633,6 +699,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   useEffect(() => {
     if (!started && !isCountingRef.current && !gameOver) {
       sessionPartsRef.current = { motor: 0, spray: 0, engrenagem: 0 };
+      setSessionPartsHud({ motor: 0, spray: 0, engrenagem: 0 });
       gameOverHandledRef.current = false;
       setShowFinishTransition(false);
 
@@ -1004,7 +1071,10 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
               case 'invert_controls': playerStatus.current.controlsInverted = false; break;
               case 'blind': playerStatus.current.isBlind = false; setIsBlindActive(false); break;
               case 'panic': playerStatus.current.isPanicking = false; break;
-              case 'ghost': playerStatus.current.isGhost = false; break;
+              case 'ghost':
+                playerStatus.current.isGhost = false;
+                syncPlayerProtectionHud();
+                break;
               case 'score_boost': playerStatus.current.scoreMultiplier = 1; break;
               case 'slow_slow': playerStatus.current.isSlowed = false; setIsSlowActive(false); break;
               case 'bubble_lift': playerStatus.current.isLevitating = false; playerStatus.current.bubbleLiftStartY = null; velocity.current = 0; break;
@@ -1460,6 +1530,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
         if (pieceDistanceSq < PLAYER_SIZE * PLAYER_SIZE) {
           sessionPartsRef.current[piece.type] += 1;
+          setSessionPartsHud({ ...sessionPartsRef.current });
         } else {
           if (piece.x > -100) {
             remainingPieces.push(piece);
@@ -1545,14 +1616,22 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     const attackEffects: CardEffect[] = [
       'swap', 'bullet', 'chains', 'tnt', 'tornado', 'slow_slow', 'blind', 'bubble_lift'
     ];
+    const forwardAttackEffects = attackEffects.filter(effect => effect !== 'tnt');
     const defenseEffects: CardEffect[] = [
       'nitro_power', 'shield', 'quick_repair', 'ghost', 'second_chance', 'armor'
     ];
 
-    const attack = attackEffects[Math.floor(Math.random() * attackEffects.length)];
-    const defense = defenseEffects[Math.floor(Math.random() * defenseEffects.length)];
+    const pickRandom = <T,>(items: T[]) =>
+      items[Math.floor(Math.random() * items.length)];
 
-    return [attack, defense].map(effect => ({
+    // Quatro cartas, como o player. Pelo menos um ataque sempre funciona para a frente,
+    // evitando bots presos com TNT + defesa quando estão perseguindo o líder.
+    const attackOne = pickRandom(forwardAttackEffects);
+    const attackTwo = pickRandom(attackEffects.filter(effect => effect !== attackOne));
+    const defenseOne = pickRandom(defenseEffects);
+    const defenseTwo = pickRandom(defenseEffects.filter(effect => effect !== defenseOne));
+
+    return [attackOne, attackTwo, defenseOne, defenseTwo].map(effect => ({
       effect,
       currentCooldown: 60 * 3 + Math.floor(Math.random() * 120),
       baseCooldown: getBotCardCooldown(effect),
@@ -1752,75 +1831,282 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     return false;
   }
 
+  function getBotLeaderTargetChance(
+    bot: (typeof botsRef.current)[number],
+    myRank: number,
+    distanceToLeader: number,
+  ) {
+    const rankPressure = [
+      0,
+      0.92, // 2º colocado: quase sempre tenta derrubar o líder.
+      0.82,
+      0.70,
+      0.58,
+      0.48,
+    ][myRank] ?? BOT_LEADER_TARGET_CHANCE;
+
+    const difficultyModifier =
+      bot.difficulty === 'easy'
+        ? -0.12
+        : bot.difficulty === 'rival'
+          ? 0.08
+          : 0;
+
+    const distanceModifier =
+      distanceToLeader <= BOT_CLOSE_LEADER_DISTANCE
+        ? 0.06
+        : distanceToLeader > 800
+          ? -0.10
+          : 0;
+
+    return Math.max(
+      BOT_PLAYER_TARGET_CHANCE,
+      Math.min(0.96, rankPressure + difficultyModifier + distanceModifier),
+    );
+  }
+
+  function chooseBotAttackTarget(
+    bot: (typeof botsRef.current)[number],
+    allRacers: { id: string; x: number; y: number; isPlayer: boolean }[],
+    myRank: number,
+  ) {
+    const opponentsAhead = allRacers.slice(0, myRank);
+    if (opponentsAhead.length === 0) return null;
+
+    // O último elemento desta lista é o rival imediatamente à frente do bot.
+    const nearestAhead = opponentsAhead[opponentsAhead.length - 1];
+    const leader = allRacers[0];
+
+    if (leader?.id === 'player') {
+      const distanceToLeader = Math.max(0, playerXRef.current - bot.x);
+      if (Math.random() < getBotLeaderTargetChance(bot, myRank, distanceToLeader)) {
+        return 'player';
+      }
+    }
+
+    // Se o player estiver à frente, mas não liderando, ainda pode virar alvo ocasional.
+    const playerAhead = opponentsAhead.find(racer => racer.id === 'player');
+    if (playerAhead) {
+      const difficultyModifier =
+        bot.difficulty === 'easy' ? -0.10 : bot.difficulty === 'rival' ? 0.10 : 0;
+
+      const chance = Math.max(0.15, Math.min(0.65, BOT_PLAYER_TARGET_CHANCE + difficultyModifier));
+      if (Math.random() < chance) return 'player';
+    }
+
+    return nearestAhead.id;
+  }
+
+  function getBotAttackCardScore(
+    effect: CardEffect,
+    bot: (typeof botsRef.current)[number],
+    allRacers: { id: string; x: number; y: number; isPlayer: boolean }[],
+    myRank: number,
+  ) {
+    const opponentsAhead = allRacers.slice(0, myRank);
+    const opponentsBehind = allRacers.slice(myRank + 1);
+
+    if (effect === 'tnt') {
+      const nearestBehind = opponentsBehind[0];
+      if (!nearestBehind) return Number.NEGATIVE_INFINITY;
+
+      const rearDistance = bot.x - nearestBehind.x;
+      if (rearDistance > BOT_TNT_REAR_RANGE) return Number.NEGATIVE_INFINITY;
+
+      // TNT é uma arma de retaguarda. Liderando, passa a ser uma ótima escolha.
+      return myRank === 0 ? 10 : 3;
+    }
+
+    // As demais cartas ofensivas precisam de alguém à frente.
+    if (opponentsAhead.length === 0) return Number.NEGATIVE_INFINITY;
+
+    switch (effect) {
+      case 'tornado':
+        return 6 + Math.min(3, opponentsAhead.length) * 1.5;
+      case 'bullet':
+        return 8.5;
+      case 'swap':
+        return myRank >= 2 ? 8 : 6.5;
+      case 'chains':
+        return 7.5;
+      case 'bubble_lift':
+        return 7.2;
+      case 'slow_slow':
+        return 6.5;
+      case 'blind':
+        return 5.5;
+      default:
+        return 5;
+    }
+  }
+
+  function launchBotBullet(
+    bot: (typeof botsRef.current)[number],
+    targetId: string,
+  ) {
+    const targetAlive = targetId === 'player'
+      ? !playerIsDead.current
+      : Boolean(botsRef.current.find(racer => racer.id === targetId && !racer.isDead));
+
+    if (!targetAlive) return false;
+
+    activeBulletsRef.current.push({
+      id: `bot-bullet-${Date.now()}-${Math.random()}`,
+      callerId: bot.id,
+      targetId,
+      x: bot.x + PLAYER_SIZE / 2,
+      y: bot.y + PLAYER_SIZE / 2,
+      angle: 0,
+    });
+
+    return true;
+  }
+
+  function launchBotTornado(
+    bot: (typeof botsRef.current)[number],
+    allRacers: { id: string; x: number; y: number; isPlayer: boolean }[],
+  ) {
+    const victims = allRacers
+      .filter(racer => racer.id !== bot.id && racer.x > bot.x)
+      .map(racer => ({ id: racer.id, x: racer.x, y: racer.y }));
+
+    if (victims.length === 0) return false;
+
+    setTornadosToRender(prev => [
+      ...prev,
+      {
+        id: `bot-tornado-${Date.now()}-${Math.random()}`,
+        callerId: bot.id,
+        callerX: bot.x,
+        callerY: bot.y,
+        victims,
+      },
+    ]);
+
+    return true;
+  }
+
   function processBotsAI() {
     const allRacers = [
-      { id: 'player', x: playerXRef.current, isPlayer: true },
-      ...botsRef.current.map(b => ({ id: b.id, x: b.x, isPlayer: false }))
+      ...(!playerIsDead.current
+        ? [{ id: 'player', x: playerXRef.current, y: y.current, isPlayer: true }]
+        : []),
+      ...botsRef.current
+        .filter(bot => !bot.isDead)
+        .map(bot => ({ id: bot.id, x: bot.x, y: bot.y, isPlayer: false })),
     ].sort((a, b) => b.x - a.x);
 
     botsRef.current.forEach(bot => {
       if (bot.isDead) return;
-      if (bot.thinkTimer > 0) { bot.thinkTimer--; return; }
+      if (bot.thinkTimer > 0) {
+        bot.thinkTimer--;
+        return;
+      }
 
       const availableCards = bot.deck.filter(card => card.currentCooldown <= 0);
       if (availableCards.length === 0) return;
 
-      const usableDefense = availableCards.find(card =>
+      const myRank = allRacers.findIndex(racer => racer.id === bot.id);
+      if (myRank < 0) return;
+
+      const underThreat = isBotUnderThreat(bot);
+
+      // Nitro deixa de roubar a vez de um ataque. Defesas realmente urgentes continuam prioritárias.
+      const urgentDefense = availableCards.find(card =>
+        card.effect !== 'nitro_power' &&
         CARD_CATEGORIES.DEFENSE_BUFF.includes(card.effect as any) &&
         shouldBotUseDefenseCard(bot, card.effect as CardEffect)
       );
-      const attackCards = availableCards.filter(card =>
-        !CARD_CATEGORIES.DEFENSE_BUFF.includes(card.effect as any)
+
+      const attackCandidates = availableCards
+        .filter(card => !CARD_CATEGORIES.DEFENSE_BUFF.includes(card.effect as any))
+        .map(card => ({
+          card,
+          score:
+            getBotAttackCardScore(card.effect as CardEffect, bot, allRacers, myRank) +
+            Math.random() * 1.5,
+        }))
+        .filter(candidate => Number.isFinite(candidate.score))
+        .sort((a, b) => b.score - a.score);
+
+      const nitroCard = availableCards.find(card =>
+        card.effect === 'nitro_power' &&
+        shouldBotUseDefenseCard(bot, 'nitro_power')
       );
-      const chosenCard = usableDefense ?? attackCards[Math.floor(Math.random() * attackCards.length)];
+
+      // Se a situação defensiva não é crítica, atacar vem antes de simplesmente buffar velocidade.
+      const chosenCard = urgentDefense ?? attackCandidates[0]?.card ?? nitroCard;
 
       if (!chosenCard) {
-        bot.thinkTimer = 8;
+        bot.thinkTimer = 6;
         return;
       }
 
-      const myRank = allRacers.findIndex(r => r.id === bot.id);
-      let target = bot.id;
+      const isDefense = CARD_CATEGORIES.DEFENSE_BUFF.includes(chosenCard.effect as any);
+      const target = isDefense
+        ? bot.id
+        : chooseBotAttackTarget(bot, allRacers, myRank);
 
-      if (!CARD_CATEGORIES.DEFENSE_BUFF.includes(chosenCard.effect as any)) {
-        const opponentsAhead = allRacers.slice(0, myRank);
+      let executed = false;
 
-        if (opponentsAhead.length > 0) {
-          const playerAhead = opponentsAhead.find(r => r.id === 'player');
-          if (playerAhead && Math.random() < BOT_PLAYER_TARGET_CHANCE) {
-            target = 'player';
-          } else {
-            target = opponentsAhead[opponentsAhead.length - 1].id;
-          }
-        } else {
-          const opponentsBehind = allRacers.slice(myRank + 1);
-          if (opponentsBehind.length > 0) target = opponentsBehind[0].id;
-          else return;
-        }
-      }
-
-      if (chosenCard.effect === 'swap') {
-        const targetRacer = allRacers.find(r => r.id === target);
-        if (targetRacer && targetRacer.x <= bot.x) return;
-
-        if (!triggerSwap(bot.id)) {
-          bot.thinkTimer = 8;
-          return;
-        }
+      if (isDefense) {
+        applyCardEffect(chosenCard.effect as CardEffect, bot.id, bot.id);
+        executed = true;
       } else if (chosenCard.effect === 'tnt') {
+        // TNT só chega aqui quando há um rival suficientemente perto atrás.
         triggerTNT(bot.id);
+        executed = true;
+      } else if (!target) {
+        executed = false;
+      } else if (chosenCard.effect === 'swap') {
+        // Mantém a animação especial do Swap. O efeito já escolhe um rival à frente.
+        executed = triggerSwap(bot.id);
       } else if (chosenCard.effect === 'bullet') {
-        triggerBullet(bot.id);
+        // Bots lançam diretamente para o alvo decidido pela IA, permitindo vários mísseis simultâneos.
+        executed = launchBotBullet(bot, target);
       } else if (chosenCard.effect === 'tornado') {
-        triggerTornado(bot.id);
+        // Tornado é naturalmente uma arma contra o pelotão à frente.
+        executed = launchBotTornado(bot, allRacers);
       } else if (chosenCard.effect === 'bubble_lift') {
-        triggerBubbleLift(bot.id);
+        executed = triggerBubbleLift(bot.id, target);
+      } else if (chosenCard.effect === 'chains') {
+        // Uma corrente física por vez para não sobrescrever o estado existente.
+        if (!activeChainsStateRef.current) {
+          applyCardEffect('chains', target, bot.id);
+          executed = true;
+        }
       } else {
         applyCardEffect(chosenCard.effect as CardEffect, target, bot.id);
+        executed = true;
+      }
+
+      // A carta só entra em cooldown se algo realmente aconteceu.
+      if (!executed) {
+        bot.thinkTimer = 4;
+        return;
       }
 
       chosenCard.currentCooldown = chosenCard.baseCooldown;
-      bot.thinkTimer = 15 + Math.floor(Math.random() * 25);
+
+      const thinkBase =
+        bot.difficulty === 'easy'
+          ? 12
+          : bot.difficulty === 'rival'
+            ? 5
+            : 8;
+
+      const thinkVariance =
+        bot.difficulty === 'easy'
+          ? 18
+          : bot.difficulty === 'rival'
+            ? 9
+            : 13;
+
+      // Ameaçado reage um pouco mais rápido; fora disso cada dificuldade mantém seu ritmo.
+      bot.thinkTimer = Math.max(
+        4,
+        thinkBase + Math.floor(Math.random() * thinkVariance) - (underThreat ? 2 : 0),
+      );
     });
   }
 
@@ -1912,8 +2198,10 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     }
 
     if (effect === 'shield') {
-      if (targetId === 'player') playerStatus.current.shieldCharges = 1;
-      else {
+      if (targetId === 'player') {
+        playerStatus.current.shieldCharges = 1;
+        syncPlayerProtectionHud();
+      } else {
         const targetBot = botsRef.current.find(b => b.id === targetId);
         if (targetBot) targetBot.status.shieldCharges = 1;
       }
@@ -1922,8 +2210,10 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     }
 
     if (effect === 'armor') {
-      if (targetId === 'player') playerStatus.current.armorCharges = 2;
-      else {
+      if (targetId === 'player') {
+        playerStatus.current.armorCharges = 2;
+        syncPlayerProtectionHud();
+      } else {
         const targetBot = botsRef.current.find(b => b.id === targetId);
         if (targetBot) targetBot.status.armorCharges = 2;
       }
@@ -1932,8 +2222,10 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     }
 
     if (effect === 'second_chance') {
-      if (targetId === 'player') playerStatus.current.secondChanceReady = true;
-      else {
+      if (targetId === 'player') {
+        playerStatus.current.secondChanceReady = true;
+        syncPlayerProtectionHud();
+      } else {
         const targetBot = botsRef.current.find(b => b.id === targetId);
         if (targetBot) targetBot.status.secondChanceReady = true;
       }
@@ -1968,6 +2260,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
           break;
         case 'ghost':
           playerStatus.current.isGhost = true;
+          syncPlayerProtectionHud();
           triggerDefenseVisual('player', 'ghost_activate');
           break;
       }
@@ -2018,6 +2311,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         registerSuccessfulDefense('player', sourceId);
         status.shieldCharges -= 1;
         status.invincibleTimer = 20;
+        syncPlayerProtectionHud();
         triggerDefenseVisual('player', 'shield_break');
         return false;
       }
@@ -2027,6 +2321,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         registerSuccessfulDefense('player', sourceId);
         status.armorCharges -= 1;
         status.invincibleTimer = 90;
+        syncPlayerProtectionHud();
         triggerDefenseVisual('player', 'armor_hit');
         return true;
       }
@@ -2041,11 +2336,13 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         const t = types[Math.floor(Math.random() * types.length)];
         sessionPartsRef.current[t] = Math.max(0, sessionPartsRef.current[t] - 1);
       }
+      setSessionPartsHud({ ...sessionPartsRef.current });
 
       if (playerLivesRef.current <= 0 && status.secondChanceReady) {
         status.secondChanceReady = false;
         playerLivesRef.current = 1;
         status.invincibleTimer = 120;
+        syncPlayerProtectionHud();
         triggerDefenseVisual('player', 'second_chance_revive');
       }
 
@@ -2166,7 +2463,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   }
 
   /* ================= APLICA O EFEITO DA BUBBLE LIFT (VAI SER REMOVIDO) ================= */
-  function triggerBubbleLift(callerId: string): boolean {
+  function triggerBubbleLift(callerId: string, preferredTargetId?: string): boolean {
     const callerBot =
       callerId === 'player'
         ? null
@@ -2211,7 +2508,11 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       )
       .sort((a, b) => a.x - b.x);
 
-    const target = targetsAhead[0];
+    const preferredTarget = preferredTargetId
+      ? targetsAhead.find(racer => racer.id === preferredTargetId)
+      : undefined;
+
+    const target = preferredTarget ?? targetsAhead[0];
 
     if (!target) {
       return false;
@@ -2426,6 +2727,41 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const maxMapX = Math.max(...allRacersPositions.map(r => r.x));
   const mapSpan = Math.max(2000, maxMapX - minMapX);
 
+  // Lista lateral baseada na mesma referência espacial da corrida/minimapa.
+  // O roster é fixo: quem for eliminado permanece visível com 0 vidas.
+  const raceHudPlayers = raceRoster
+    .map((racer, rosterIndex) => {
+      if (racer.isPlayer) {
+        return {
+          ...racer,
+          rosterIndex,
+          x: playerX,
+          lives: Math.max(0, playerLives),
+          isDead: playerIsDead.current || playerLives <= 0,
+        };
+      }
+
+      const bot = bots.find(item => item.id === racer.id);
+      return {
+        ...racer,
+        rosterIndex,
+        x: bot?.x ?? Number.NEGATIVE_INFINITY,
+        lives: Math.max(0, bot?.lives ?? 0),
+        isDead: !bot || bot.isDead || (bot.lives ?? 0) <= 0,
+      };
+    })
+    .sort((a, b) => {
+      if (a.isDead !== b.isDead) return a.isDead ? 1 : -1;
+      if (a.isDead && b.isDead) return a.rosterIndex - b.rosterIndex;
+      return b.x - a.x;
+    });
+
+  const hasActiveProtection =
+    playerProtectionHud.shieldCharges > 0 ||
+    playerProtectionHud.armorCharges > 0 ||
+    playerProtectionHud.secondChanceReady ||
+    playerProtectionHud.isGhost;
+
   return (
     <View style={styles.container}>
       <MemoCenarioBackground
@@ -2448,24 +2784,52 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         ]}
       />
 
-      {/* HUD LIMPO: posição instantânea substitui o ranking de 6 linhas.
-          O mini-mapa já mostra a ordem completa dos corredores. */}
-      <View style={styles.positionBadge} pointerEvents="none">
-        <Text style={styles.positionBadgeValue}>
-          {Math.max(
-            1,
-            leaderboard.findIndex(racer => racer.id === 'player') + 1 ||
-            raceObjectivesLive.position,
-          )}º
-        </Text>
-        <Text style={styles.positionBadgeTotal}>/ {TOTAL_RACERS}</Text>
-      </View>
+      {/* ================= HUD ESQUERDO: CORREDORES + LOOT ================= */}
+      <View style={styles.leftHud} pointerEvents="none">
+        <View style={styles.racersPanel}>
+          {raceHudPlayers.map((racer, index) => (
+            <View
+              key={racer.id}
+              style={[
+                styles.racerHudRow,
+                racer.isPlayer && styles.racerHudRowPlayer,
+                racer.isDead && styles.racerHudRowDead,
+              ]}
+            >
+              <Text style={styles.racerHudPosition}>{index + 1}</Text>
+              <View style={[styles.racerHudDot, { backgroundColor: racer.color }]} />
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.racerHudName,
+                  racer.isPlayer && styles.racerHudNamePlayer,
+                ]}
+              >
+                {racer.name}
+              </Text>
+              <Text style={styles.racerHudHeart}>{racer.isDead ? '☠' : '♥'}</Text>
+              <Text style={[styles.racerHudLives, { color: getLifeColor(racer.lives) }]}>
+                {racer.lives}
+              </Text>
+            </View>
+          ))}
+        </View>
 
-      <RaceObjectivesHUD
-        position={raceObjectivesLive.position}
-        attacks={raceObjectivesLive.attacks}
-        overtakes={raceObjectivesLive.overtakes}
-      />
+        <View style={styles.lootPanel}>
+          <View style={styles.lootChip}>
+            <Text style={styles.lootIcon}>🔧</Text>
+            <Text style={styles.lootValue}>{sessionPartsHud.motor}</Text>
+          </View>
+          <View style={styles.lootChip}>
+            <Text style={styles.lootIcon}>⚙️</Text>
+            <Text style={styles.lootValue}>{sessionPartsHud.engrenagem}</Text>
+          </View>
+          <View style={styles.lootChip}>
+            <Text style={styles.lootIcon}>🎨</Text>
+            <Text style={styles.lootValue}>{sessionPartsHud.spray}</Text>
+          </View>
+        </View>
+      </View>
 
       {/* ================= MINI-MAPA ================= */}
       <View style={styles.miniMapContainer}>
@@ -2561,8 +2925,8 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         )}
       </View>
 
-      {/* STATUS DO PLAYER: tempo + vida + buffs em um único bloco compacto. */}
-      <View style={styles.hud}>
+      {/* ================= HUD DIREITO: TEMPO + OBJETIVOS + PROTEÇÕES ================= */}
+      <View style={styles.rightHud} pointerEvents="none">
         <Animated.View
           style={[
             styles.timerBadge,
@@ -2582,27 +2946,40 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
           </Text>
         </Animated.View>
 
-        <View style={styles.playerStatusRow}>
-          <View style={styles.lifeCompact}>
-            <Text style={styles.lifeCompactIcon}>❤️</Text>
-            <Text style={[styles.lifeCompactValue, { color: getLifeColor(playerLives) }]}>
-              {playerLives}
-            </Text>
-          </View>
-
-          {playerStatus.current.shieldCharges > 0 && (
-            <Text style={styles.statusEffectIcon}>🛡️{playerStatus.current.shieldCharges}</Text>
-          )}
-          {playerStatus.current.armorCharges > 0 && (
-            <Text style={styles.statusEffectIcon}>🧱{playerStatus.current.armorCharges}</Text>
-          )}
-          {playerStatus.current.secondChanceReady && (
-            <Text style={styles.statusEffectIcon}>↻</Text>
-          )}
-          {playerStatus.current.isGhost && (
-            <Text style={styles.statusEffectIcon}>👻</Text>
-          )}
+        <View style={styles.objectivesSlot}>
+          <RaceObjectivesHUD
+            position={raceObjectivesLive.position}
+            attacks={raceObjectivesLive.attacks}
+            overtakes={raceObjectivesLive.overtakes}
+          />
         </View>
+
+        {hasActiveProtection && (
+          <View style={styles.protectionPanel}>
+            {playerProtectionHud.shieldCharges > 0 && (
+              <View style={styles.protectionChip}>
+                <Text style={styles.protectionIcon}>🛡️</Text>
+                <Text style={styles.protectionValue}>{playerProtectionHud.shieldCharges}</Text>
+              </View>
+            )}
+            {playerProtectionHud.armorCharges > 0 && (
+              <View style={styles.protectionChip}>
+                <Text style={styles.protectionIcon}>🧱</Text>
+                <Text style={styles.protectionValue}>{playerProtectionHud.armorCharges}</Text>
+              </View>
+            )}
+            {playerProtectionHud.secondChanceReady && (
+              <View style={styles.protectionChip}>
+                <Text style={styles.protectionIcon}>↻</Text>
+              </View>
+            )}
+            {playerProtectionHud.isGhost && (
+              <View style={styles.protectionChip}>
+                <Text style={styles.protectionIcon}>👻</Text>
+              </View>
+            )}
+          </View>
+        )}
       </View>
 
       <View
@@ -3052,7 +3429,31 @@ const styles = StyleSheet.create({
   miniMapContainer: { position: 'absolute', top: 15, left: '25%', right: '25%', height: 16, justifyContent: 'center', zIndex: 20 },
   miniMapLine: { position: 'absolute', left: 0, right: 0, height: 4, backgroundColor: 'rgba(255, 255, 255, 0.4)', borderRadius: 2 },
   miniMapDot: { position: 'absolute', top: '50%', marginTop: -5 },
-  hud: { position: 'absolute', top: 12, right: 20, zIndex: 30, alignItems: 'flex-end' },
+
+  // HUD superior dividido em dois clusters, deixando o minimapa respirar no centro.
+  leftHud: { position: 'absolute', top: 10, left: 14, width: 152, zIndex: 30 },
+  racersPanel: { paddingVertical: 5, paddingHorizontal: 5, borderRadius: 11, backgroundColor: 'rgba(8,8,12,0.52)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)' },
+  racerHudRow: { height: 19, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4, borderRadius: 6 },
+  racerHudRowPlayer: { backgroundColor: 'rgba(255,214,10,0.13)', borderWidth: 1, borderColor: 'rgba(255,214,10,0.35)' },
+  racerHudRowDead: { opacity: 0.42 },
+  racerHudPosition: { width: 13, color: 'rgba(255,255,255,0.62)', fontSize: 8, fontWeight: '900' },
+  racerHudDot: { width: 7, height: 7, borderRadius: 4, marginRight: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.72)' },
+  racerHudName: { flex: 1, color: '#FFF', fontSize: 8, fontWeight: '800', marginRight: 4 },
+  racerHudNamePlayer: { color: '#FFD60A', fontWeight: '900' },
+  racerHudHeart: { width: 14, textAlign: 'center', color: '#FF4D67', fontSize: 9, fontWeight: '900' },
+  racerHudLives: { width: 14, textAlign: 'right', fontSize: 9, fontWeight: '900' },
+  lootPanel: { marginTop: 6, height: 30, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 5, borderRadius: 10, backgroundColor: 'rgba(8,8,12,0.52)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)' },
+  lootChip: { minWidth: 41, height: 22, paddingHorizontal: 5, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 7, backgroundColor: 'rgba(255,255,255,0.08)' },
+  lootIcon: { fontSize: 11, marginRight: 3 },
+  lootValue: { color: '#FFF', fontSize: 10, fontWeight: '900' },
+
+  rightHud: { position: 'absolute', top: 10, right: 14, width: 154, zIndex: 30, alignItems: 'flex-end' },
+  objectivesSlot: { width: '100%', marginTop: 6, alignItems: 'flex-end' },
+  protectionPanel: { marginTop: 6, minHeight: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 5 },
+  protectionChip: { minWidth: 27, height: 27, paddingHorizontal: 5, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: 'rgba(8,8,12,0.58)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
+  protectionIcon: { fontSize: 12 },
+  protectionValue: { color: '#FFF', fontSize: 9, fontWeight: '900', marginLeft: 2 },
+
   timerBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -3088,14 +3489,6 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 2 },
     textShadowRadius: 3,
   },
-  positionBadge: { position: 'absolute', top: 12, left: 20, zIndex: 30, minWidth: 78, height: 42, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: 'rgba(8,8,12,0.62)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)' },
-  positionBadgeValue: { color: '#FFD60A', fontSize: 23, fontWeight: '900', fontStyle: 'italic' },
-  positionBadgeTotal: { color: 'rgba(255,255,255,0.72)', fontSize: 11, fontWeight: '900', marginLeft: 4 },
-  playerStatusRow: { marginTop: 5, minHeight: 25, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 5 },
-  lifeCompact: { height: 24, paddingHorizontal: 7, flexDirection: 'row', alignItems: 'center', borderRadius: 8, backgroundColor: 'rgba(8,8,12,0.55)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)' },
-  lifeCompactIcon: { fontSize: 13, marginRight: 3 },
-  lifeCompactValue: { fontSize: 13, fontWeight: '900' },
-  statusEffectIcon: { minWidth: 24, height: 24, textAlign: 'center', textAlignVertical: 'center', color: '#FFF', fontSize: 11, fontWeight: '900', borderRadius: 8, backgroundColor: 'rgba(8,8,12,0.55)', overflow: 'hidden' },
   nitroBarContainer: { width: 150, height: 12, marginBottom: 7, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.72)', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
   nitroBarFill: { position: 'absolute', left: 0, top: 0, bottom: 0 },
   nitroBarText: { color: '#FFF', fontWeight: '900', fontSize: 8, fontStyle: 'italic', letterSpacing: 0.8, zIndex: 2 },

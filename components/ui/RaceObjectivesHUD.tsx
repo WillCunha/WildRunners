@@ -66,22 +66,17 @@ export default function RaceObjectivesHUD({
 
 const styles = StyleSheet.create({
   container: {
-    position: 'absolute',
-    top: 37,
-    left: '33%',
-    right: '33%',
-    zIndex: 30,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 5,
+    width: '100%',
+    alignItems: 'flex-end',
+    gap: 4,
   },
   chip: {
-    minWidth: 50,
+    minWidth: 82,
     height: 23,
-    paddingHorizontal: 7,
+    paddingHorizontal: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     borderRadius: 8,
     backgroundColor: 'rgba(8,8,12,0.52)',
     borderWidth: 1,

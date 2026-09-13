@@ -4,6 +4,7 @@ import { getRandomLoadingTipKey, LOADING_TIP_KEYS, LoadingTipKey } from '@/src/u
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   Easing,
   Image,
@@ -37,6 +38,7 @@ export default function LoadingScreen() {
   const [minimumTimePassed, setMinimumTimePassed] =
     useState(false);
 
+  const [preloadAttempt, setPreloadAttempt] = useState(0);
   const [tipKey, setTipKey] = useState<LoadingTipKey>(LOADING_TIP_KEYS[0]);
 
   const progress = useRef(
@@ -49,6 +51,38 @@ export default function LoadingScreen() {
   const handleAssetsReady = useCallback(() => {
     setAssetsReady(true);
   }, []);
+
+  const handlePreloadTimeout = useCallback(
+    (completed: number, total: number) => {
+      console.warn(
+        `[LoadingScreen] Preload interrompido: ${completed}/${total}`,
+      );
+
+      Alert.alert(
+        t('loading.preloadTimeoutTitle'),
+        t('loading.preloadTimeoutMessage'),
+        [
+          {
+            text: t('loading.retry'),
+            onPress: () => {
+              console.log(
+                '[LoadingScreen] Usuário solicitou nova tentativa de preload.',
+              );
+
+              setAssetsReady(false);
+
+              // Remonta completamente o PreRaceAssetPreloader.
+              setPreloadAttempt(current => current + 1);
+            },
+          },
+        ],
+        {
+          cancelable: false,
+        },
+      );
+    },
+    [t],
+  );
 
   /*
    * FASE 1:
@@ -154,18 +188,20 @@ export default function LoadingScreen() {
         dentro de Promise.all/useEffect.
       */}
       <PreRaceAssetPreloader
+        key={`preload-${preloadAttempt}`}
         enabled={shouldPreloadPreRace}
         onReady={handleAssetsReady}
+        onTimeout={handlePreloadTimeout}
       />
 
       <View style={styles.cardContainer}>
         <Text style={styles.title}>
-           {t('loading.title')}
+          {t('loading.title')}
         </Text>
 
         <View style={styles.tipBox}>
           <Text style={styles.tipText}>
-             {t(tipKey)}
+            {t(tipKey)}
           </Text>
         </View>
 

@@ -9,6 +9,10 @@ const en = {
   },
   loading: {
     title: 'LOADING...',
+    preloadTimeoutTitle: 'Loading problem',
+    preloadTimeoutMessage:
+      'Some game assets took longer than expected to load. Please try again.',
+    retry: 'TRY AGAIN',
     tips: {
       cardsTiming: 'Use your racing cards at the right moment to turn the race around!',
       raceStrategy: 'Speed isn’t everything — the right strategy can change the race!',

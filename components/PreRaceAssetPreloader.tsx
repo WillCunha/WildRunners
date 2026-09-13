@@ -5,7 +5,7 @@ import {
   Image,
   ImageSourcePropType,
   StyleSheet,
-  View,
+  View
 } from 'react-native';
 
 const CARD_IMAGES: ImageSourcePropType[] = [
@@ -55,9 +55,6 @@ const UI_IMAGES: ImageSourcePropType[] = [
 
 function getCarImages(): ImageSourcePropType[] {
   return Object.values(carMaps).flatMap(car => [
-    car.corpoBrancoFrente,
-    car.corpoBrancoTras,
-    car.corpoTransparente,
     car.wheelImage,
     car.icone,
   ] as ImageSourcePropType[]);
@@ -86,6 +83,7 @@ function uniqueSources(sources: ImageSourcePropType[]) {
 export type PreRaceAssetPreloaderProps = {
   enabled?: boolean;
   onReady: () => void;
+  onTimeout?: (completed: number, total: number) => void;
 };
 
 /**
@@ -99,6 +97,7 @@ export type PreRaceAssetPreloaderProps = {
 export default function PreRaceAssetPreloader({
   enabled = true,
   onReady,
+  onTimeout,
 }: PreRaceAssetPreloaderProps) {
   const sources = useMemo(
     () => uniqueSources([
@@ -121,8 +120,30 @@ export default function PreRaceAssetPreloader({
     if (!enabled || sources.length === 0) {
       readySentRef.current = true;
       onReady();
+      return;
     }
-  }, [enabled, onReady, sources.length]);
+
+    const safetyTimer = setTimeout(() => {
+      if (readySentRef.current) return;
+
+      const completed = completedRef.current.size;
+
+      console.warn(
+        `[AssetPreload] Timeout: ${completed}/${sources.length} assets concluídos.`,
+      );
+
+      onTimeout?.(completed, sources.length);
+    }, 5000);
+
+    return () => {
+      clearTimeout(safetyTimer);
+    };
+  }, [
+    enabled,
+    onReady,
+    onTimeout,
+    sources.length,
+  ]);
 
   const markFinished = (index: number) => {
     if (!enabled || readySentRef.current) return;
