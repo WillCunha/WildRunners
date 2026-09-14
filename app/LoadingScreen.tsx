@@ -1,197 +1,290 @@
+import { getCenarioPreloadSources, type CenarioId } from '@/components/Cenarios/CenarioBackground';
 import PreRaceAssetPreloader from '@/components/PreRaceAssetPreloader';
 import { useLanguage } from '@/context/LanguageContext';
-import { getRandomLoadingTipKey, LOADING_TIP_KEYS, LoadingTipKey } from '@/src/utils/loadingTips';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert,
+  getRandomLoadingTipKey,
+  LOADING_TIP_KEYS,
+  LoadingTipKey,
+} from '@/src/utils/loadingTips';
+import {
+  useLocalSearchParams,
+  useRouter,
+} from 'expo-router';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import {
   Animated,
   Easing,
   Image,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 
-
-
 export default function LoadingScreen() {
   const router = useRouter();
-
   const { t } = useLanguage();
 
-  const params = useLocalSearchParams<{
-    next?: string;
-  }>();
+  const params =
+    useLocalSearchParams<{
+      next?: string;
+      deck?: string;
+      mapImage?: string;
+    }>();
 
-  const nextRoute = Array.isArray(params.next)
+  const nextRoute = Array.isArray(
+    params.next,
+  )
     ? params.next[0]
     : params.next;
 
-  // O preload pesado só é necessário na entrada do fluxo pré-corrida.
-  const shouldPreloadPreRace =
-    nextRoute === '/CarSelectionScreen';
+  const shouldPreloadAssets =
+    nextRoute === '/CarSelectionScreen' ||
+    nextRoute === '/mapa';
 
-  const [assetsReady, setAssetsReady] = useState(
-    !shouldPreloadPreRace,
+  const extraSources = useMemo(() => {
+    if (
+      nextRoute !== '/mapa' ||
+      !params.mapImage
+    ) {
+      return [];
+    }
+
+    return getCenarioPreloadSources(
+      params.mapImage as CenarioId,
+      'day',
+    );
+  }, [nextRoute, params.mapImage]);
+
+  const [
+    assetsReady,
+    setAssetsReady,
+  ] = useState(
+    !shouldPreloadAssets,
   );
-  const [minimumTimePassed, setMinimumTimePassed] =
-    useState(false);
 
-  const [preloadAttempt, setPreloadAttempt] = useState(0);
-  const [tipKey, setTipKey] = useState<LoadingTipKey>(LOADING_TIP_KEYS[0]);
+  const [
+    completed,
+    setCompleted,
+  ] = useState(0);
+
+  const [total, setTotal] =
+    useState(0);
+
+  const [failed, setFailed] =
+    useState(0);
+
+  const [
+    preloadAttempt,
+    setPreloadAttempt,
+  ] = useState(0);
+
+  const [tipKey, setTipKey] =
+    useState<LoadingTipKey>(
+      LOADING_TIP_KEYS[0],
+    );
 
   const progress = useRef(
     new Animated.Value(0),
   ).current;
 
-  // Impede duas navegações caso os dois estados mudem muito próximos.
-  const navigationStartedRef = useRef(false);
+  const navigationStartedRef =
+    useRef(false);
 
-  const handleAssetsReady = useCallback(() => {
-    setAssetsReady(true);
-  }, []);
-
-  const handlePreloadTimeout = useCallback(
-    (completed: number, total: number) => {
-      console.warn(
-        `[LoadingScreen] Preload interrompido: ${completed}/${total}`,
-      );
-
-      Alert.alert(
-        t('loading.preloadTimeoutTitle'),
-        t('loading.preloadTimeoutMessage'),
-        [
-          {
-            text: t('loading.retry'),
-            onPress: () => {
-              console.log(
-                '[LoadingScreen] Usuário solicitou nova tentativa de preload.',
-              );
-
-              setAssetsReady(false);
-
-              // Remonta completamente o PreRaceAssetPreloader.
-              setPreloadAttempt(current => current + 1);
-            },
-          },
-        ],
-        {
-          cancelable: false,
-        },
-      );
+  const animateProgress = useCallback(
+    (value: number) => {
+      Animated.timing(progress, {
+        toValue: Math.max(
+          0,
+          Math.min(1, value),
+        ),
+        duration: 140,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: false,
+      }).start();
     },
-    [t],
+    [progress],
   );
 
-  /*
-   * FASE 1:
-   * - escolhe a dica;
-   * - reseta o preload;
-   * - anima 0 -> 90%;
-   * - garante no mínimo 2 segundos de LoadingScreen.
-   *
-   * Enquanto isso, PreRaceAssetPreloader está montado no JSX
-   * e avisa via onReady quando as imagens terminaram.
-   */
-  useEffect(() => {
-    setTipKey(
-      getRandomLoadingTipKey()
+  const handleProgress = useCallback(
+    (
+      loadedCount: number,
+      totalCount: number,
+    ) => {
+      setCompleted(loadedCount);
+      setTotal(totalCount);
+
+      const realProgress =
+        totalCount > 0
+          ? loadedCount / totalCount
+          : 0;
+
+      animateProgress(realProgress);
+    },
+    [animateProgress],
+  );
+
+  const handleAssetsReady =
+    useCallback(() => {
+      setAssetsReady(true);
+
+      // O 100% só é solicitado quando o preloader
+      // confirmou que todos os arquivos dispararam onLoad.
+      animateProgress(1);
+    }, [animateProgress]);
+
+  const handlePreloadError =
+    useCallback(
+      (
+        failedCount: number,
+        totalCount: number,
+      ) => {
+        setFailed(failedCount);
+        setTotal(totalCount);
+      },
+      [],
     );
-    setAssetsReady(!shouldPreloadPreRace);
-    setMinimumTimePassed(false);
-    navigationStartedRef.current = false;
+
+  const retryPreload = useCallback(() => {
+    setCompleted(0);
+    setTotal(0);
+    setFailed(0);
+    setAssetsReady(false);
+
+    navigationStartedRef.current =
+      false;
 
     progress.stopAnimation();
     progress.setValue(0);
 
-    const progressAnimation = Animated.timing(progress, {
-      toValue: 0.9,
-      duration: 2000,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: false,
-    });
+    setPreloadAttempt(
+      current => current + 1,
+    );
+  }, [progress]);
 
-    progressAnimation.start();
+  useEffect(() => {
+    setTipKey(
+      getRandomLoadingTipKey(),
+    );
 
-    const minimumTimer = setTimeout(() => {
-      setMinimumTimePassed(true);
-    }, 2000);
+    setCompleted(0);
+    setTotal(0);
+    setFailed(0);
 
-    return () => {
-      clearTimeout(minimumTimer);
-      progressAnimation.stop();
-    };
+    navigationStartedRef.current =
+      false;
+
+    progress.stopAnimation();
+    progress.setValue(0);
+
+    if (shouldPreloadAssets) {
+      setAssetsReady(false);
+      return;
+    }
+
+    // Essa rota não tem lote de imagens para pré-carregar.
+    // Não inventamos uma porcentagem intermediária.
+    setAssetsReady(true);
+    animateProgress(1);
   }, [
+    animateProgress,
     nextRoute,
     progress,
-    shouldPreloadPreRace,
+    shouldPreloadAssets,
   ]);
 
-  /*
-   * FASE 2:
-   * Só libera os últimos 10% quando:
-   *
-   * 1) o tempo mínimo passou;
-   * 2) os assets necessários estão prontos.
-   *
-   * Se o destino não precisa de preload, assetsReady já começa true.
-   */
   useEffect(() => {
-    if (!minimumTimePassed) return;
     if (!assetsReady) return;
-    if (navigationStartedRef.current) return;
+    if (failed > 0) return;
 
-    navigationStartedRef.current = true;
+    if (
+      navigationStartedRef.current
+    ) {
+      return;
+    }
 
-    let cancelled = false;
+    navigationStartedRef.current =
+      true;
 
-    const finishAnimation = Animated.timing(progress, {
-      toValue: 1,
-      duration: 300,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: false,
-    });
+    // Pequena suavização visual para o usuário enxergar
+    // a barra chegando ao 100% real antes da troca de tela.
+    const finishAnimation =
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: 160,
+        easing: Easing.out(
+          Easing.quad,
+        ),
+        useNativeDriver: false,
+      });
 
-    finishAnimation.start(({ finished }) => {
-      if (!finished || cancelled) return;
+    finishAnimation.start(
+      ({ finished }) => {
+        if (!finished) return;
 
-      router.replace(
-        nextRoute
-          ? (nextRoute as any)
-          : '/',
-      );
-    });
+        if (nextRoute === '/mapa') {
+          router.replace({
+            pathname: '/mapa',
+            params: {
+              deck: params.deck,
+              mapImage: params.mapImage,
+            },
+          } as any);
+
+          return;
+        }
+
+        router.replace(
+          nextRoute
+            ? (nextRoute as any)
+            : '/',
+        );
+      },
+    );
 
     return () => {
-      cancelled = true;
       finishAnimation.stop();
     };
   }, [
     assetsReady,
-    minimumTimePassed,
+    failed,
     nextRoute,
+    params.deck,
+    params.mapImage,
     progress,
     router,
   ]);
 
-  const widthInterpolate = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0%', '100%'],
-  });
+  const widthInterpolate =
+    progress.interpolate({
+      inputRange: [0, 1],
+      outputRange: ['0%', '100%'],
+    });
+
+  const percentage =
+    total > 0
+      ? Math.round(
+          (completed / total) * 100,
+        )
+      : assetsReady
+        ? 100
+        : 0;
 
   return (
     <View style={styles.container}>
-      {/*
-        IMPORTANTE:
-        É componente React. Não chame PreRaceAssetPreloader()
-        dentro de Promise.all/useEffect.
-      */}
       <PreRaceAssetPreloader
         key={`preload-${preloadAttempt}`}
-        enabled={shouldPreloadPreRace}
+        enabled={shouldPreloadAssets}
+        onProgress={handleProgress}
         onReady={handleAssetsReady}
-        onTimeout={handlePreloadTimeout}
+        onError={handlePreloadError}
+        extraSources={extraSources}
       />
 
       <View style={styles.cardContainer}>
@@ -205,14 +298,55 @@ export default function LoadingScreen() {
           </Text>
         </View>
 
-        <View style={styles.progressBarBackground}>
+        <View
+          style={
+            styles.progressBarBackground
+          }
+        >
           <Animated.View
             style={[
               styles.progressBarFill,
-              { width: widthInterpolate },
+              {
+                width:
+                  widthInterpolate,
+              },
             ]}
           />
         </View>
+
+        <Text style={styles.progressText}>
+          {total > 0
+            ? `${percentage}%`
+            : `${percentage}%`}
+        </Text>
+
+        {failed > 0 && (
+          <View style={styles.errorBox}>
+            <Text
+              style={styles.errorText}
+            >
+              {failed}{' '}
+              recurso
+              {failed > 1 ? 's' : ''}{' '}
+              não carregou
+              {failed > 1 ? 'aram' : ''}.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={retryPreload}
+              activeOpacity={0.85}
+            >
+              <Text
+                style={
+                  styles.retryButtonText
+                }
+              >
+                {t('loading.retry')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       <Image
@@ -239,10 +373,11 @@ const styles = StyleSheet.create({
     width: '90%',
     backgroundColor: '#333',
     borderWidth: 4,
-    borderColor: '#000000',
+    borderColor: '#000',
     borderRadius: 20,
     padding: 24,
     alignItems: 'center',
+
     shadowColor: '#000',
     shadowOffset: {
       width: 6,
@@ -292,6 +427,41 @@ const styles = StyleSheet.create({
   progressBarFill: {
     height: '100%',
     backgroundColor: '#34C759',
+  },
+
+  progressText: {
+    marginTop: 10,
+    color: '#fff',
+    fontSize: 14,
+    fontFamily: 'Fredoka-Medium',
+  },
+
+  errorBox: {
+    width: '100%',
+    marginTop: 16,
+    alignItems: 'center',
+  },
+
+  errorText: {
+    color: '#ffb4b4',
+    fontSize: 13,
+    marginBottom: 10,
+    fontFamily: 'Fredoka-Medium',
+  },
+
+  retryButton: {
+    backgroundColor: '#FFF275',
+    borderWidth: 2,
+    borderColor: '#000',
+    borderRadius: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+  },
+
+  retryButtonText: {
+    color: '#000',
+    fontSize: 14,
+    fontFamily: 'Fredoka-Bold',
   },
 
   wfLogo: {

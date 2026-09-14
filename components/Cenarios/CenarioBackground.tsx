@@ -213,6 +213,33 @@ const CENARIOS: Partial<Record<CenarioId, CenarioAssets>> = {
   },
 };
 
+export function getCenarioPreloadSources(
+  mapId: CenarioId = 'sao_paulo',
+  skyTheme: SkyTheme = 'day',
+): ImageSourcePropType[] {
+  const cenario =
+    CENARIOS[mapId] ??
+    CENARIOS.sao_paulo;
+
+  if (!cenario) {
+    return [];
+  }
+
+  const skySource =
+    cenario.skies[skyTheme] ??
+    cenario.skies.day;
+
+  return [
+    skySource,
+    cenario.farCity,
+    cenario.landmarks,
+    cenario.nearCity,
+  ].filter(
+    (source): source is ImageSourcePropType =>
+      source != null,
+  );
+}
+
 
 /* =========================================================
    COMPONENTE
@@ -220,7 +247,7 @@ const CENARIOS: Partial<Record<CenarioId, CenarioAssets>> = {
 
 const CenarioBackground: React.FC<CenarioBackgroundProps> = ({
   isMoving,
-  mapId = 'manaus',
+  mapId = 'sao_paulo',
   skyTheme = 'day',
   groundY,
 }) => {

@@ -1,11 +1,14 @@
 import { carMaps } from '@/src/utils/carMaps';
 import { CITY_MAPS } from '@/src/utils/cityMaps';
-import { Asset } from 'expo-asset';
-import { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
+import {
+  Image,
+  ImageSourcePropType,
+  StyleSheet,
+  View,
+} from 'react-native';
 
-type AssetModule = number;
-
-const CARD_IMAGES: AssetModule[] = [
+const CARD_IMAGES: ImageSourcePropType[] = [
   require('@/assets/images/cards/chains.png'),
   require('@/assets/images/cards/tnt.png'),
   require('@/assets/images/cards/swap.png'),
@@ -22,7 +25,7 @@ const CARD_IMAGES: AssetModule[] = [
   require('@/assets/images/cards/second_chance.png'),
 ];
 
-const EFFECT_IMAGES: AssetModule[] = [
+const EFFECT_IMAGES: ImageSourcePropType[] = [
   require('@/assets/images/animation/explosion/img_0.png'),
   require('@/assets/images/animation/explosion/img_1.png'),
   require('@/assets/images/animation/explosion/img_2.png'),
@@ -42,17 +45,26 @@ const EFFECT_IMAGES: AssetModule[] = [
   require('@/assets/images/animation/tornado/img_7.png'),
 ];
 
-const UI_IMAGES: AssetModule[] = [
+const EMPTY_EXTRA_SOURCES: ImageSourcePropType[] = [];
+
+const UI_IMAGES: ImageSourcePropType[] = [
   require('@/assets/images/components/background/background_home.png'),
   require('@/assets/images/components/background/start_screen.png'),
   require('@/assets/images/gameLogoV5.png'),
   require('@/assets/images/logo1024v1.png'),
 ];
 
-const isAssetModule = (value: unknown): value is AssetModule =>
-  typeof value === 'number';
+function isImageSource(value: unknown): value is ImageSourcePropType {
+  if (typeof value === 'number') return true;
 
-function getCarImages(): AssetModule[] {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'uri' in value
+  );
+}
+
+function getCarImages(): ImageSourcePropType[] {
   return Object.values(carMaps)
     .flatMap(car => [
       car.corpoBrancoFrente,
@@ -61,119 +73,185 @@ function getCarImages(): AssetModule[] {
       car.wheelImage,
       car.icone,
     ])
-    .filter(isAssetModule);
+    .filter(isImageSource);
 }
 
-function getMapImages(): AssetModule[] {
+function getMapImages(): ImageSourcePropType[] {
   return CITY_MAPS
     .flatMap(map => [
       map.icon,
       map.iconGRAY,
     ])
-    .filter(isAssetModule);
+    .filter(isImageSource);
+}
+
+function uniqueSources(
+  sources: ImageSourcePropType[],
+): ImageSourcePropType[] {
+  const seen = new Set<string>();
+
+  return sources.filter((source, index) => {
+    const resolved = Image.resolveAssetSource(source);
+
+    const key =
+      resolved?.uri ??
+      `asset-${index}-${String(source)}`;
+
+    if (seen.has(key)) return false;
+
+    seen.add(key);
+    return true;
+  });
 }
 
 export type PreRaceAssetPreloaderProps = {
   enabled?: boolean;
   onReady: () => void;
-  onTimeout?: (completed: number, total: number) => void;
+  onProgress?: (completed: number, total: number) => void;
+  onError?: (failed: number, total: number) => void;
+  extraSources?: ImageSourcePropType[];
 };
 
 export default function PreRaceAssetPreloader({
   enabled = true,
   onReady,
-  onTimeout,
+  onProgress,
+  onError,
+  extraSources = EMPTY_EXTRA_SOURCES,
 }: PreRaceAssetPreloaderProps) {
-
-  const modules = useMemo(
+  const sources = useMemo(
     () =>
-      Array.from(
-        new Set<AssetModule>([
-          ...UI_IMAGES,
-          ...CARD_IMAGES,
-          ...EFFECT_IMAGES,
-          ...getCarImages(),
-          ...getMapImages(),
-        ]),
-      ),
-    [],
+      uniqueSources([
+        ...UI_IMAGES,
+        ...CARD_IMAGES,
+        ...EFFECT_IMAGES,
+        ...getCarImages(),
+        ...getMapImages(),
+        ...extraSources,
+      ]),
+    [extraSources],
   );
 
-  const completedRef = useRef(new Set<number>());
+  const completedRef = useRef<Set<number>>(new Set());
+  const failedRef = useRef<Set<number>>(new Set());
+  const readySentRef = useRef(false);
 
   useEffect(() => {
+    completedRef.current = new Set();
+    failedRef.current = new Set();
+    readySentRef.current = false;
+
     if (!enabled) {
+      onProgress?.(0, 0);
+      readySentRef.current = true;
       onReady();
       return;
     }
 
-    let cancelled = false;
+    onProgress?.(0, sources.length);
 
-    completedRef.current = new Set();
-
-    const safetyTimer = setTimeout(() => {
-      if (cancelled) return;
-
-      console.warn(
-        `[AssetPreload] Timeout: ${completedRef.current.size}/${modules.length} assets concluídos.`,
-      );
-
-      onTimeout?.(
-        completedRef.current.size,
-        modules.length,
-      );
-    }, 5000);
-
-    const preload = async () => {
-      await Promise.allSettled(
-        modules.map(async (moduleId, index) => {
-          try {
-            const asset = Asset.fromModule(moduleId);
-
-            await asset.downloadAsync();
-
-            if (cancelled) return;
-
-            completedRef.current.add(index);
-
-            console.log(
-              `[AssetPreload] ${completedRef.current.size}/${modules.length}`,
-            );
-          } catch (error) {
-            console.warn(
-              '[AssetPreload] Falha no asset:',
-              moduleId,
-              error,
-            );
-          }
-        }),
-      );
-
-      if (cancelled) return;
-
-      if (completedRef.current.size === modules.length) {
-        clearTimeout(safetyTimer);
-
-        console.log(
-          `[AssetPreload] Todos os ${modules.length} assets estão disponíveis.`,
-        );
-
-        onReady();
-      }
-    };
-
-    preload();
-
-    return () => {
-      cancelled = true;
-      clearTimeout(safetyTimer);
-    };
+    if (sources.length === 0) {
+      readySentRef.current = true;
+      onReady();
+    }
   }, [
     enabled,
-    modules,
+    onProgress,
     onReady,
-    onTimeout,
+    sources.length,
   ]);
 
-  return null;
+  const markLoaded = (index: number) => {
+    if (!enabled || readySentRef.current) return;
+    if (completedRef.current.has(index)) return;
+
+    failedRef.current.delete(index);
+    completedRef.current.add(index);
+
+    const completed = completedRef.current.size;
+    const total = sources.length;
+
+    onProgress?.(completed, total);
+
+    console.log(
+      `[AssetPreload] ${completed}/${total} carregados`,
+    );
+
+    if (completed === total) {
+      readySentRef.current = true;
+
+      console.log(
+        `[AssetPreload] Todos os ${total} assets foram realmente carregados pelo React Native Image.`,
+      );
+
+      onReady();
+    }
+  };
+
+  const markFailed = (
+    index: number,
+    error: unknown,
+  ) => {
+    if (!enabled || readySentRef.current) return;
+    if (failedRef.current.has(index)) return;
+
+    failedRef.current.add(index);
+
+    console.warn(
+      `[AssetPreload] Falha no asset ${index + 1}/${sources.length}`,
+      error,
+    );
+
+    onError?.(
+      failedRef.current.size,
+      sources.length,
+    );
+  };
+
+  if (!enabled) return null;
+
+  return (
+    <View
+      pointerEvents="none"
+      style={styles.preloadHost}
+      collapsable={false}
+    >
+      {sources.map((source, index) => (
+        <Image
+          key={`preload-${index}`}
+          source={source}
+          style={styles.preloadImage}
+          resizeMode="contain"
+          fadeDuration={0}
+          onLoad={() => markLoaded(index)}
+          onError={event =>
+            markFailed(
+              index,
+              event.nativeEvent.error,
+            )
+          }
+        />
+      ))}
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  // Fora da área visível, mas ainda montado.
+  // Não usar display: 'none', pois queremos forçar o pipeline do Image.
+  preloadHost: {
+    position: 'absolute',
+    left: -10000,
+    top: -10000,
+    width: 64,
+    height: 64,
+    overflow: 'hidden',
+    opacity: 0.01,
+  },
+
+  preloadImage: {
+    position: 'absolute',
+    width: 64,
+    height: 64,
+  },
+});
