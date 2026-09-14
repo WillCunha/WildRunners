@@ -1,83 +1,34 @@
-import { getCenarioPreloadSources, type CenarioId } from '@/components/Cenarios/CenarioBackground';
-import PreRaceAssetPreloader, { type PreloadMode } from '@/components/PreRaceAssetPreloader';
+import EntryAssetPreloader from '@/components/EntryAssetPreloader';
 import { useLanguage } from '@/context/LanguageContext';
 import {
   getRandomLoadingTipKey,
   LOADING_TIP_KEYS,
   LoadingTipKey,
 } from '@/src/utils/loadingTips';
-import {
-  useLocalSearchParams,
-  useRouter,
-} from 'expo-router';
+import { useRouter } from 'expo-router';
 import React, {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react';
 import {
   Animated,
   Easing,
-  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 
+const ACCENT = '#FFD60A';
+
 export default function LoadingScreen() {
   const router = useRouter();
   const { t } = useLanguage();
 
-  const params =
-    useLocalSearchParams<{
-      next?: string;
-      deck?: string;
-      mapImage?: string;
-    }>();
-
-  const nextRoute = Array.isArray(
-    params.next,
-  )
-    ? params.next[0]
-    : params.next;
-
-  const shouldPreloadAssets =
-    nextRoute === '/CarSelectionScreen' ||
-    nextRoute === '/mapa';
-
-  const preloadMode: PreloadMode =
-    nextRoute === '/mapa'
-      ? 'race'
-      : 'carSelection';
-
-  const extraSources = useMemo(() => {
-    if (
-      nextRoute !== '/mapa' ||
-      !params.mapImage
-    ) {
-      return [];
-    }
-
-    return getCenarioPreloadSources(
-      params.mapImage as CenarioId,
-      'day',
-    );
-  }, [nextRoute, params.mapImage]);
-
-  const [
-    assetsReady,
-    setAssetsReady,
-  ] = useState(
-    !shouldPreloadAssets,
-  );
-
-  const [
-    completed,
-    setCompleted,
-  ] = useState(0);
+  const [completed, setCompleted] =
+    useState(0);
 
   const [total, setTotal] =
     useState(0);
@@ -85,10 +36,11 @@ export default function LoadingScreen() {
   const [failed, setFailed] =
     useState(0);
 
-  const [
-    preloadAttempt,
-    setPreloadAttempt,
-  ] = useState(0);
+  const [assetsReady, setAssetsReady] =
+    useState(false);
+
+  const [preloadAttempt, setPreloadAttempt] =
+    useState(0);
 
   const [tipKey, setTipKey] =
     useState<LoadingTipKey>(
@@ -109,7 +61,7 @@ export default function LoadingScreen() {
           0,
           Math.min(1, value),
         ),
-        duration: 140,
+        duration: 120,
         easing: Easing.out(Easing.quad),
         useNativeDriver: false,
       }).start();
@@ -135,44 +87,42 @@ export default function LoadingScreen() {
     [animateProgress],
   );
 
-  const handleAssetsReady =
-    useCallback(() => {
-      // Se houve um onError transitório que se recuperou no retry,
-      // garantimos que a tela não fique presa com um valor antigo.
-      setFailed(0);
-      setAssetsReady(true);
+  const handleReady = useCallback(() => {
+    setFailed(0);
+    setAssetsReady(true);
 
-      // 100% somente depois que o preloader confirmou
-      // que todos os assets necessários carregaram.
-      animateProgress(1);
-    }, [animateProgress]);
+    progress.stopAnimation();
+    progress.setValue(1);
+  }, [progress]);
 
-  const handlePreloadError =
-    useCallback(
-      (
-        failedCount: number,
-        totalCount: number,
-      ) => {
-        // O preloader agora envia 0 novamente quando um asset
-        // que havia falhado se recupera no retry automático.
-        setFailed(failedCount);
-        setTotal(totalCount);
-      },
-      [],
-    );
+  const handleFailed = useCallback(
+    (
+      failedCount: number,
+      totalCount: number,
+    ) => {
+      setFailed(failedCount);
+      setTotal(totalCount);
+      setAssetsReady(false);
+    },
+    [],
+  );
 
   const retryPreload = useCallback(() => {
+    navigationStartedRef.current = false;
+
     setCompleted(0);
     setTotal(0);
     setFailed(0);
     setAssetsReady(false);
 
-    navigationStartedRef.current =
-      false;
+    setTipKey(
+      getRandomLoadingTipKey(),
+    );
 
     progress.stopAnimation();
     progress.setValue(0);
 
+    // Remonta o EntryAssetPreloader do zero.
     setPreloadAttempt(
       current => current + 1,
     );
@@ -182,92 +132,34 @@ export default function LoadingScreen() {
     setTipKey(
       getRandomLoadingTipKey(),
     );
-
-    setCompleted(0);
-    setTotal(0);
-    setFailed(0);
-
-    navigationStartedRef.current =
-      false;
-
-    progress.stopAnimation();
-    progress.setValue(0);
-
-    if (shouldPreloadAssets) {
-      setAssetsReady(false);
-      return;
-    }
-
-    // Essa rota não tem lote de imagens para pré-carregar.
-    // Não inventamos uma porcentagem intermediária.
-    setAssetsReady(true);
-    animateProgress(1);
-  }, [
-    animateProgress,
-    nextRoute,
-    progress,
-    shouldPreloadAssets,
-  ]);
+  }, []);
 
   useEffect(() => {
     if (!assetsReady) return;
     if (failed > 0) return;
-
-    if (
-      navigationStartedRef.current
-    ) {
+    if (navigationStartedRef.current) {
       return;
     }
 
-    navigationStartedRef.current =
-      true;
+    navigationStartedRef.current = true;
 
-    // Pequena suavização visual para o usuário enxergar
-    // a barra chegando ao 100% real antes da troca de tela.
-    const finishAnimation =
-      Animated.timing(progress, {
-        toValue: 1,
-        duration: 160,
-        easing: Easing.out(
-          Easing.quad,
-        ),
-        useNativeDriver: false,
-      });
-
-    finishAnimation.start(
-      ({ finished }) => {
-        if (!finished) return;
-
-        if (nextRoute === '/mapa') {
-          router.replace({
-            pathname: '/mapa',
-            params: {
-              deck: params.deck,
-              mapImage: params.mapImage,
-            },
-          } as any);
-
-          return;
-        }
-
+    // Não existe timer artificial.
+    // Apenas deixamos o React pintar o frame de 100%
+    // e então entramos na raiz interna do jogo.
+    const frameId = requestAnimationFrame(
+      () => {
         router.replace(
-          nextRoute
-            ? (nextRoute as any)
-            : '/',
+          '/CarSelectionScreen',
         );
       },
     );
 
     return () => {
-      finishAnimation.stop();
+      cancelAnimationFrame(frameId);
     };
   }, [
     assetsReady,
     failed,
-    nextRoute,
-    params.deck,
-    params.mapImage,
-    progress,
     router,
   ]);
 
@@ -282,23 +174,22 @@ export default function LoadingScreen() {
       ? Math.round(
           (completed / total) * 100,
         )
-      : assetsReady
-        ? 100
-        : 0;
+      : 0;
 
   return (
     <View style={styles.container}>
-      <PreRaceAssetPreloader
-        key={`preload-${preloadAttempt}`}
-        enabled={shouldPreloadAssets}
-        mode={preloadMode}
+      <EntryAssetPreloader
+        key={`entry-preload-${preloadAttempt}`}
         onProgress={handleProgress}
-        onReady={handleAssetsReady}
-        onError={handlePreloadError}
-        extraSources={extraSources}
+        onReady={handleReady}
+        onFailed={handleFailed}
       />
 
-      <View style={styles.cardContainer}>
+      <View style={styles.content}>
+        <Text style={styles.eyebrow}>
+          WILD RUNNERS
+        </Text>
+
         <Text style={styles.title}>
           {t('loading.title')}
         </Text>
@@ -318,8 +209,7 @@ export default function LoadingScreen() {
             style={[
               styles.progressBarFill,
               {
-                width:
-                  widthInterpolate,
+                width: widthInterpolate,
               },
             ]}
           />
@@ -327,31 +217,23 @@ export default function LoadingScreen() {
 
         <Text style={styles.progressText}>
           {total > 0
-            ? `${percentage}%  •  ${completed}/${total}`
-            : `${percentage}%`}
+            ? `${percentage}% `
+            : '0%'}
         </Text>
 
         {failed > 0 && (
-          <View style={styles.errorBox}>
-            <Text
-              style={styles.errorText}
-            >
-              {failed}{' '}
-              recurso
-              {failed > 1 ? 's' : ''}{' '}
-              não carregou
-              {failed > 1 ? 'aram' : ''}.
+          <View style={styles.errorArea}>
+            <Text style={styles.errorText}>
+              ⚠ {failed}/{total}
             </Text>
 
             <TouchableOpacity
+              activeOpacity={0.85}
               style={styles.retryButton}
               onPress={retryPreload}
-              activeOpacity={0.85}
             >
               <Text
-                style={
-                  styles.retryButtonText
-                }
+                style={styles.retryButtonText}
               >
                 {t('loading.retry')}
               </Text>
@@ -359,14 +241,6 @@ export default function LoadingScreen() {
           </View>
         )}
       </View>
-
-      <Image
-        source={require(
-          '@/assets/images/logo1024v1.png'
-        )}
-        style={styles.wfLogo}
-        resizeMode="contain"
-      />
     </View>
   );
 }
@@ -374,113 +248,105 @@ export default function LoadingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#080A0E',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: 28,
   },
 
-  cardContainer: {
-    width: '90%',
-    backgroundColor: '#333',
-    borderWidth: 4,
-    borderColor: '#000',
-    borderRadius: 20,
-    padding: 24,
+  content: {
+    width: '100%',
+    maxWidth: 700,
     alignItems: 'center',
+  },
 
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 6,
-      height: 6,
-    },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 5,
+  eyebrow: {
+    color: ACCENT,
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 5,
+    marginBottom: 10,
   },
 
   title: {
-    fontSize: 28,
-    color: '#fff',
-    marginBottom: 20,
-    letterSpacing: 2,
-    fontFamily: 'Fredoka-Bold',
+    color: '#FFFFFF',
+    fontSize: 26,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    textAlign: 'center',
   },
 
   tipBox: {
     width: '100%',
-    backgroundColor: '#FFF275',
-    borderWidth: 3,
-    borderColor: '#000',
+    minHeight: 64,
+    justifyContent: 'center',
+    marginTop: 28,
+    marginBottom: 22,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 30,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,214,10,0.18)',
   },
 
   tipText: {
-    fontSize: 16,
-    color: '#000',
+    color: '#C7CBD3',
+    fontSize: 14,
+    lineHeight: 20,
     textAlign: 'center',
-    lineHeight: 22,
-    fontFamily: 'Fredoka-Medium',
   },
 
   progressBarBackground: {
     width: '100%',
-    height: 24,
-    backgroundColor: '#e0e0e0',
-    borderWidth: 3,
-    borderColor: '#000',
-    borderRadius: 12,
+    height: 12,
+    borderRadius: 999,
     overflow: 'hidden',
+    backgroundColor: '#1B1F27',
+    borderWidth: 1,
+    borderColor: '#2A303A',
   },
 
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#34C759',
+    borderRadius: 999,
+    backgroundColor: ACCENT,
   },
 
   progressText: {
     marginTop: 10,
-    color: '#fff',
-    fontSize: 14,
-    fontFamily: 'Fredoka-Medium',
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1,
   },
 
-  errorBox: {
-    width: '100%',
-    marginTop: 16,
+  errorArea: {
     alignItems: 'center',
+    marginTop: 20,
   },
 
   errorText: {
-    color: '#ffb4b4',
+    color: '#FF7676',
     fontSize: 13,
+    fontWeight: '800',
     marginBottom: 10,
-    fontFamily: 'Fredoka-Medium',
   },
 
   retryButton: {
-    backgroundColor: '#FFF275',
-    borderWidth: 2,
-    borderColor: '#000',
-    borderRadius: 10,
+    minWidth: 150,
     paddingHorizontal: 18,
-    paddingVertical: 9,
+    paddingVertical: 11,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: ACCENT,
   },
 
   retryButtonText: {
-    color: '#000',
-    fontSize: 14,
-    fontFamily: 'Fredoka-Bold',
-  },
-
-  wfLogo: {
-    position: 'absolute',
-    right: 18,
-    bottom: 14,
-    width: 50,
-    height: 50,
-    opacity: 0.9,
+    color: '#0B0D10',
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 1,
   },
 });

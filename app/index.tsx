@@ -100,40 +100,30 @@ export default function StartScreen() {
   }, [player, scaleValue, scanProgress]);
 
   const handleStartPress = () => {
-    if (isLanguageLoading) {
-      return;
-    }
+    if (isLanguageLoading) return;
 
     player.pause();
 
-    const nextScreen = !profile
-      ? '/RegistrationScreen'
-      : '/CarSelectionScreen';
-
-    /*
-     * INDEX NÃO PODE PERMANECER NA STACK.
-     *
-     * A partir daqui o usuário entrou no game.
-     */
     if (!hasSelectedLanguage) {
-      router.replace({
+      router.push({
         pathname: '/LanguageSelectionScreen',
         params: {
-          next: nextScreen,
+          next: profile
+            ? '/LoadingScreen'
+            : '/RegistrationScreen',
         },
       });
 
       return;
     }
 
-    router.replace({
-      pathname: '/LoadingScreen',
-      params: {
-        next: nextScreen,
-      },
-    });
-  };
+    if (!profile) {
+      router.push('/RegistrationScreen');
+      return;
+    }
 
+    router.push('/LoadingScreen');
+  };
   if (!assets) {
     return null;
   }
