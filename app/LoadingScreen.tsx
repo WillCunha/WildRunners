@@ -1,5 +1,5 @@
 import { getCenarioPreloadSources, type CenarioId } from '@/components/Cenarios/CenarioBackground';
-import PreRaceAssetPreloader from '@/components/PreRaceAssetPreloader';
+import PreRaceAssetPreloader, { type PreloadMode } from '@/components/PreRaceAssetPreloader';
 import { useLanguage } from '@/context/LanguageContext';
 import {
   getRandomLoadingTipKey,
@@ -47,6 +47,11 @@ export default function LoadingScreen() {
   const shouldPreloadAssets =
     nextRoute === '/CarSelectionScreen' ||
     nextRoute === '/mapa';
+
+  const preloadMode: PreloadMode =
+    nextRoute === '/mapa'
+      ? 'race'
+      : 'carSelection';
 
   const extraSources = useMemo(() => {
     if (
@@ -132,10 +137,13 @@ export default function LoadingScreen() {
 
   const handleAssetsReady =
     useCallback(() => {
+      // Se houve um onError transitório que se recuperou no retry,
+      // garantimos que a tela não fique presa com um valor antigo.
+      setFailed(0);
       setAssetsReady(true);
 
-      // O 100% só é solicitado quando o preloader
-      // confirmou que todos os arquivos dispararam onLoad.
+      // 100% somente depois que o preloader confirmou
+      // que todos os assets necessários carregaram.
       animateProgress(1);
     }, [animateProgress]);
 
@@ -145,6 +153,8 @@ export default function LoadingScreen() {
         failedCount: number,
         totalCount: number,
       ) => {
+        // O preloader agora envia 0 novamente quando um asset
+        // que havia falhado se recupera no retry automático.
         setFailed(failedCount);
         setTotal(totalCount);
       },
@@ -281,6 +291,7 @@ export default function LoadingScreen() {
       <PreRaceAssetPreloader
         key={`preload-${preloadAttempt}`}
         enabled={shouldPreloadAssets}
+        mode={preloadMode}
         onProgress={handleProgress}
         onReady={handleAssetsReady}
         onError={handlePreloadError}
@@ -316,7 +327,7 @@ export default function LoadingScreen() {
 
         <Text style={styles.progressText}>
           {total > 0
-            ? `${percentage}%`
+            ? `${percentage}%  •  ${completed}/${total}`
             : `${percentage}%`}
         </Text>
 
