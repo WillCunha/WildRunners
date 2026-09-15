@@ -1,7 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useMemo, useRef } from 'react';
 import {
   Animated,
-  Easing,
   ImageSourcePropType,
   StyleSheet,
   useWindowDimensions,
@@ -31,7 +30,10 @@ type CenarioAssets = {
 };
 
 interface CenarioBackgroundProps {
-  isMoving: boolean;
+  // Mantido opcional para compatibilidade com chamadas antigas.
+  // O movimento real agora vem de travelX, alimentado pela física do Mapa.
+  isMoving?: boolean;
+  travelX?: Animated.Value;
   mapId?: CenarioId;
   skyTheme?: SkyTheme;
   groundY: number;
@@ -213,213 +215,91 @@ const CENARIOS: Partial<Record<CenarioId, CenarioAssets>> = {
   },
 };
 
-export function getCenarioPreloadSources(
-  mapId: CenarioId = 'sao_paulo',
-  skyTheme: SkyTheme = 'day',
-): ImageSourcePropType[] {
-  const cenario =
-    CENARIOS[mapId] ??
-    CENARIOS.sao_paulo;
-
-  if (!cenario) {
-    return [];
-  }
-
-  const skySource =
-    cenario.skies[skyTheme] ??
-    cenario.skies.day;
-
-  return [
-    skySource,
-    cenario.farCity,
-    cenario.landmarks,
-    cenario.nearCity,
-  ].filter(
-    (source): source is ImageSourcePropType =>
-      source != null,
-  );
-}
-
 
 /* =========================================================
    COMPONENTE
 ========================================================= */
 
+const FAR_PARALLAX_FACTOR = 0.18;
+const LANDMARK_PARALLAX_FACTOR = 0.46;
+const NEAR_PARALLAX_FACTOR = 1.0;
+
 const CenarioBackground: React.FC<CenarioBackgroundProps> = ({
-  isMoving,
+  travelX,
   mapId = 'sao_paulo',
   skyTheme = 'day',
   groundY,
 }) => {
-
   const {
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT,
   } = useWindowDimensions();
 
-
-  /*
-   * Cada plano possui sua própria posição.
-   *
-   * NÃO usamos State aqui.
-   * Animated.Value não provoca re-render do React.
-   */
-
-  const farX =
-    useRef(new Animated.Value(0)).current;
-
-  const landmarkX =
-    useRef(new Animated.Value(0)).current;
-
-  const nearX =
-    useRef(new Animated.Value(0)).current;
-
-
-  /*
-   * Cenário escolhido.
-   */
+  // Fallback mantém o componente seguro caso alguma tela antiga ainda não envie travelX.
+  const fallbackTravelX = useRef(new Animated.Value(0)).current;
+  const travel = travelX ?? fallbackTravelX;
+  const loopWidth = Math.max(1, SCREEN_WIDTH);
 
   const cenario =
     CENARIOS[mapId] ??
     CENARIOS.sao_paulo!;
 
-
-  /*
-   * Caso o céu solicitado ainda não exista,
-   * usamos o céu diurno.
-   */
-
   const skySource =
     cenario.skies[skyTheme] ??
     cenario.skies.day!;
 
-
   /* =========================================================
-     PARALLAX
+     PARALLAX LIGADO À VELOCIDADE REAL
+
+     travelX é incrementado pelo loop de física do Mapa usando
+     playerSpeed.current. Não existe setState nem Animated.loop aqui.
+
+     Cada camada deriva do MESMO deslocamento com uma profundidade:
+     - far:       18%
+     - landmarks: 46%
+     - near:      100%
+
+     Animated.modulo mantém duas imagens repetidas em loop sem salto.
   ========================================================= */
+  const farX = useMemo(
+    () =>
+      Animated.multiply(
+        Animated.modulo(
+          Animated.multiply(travel, FAR_PARALLAX_FACTOR),
+          loopWidth,
+        ),
+        -1,
+      ),
+    [travel, loopWidth],
+  );
 
-  useEffect(() => {
+  const landmarkX = useMemo(
+    () =>
+      Animated.multiply(
+        Animated.modulo(
+          Animated.multiply(travel, LANDMARK_PARALLAX_FACTOR),
+          loopWidth,
+        ),
+        -1,
+      ),
+    [travel, loopWidth],
+  );
 
-    let farAnimation:
-      Animated.CompositeAnimation | null = null;
-
-    let landmarkAnimation:
-      Animated.CompositeAnimation | null = null;
-
-    let nearAnimation:
-      Animated.CompositeAnimation | null = null;
-
-
-    if (isMoving) {
-
-      /*
-       * DISTANTE
-       *
-       * Move muito lentamente.
-       */
-
-      farAnimation = Animated.loop(
-
-        Animated.timing(farX, {
-
-          toValue: -SCREEN_WIDTH,
-
-          duration: 60000,
-
-          easing: Easing.linear,
-
-          useNativeDriver: true,
-
-        })
-
-      );
-
-
-      /*
-       * LANDMARKS
-       *
-       * Movimento intermediário.
-       */
-
-      landmarkAnimation = Animated.loop(
-
-        Animated.timing(landmarkX, {
-
-          toValue: -SCREEN_WIDTH,
-
-          duration: 36000,
-
-          easing: Easing.linear,
-
-          useNativeDriver: true,
-
-        })
-
-      );
-
-
-      /*
-       * PRÉDIOS PRÓXIMOS
-       *
-       * Movem mais rápido.
-       */
-
-      nearAnimation = Animated.loop(
-
-        Animated.timing(nearX, {
-
-          toValue: -SCREEN_WIDTH,
-
-          duration: 18000,
-
-          easing: Easing.linear,
-
-          useNativeDriver: true,
-
-        })
-
-      );
-
-
-      farAnimation.start();
-
-      landmarkAnimation.start();
-
-      nearAnimation.start();
-
-    } else {
-
-      farX.stopAnimation();
-
-      landmarkX.stopAnimation();
-
-      nearX.stopAnimation();
-
-    }
-
-
-    return () => {
-
-      farAnimation?.stop();
-
-      landmarkAnimation?.stop();
-
-      nearAnimation?.stop();
-
-    };
-
-  }, [
-    isMoving,
-    SCREEN_WIDTH,
-    farX,
-    landmarkX,
-    nearX,
-  ]);
-
+  const nearX = useMemo(
+    () =>
+      Animated.multiply(
+        Animated.modulo(
+          Animated.multiply(travel, NEAR_PARALLAX_FACTOR),
+          loopWidth,
+        ),
+        -1,
+      ),
+    [travel, loopWidth],
+  );
 
   return (
     <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-      {/* CÉU */}
+      {/* CÉU permanece parado: é nossa referência visual de profundidade. */}
       <Animated.Image
         source={skySource}
         resizeMode="cover"
@@ -479,7 +359,7 @@ interface ParallaxLayerProps {
 
   source: ImageSourcePropType;
 
-  translateX: Animated.Value;
+  translateX: any;
 
   width: number;
 
