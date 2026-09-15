@@ -94,6 +94,12 @@ const MAX_MOTOR_LEVEL = 10;
 const INITIAL_SPEED_RATIO = 0.55; // velocidade ao iniciar a corrida
 const BRAKE_MIN_SPEED_RATIO = 0.35; // piso do freio, proporcional ao carro
 const NITRO_SPEED_MULTIPLIER = 1.30;
+const NITRO_CARD_SPEED_MULTIPLIER = 1.25;
+const SLOW_SPEED_MULTIPLIER = 0.40;
+
+// Distância visual do cenário por unidade de velocidade física/tick.
+// Um único Animated.Value alimenta as três camadas do parallax.
+const SCENARIO_TRAVEL_SCALE = 0.35;
 
 // Constantes ainda usadas pela física/bots existentes.
 const MAX_SPEED = 12; // escala legada usada pelos bots por enquanto
@@ -274,6 +280,11 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const [isCrouching, setIsCrouching] = useState(false);
 
   const playerSpeed = useRef(DYNAMIC_INITIAL_SPEED);
+
+  // Parallax dirigido pela velocidade real do player.
+  // Ref acumula distância; Animated.Value entrega ao cenário sem re-render React.
+  const scenarioTravelRef = useRef(0);
+  const scenarioTravelAnim = useRef(new Animated.Value(0)).current;
 
   // -1 = freio máximo | 0 = neutro | +1 = aceleração máxima.
   // Fica em ref para o gesto não provocar re-render durante a corrida.
@@ -845,6 +856,8 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     setDefenseVisualEvents({});
     setIsSlowActive(false);
     playerSpeed.current = DYNAMIC_INITIAL_SPEED;
+    scenarioTravelRef.current = 0;
+    scenarioTravelAnim.setValue(0);
     analogInputRef.current = 0;
     analogKnobX.setValue(0);
     gameTime.current = 0;
@@ -1241,27 +1254,50 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         };
       }
 
+      // ================= VELOCIDADE EFETIVA DO PLAYER =================
+      // Slow Slow deixa de ser um clamp aplicado no fim do cálculo. Em vez disso,
+      // ele reduz toda a faixa de pilotagem. Assim acelerador e freio continuam
+      // respondendo enquanto o debuff está ativo.
+      const slowMultiplier = playerStatus.current.isSlowed
+        ? SLOW_SPEED_MULTIPLIER
+        : 1;
+
+      const effectiveNormalMaxSpeed = DYNAMIC_MAX_SPEED * slowMultiplier;
+      const effectiveMinSpeed = effectiveNormalMaxSpeed * BRAKE_MIN_SPEED_RATIO;
+
+      const nitroCardActive = Boolean(
+        activeEffectsTimers.current['nitro_power'] &&
+        activeEffectsTimers.current['nitro_power']! > 0
+      );
+
       if (playerStatus.current.isStunned) {
         playerSpeed.current = 0;
-      } else if (activeEffectsTimers.current['nitro_power'] && activeEffectsTimers.current['nitro_power'] > 0) {
-        playerSpeed.current = DYNAMIC_MAX_SPEED * NITRO_POWER_MULTIPLIER;
+      } else if (nitroCardActive) {
+        // Carta Nitro: acelera o teto efetivo. Se houver Slow Slow ao mesmo tempo,
+        // o nitro ajuda, mas não apaga completamente o debuff.
+        playerSpeed.current =
+          effectiveNormalMaxSpeed * NITRO_CARD_SPEED_MULTIPLIER;
       } else if (isNitroActive.current) {
-        playerSpeed.current = DYNAMIC_NITRO_SPEED;
+        // Nitro carregado pelo vácuo usa a mesma regra, com multiplicador próprio.
+        playerSpeed.current =
+          effectiveNormalMaxSpeed * NITRO_SPEED_MULTIPLIER;
+
         nitroTimer.current -= 1;
         if (nitroTimer.current <= 0) {
           isNitroActive.current = false;
           nitroCharge.current = 0;
           setNitroReady(false);
           setNitroPercent(0);
-          // Ao terminar o nitro, volta para o teto normal do carro.
-          playerSpeed.current = DYNAMIC_MAX_SPEED;
+          playerSpeed.current = effectiveNormalMaxSpeed;
         }
       } else {
         // ================= CONTROLE ANALÓGICO =================
-        // Mantemos qualquer velocidade acima do teto (ex.: fim de buff) sob controle.
-        playerSpeed.current = Math.min(playerSpeed.current, DYNAMIC_MAX_SPEED);
+        // O teto e o piso usados pelo analógico já incluem Slow Slow quando ativo.
+        playerSpeed.current = Math.min(
+          playerSpeed.current,
+          effectiveNormalMaxSpeed,
+        );
 
-        // O efeito de controles invertidos também inverte acelerar/frear.
         const rawAnalogInput = analogInputRef.current;
         const analogInput = playerStatus.current.controlsInverted
           ? -rawAnalogInput
@@ -1270,35 +1306,32 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         const magnitude = Math.abs(analogInput);
 
         if (magnitude > ANALOG_DEAD_ZONE) {
-          // Remove a zona morta e reescala o restante para 0..1.
           const intensity = Math.min(
             1,
             (magnitude - ANALOG_DEAD_ZONE) / (1 - ANALOG_DEAD_ZONE),
           );
 
           if (analogInput > 0) {
-            // Modelo + upgrade de aceleração controlam quanto o carro ganha por tick.
-            const accelerationPerTick = DYNAMIC_ACCELERATION_PER_TICK * intensity;
+            const accelerationPerTick =
+              DYNAMIC_ACCELERATION_PER_TICK * intensity;
+
             playerSpeed.current = Math.min(
-              DYNAMIC_MAX_SPEED,
+              effectiveNormalMaxSpeed,
               playerSpeed.current + accelerationPerTick,
             );
           } else {
-            // Freio arcade proporcional ao carro: Ferrari, Fusca, Buggy etc.
-            // preservam suas diferenças mesmo no limite esquerdo do analógico.
-            const brakePerTick = Math.max(0.055, DYNAMIC_ACCELERATION_PER_TICK * 1.55);
+            const brakePerTick = Math.max(
+              0.055,
+              DYNAMIC_ACCELERATION_PER_TICK * 1.55,
+            );
+
             playerSpeed.current = Math.max(
-              DYNAMIC_MIN_SPEED,
+              effectiveMinSpeed,
               playerSpeed.current - brakePerTick * intensity,
             );
           }
         }
-        // Em neutro não alteramos a velocidade: o player mantém o ritmo atual.
-      }
-
-
-      if (playerStatus.current.isSlowed) {
-        playerSpeed.current = Math.min(playerSpeed.current, DYNAMIC_MAX_SPEED * 0.4);
+        // Neutro = mantém a velocidade atual, inclusive durante Slow Slow.
       }
 
       const dynamicSpeed = playerSpeed.current;
@@ -1843,6 +1876,19 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       });
 
       activePiecesRef.current = remainingPieces;
+
+      // ============================================================
+      // PARALLAX DIRIGIDO PELA VELOCIDADE REAL
+      // ============================================================
+      // Usa a velocidade FINAL deste tick: analógico, Slow Slow, carta Nitro,
+      // nitro do vácuo, stun e demais efeitos já foram aplicados acima.
+      // Não há setState: apenas um Animated.Value extra por passo da física.
+      if (started && !gameOver && !playerIsDead.current) {
+        scenarioTravelRef.current +=
+          Math.max(0, playerSpeed.current) * SCENARIO_TRAVEL_SCALE;
+
+        scenarioTravelAnim.setValue(scenarioTravelRef.current);
+      }
 
       // ============================================================
       // RENDER VISUAL
@@ -3135,6 +3181,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         mapId={selectedMapId}
         skyTheme={selectedSkyTheme}
         groundY={GROUND_Y}
+        travelX={scenarioTravelAnim}
       />
       <View style={StyleSheet.absoluteFillObject} />
 
@@ -3811,8 +3858,17 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
                   </View>
                 </View>
 
+                {/* Velocímetro = velocidade física real. Slow Slow, carta Nitro e
+                    nitro do vácuo alteram playerSpeed.current antes deste snapshot. */}
                 <View style={styles.speedometer}>
-                  <Text style={styles.speedometerValue}>
+                  <Text
+                    style={[
+                      styles.speedometerValue,
+                      playerStatus.current.isSlowed && styles.speedometerValueSlowed,
+                      (isNitroActive.current || (activeEffectsTimers.current['nitro_power'] ?? 0) > 0) &&
+                        styles.speedometerValueNitro,
+                    ]}
+                  >
                     {Math.max(0, Math.round(playerSpeed.current * KMH_PER_PHYSICS_UNIT))}
                   </Text>
                   <Text style={styles.speedometerUnit}>KM/H</Text>
@@ -4174,6 +4230,12 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     fontStyle: 'italic',
     lineHeight: 20,
+  },
+  speedometerValueSlowed: {
+    color: '#64D2FF',
+  },
+  speedometerValueNitro: {
+    color: '#00FFFF',
   },
   speedometerUnit: { color: 'rgba(255,255,255,0.62)', fontSize: 6, fontWeight: '900', letterSpacing: 0.8 },
 
