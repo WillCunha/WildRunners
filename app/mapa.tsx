@@ -31,7 +31,7 @@ import {
 } from '@/src/utils/progression';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Animated, BackHandler, Image, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { Animated, BackHandler, Image, PanResponder, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 
 type CarKey = keyof typeof carMaps;
 
@@ -80,13 +80,32 @@ const GRAVITY = 0.8;
 const JUMP_FORCE = -15;
 const PLAYER_SIZE = 50;
 
-// Novas constantes de Corrida
-const MAX_SPEED = 12;
+// HUD inferior / pista: mantemos a linha da pista acima do painel para os carros
+// nunca ficarem escondidos atrás dos controles.
+const BOTTOM_HUD_HEIGHT = 118;
+const BOTTOM_HUD_BOTTOM = 8;
+const TRACK_TO_HUD_GAP = 8;
+
+// ================= VELOCIDADE / PILOTAGEM =================
+// O carMaps guarda os valores que o jogador entende como km/h.
+// A física do Mapa trabalha numa escala menor para não deslocar centenas de pixels por tick.
+const KMH_PER_PHYSICS_UNIT = 18;
+const MAX_MOTOR_LEVEL = 10;
+const INITIAL_SPEED_RATIO = 0.55; // velocidade ao iniciar a corrida
+const BRAKE_MIN_SPEED_RATIO = 0.35; // piso do freio, proporcional ao carro
+const NITRO_SPEED_MULTIPLIER = 1.30;
+
+// Constantes ainda usadas pela física/bots existentes.
+const MAX_SPEED = 12; // escala legada usada pelos bots por enquanto
 const MIN_SPEED = 3;
 const IMPULSE_FORCE = 1.5;
 const ACCELERATION = 0.3;
 const FRICTION = 0.15;
-const NITRO_SPEED = 22;
+
+// Controle analógico horizontal. O centro mantém a velocidade atual;
+// direita acelera e esquerda freia de forma proporcional ao deslocamento.
+const ANALOG_DEAD_ZONE = 0.08;
+const ANALOG_KNOB_SIZE = 34;
 const NITRO_DURATION = 60 * 3;
 
 /* ================= CORES DISPONÍVEIS ================= */
@@ -110,7 +129,7 @@ const NITRO_POWER_MULTIPLIER = 1.25;
 export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: MapaProps) {
 
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
-  const GROUND_Y = SCREEN_HEIGHT - 100;
+  const GROUND_Y = SCREEN_HEIGHT - (BOTTOM_HUD_HEIGHT + BOTTOM_HUD_BOTTOM + TRACK_TO_HUD_GAP);
   const router = useRouter();
 
   const showLoading = useLoadingStore((state) => state.showLoading);
@@ -160,8 +179,40 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     engrenagem: { defenseLevel: 1 },
   };
 
-  const DYNAMIC_MAX_SPEED = MAX_SPEED + ((carStats.motor.speedLevel - 1) * 0.8);
-  const DYNAMIC_IMPULSE = IMPULSE_FORCE + ((carStats.motor.accelerationLevel - 1) * 0.15);
+  // O MODELO do carro define a faixa de desempenho; o upgrade define onde o player
+  // está dentro dessa faixa. Assim, um supercarro continua superior mesmo no neutro/freio.
+  const selectedCarDefinition = carMaps[carKey as CarKey] ?? carMaps.buggy;
+
+  const clampUpgradeLevel = (level: number | undefined) =>
+    Math.max(1, Math.min(MAX_MOTOR_LEVEL, Number(level) || 1));
+
+  const speedLevel = clampUpgradeLevel(carStats.motor.speedLevel);
+  const accelerationLevel = clampUpgradeLevel(carStats.motor.accelerationLevel);
+
+  const speedUpgradeProgress = (speedLevel - 1) / (MAX_MOTOR_LEVEL - 1);
+  const accelerationUpgradeProgress = (accelerationLevel - 1) / (MAX_MOTOR_LEVEL - 1);
+
+  // Valor oficial mostrado no velocímetro quando o carro chega ao seu teto normal.
+  const DYNAMIC_TOP_SPEED_KMH =
+    selectedCarDefinition.stats.speed.base +
+    (selectedCarDefinition.stats.speed.maxUpgrade - selectedCarDefinition.stats.speed.base) * speedUpgradeProgress;
+
+  // Aceleração também respeita modelo + upgrade. Esse valor é um stat de balanceamento;
+  // convertemos abaixo para incremento da escala física por tick.
+  const DYNAMIC_ACCELERATION_STAT =
+    selectedCarDefinition.stats.acceleration.base +
+    (selectedCarDefinition.stats.acceleration.maxUpgrade - selectedCarDefinition.stats.acceleration.base) * accelerationUpgradeProgress;
+
+  const DYNAMIC_MAX_SPEED = DYNAMIC_TOP_SPEED_KMH / KMH_PER_PHYSICS_UNIT;
+  const DYNAMIC_INITIAL_SPEED = DYNAMIC_MAX_SPEED * INITIAL_SPEED_RATIO;
+  const DYNAMIC_MIN_SPEED = DYNAMIC_MAX_SPEED * BRAKE_MIN_SPEED_RATIO;
+  const DYNAMIC_NITRO_SPEED = DYNAMIC_MAX_SPEED * NITRO_SPEED_MULTIPLIER;
+
+  // Escala de resposta do acelerador. Carros com acceleration maior chegam ao teto antes.
+  // Mantemos a faixa pequena porque stepGame roda ~60 vezes por segundo.
+  const DYNAMIC_ACCELERATION_PER_TICK =
+    0.02 + Math.min(1, DYNAMIC_ACCELERATION_STAT / 220) * 0.06;
+
   const DYNAMIC_JUMP_FORCE = JUMP_FORCE - ((carStats.motor.jumpPowerLevel - 1) * 0.6);
   // Nível 1 = 5 Vidas, Nível 2 = 6 Vidas...
   const INITIAL_LIVES = 4 + carStats.engrenagem.defenseLevel;
@@ -222,7 +273,15 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const isCrouchingRef = useRef(false);
   const [isCrouching, setIsCrouching] = useState(false);
 
-  const playerSpeed = useRef(MIN_SPEED);
+  const playerSpeed = useRef(DYNAMIC_INITIAL_SPEED);
+
+  // -1 = freio máximo | 0 = neutro | +1 = aceleração máxima.
+  // Fica em ref para o gesto não provocar re-render durante a corrida.
+  const analogInputRef = useRef(0);
+  const analogKnobX = useRef(new Animated.Value(0)).current;
+  const analogTrackWidthRef = useRef(0);
+  const analogDragStartXRef = useRef(0);
+
   const nitroCharge = useRef(0);
   const isNitroActive = useRef(false);
   const nitroTimer = useRef(0);
@@ -245,6 +304,58 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     playFinal30Warning,
     playCardSfx
   } = useContext(AudioContext);
+
+  const clampAnalogKnobX = (value: number) => {
+    const maxTravel = Math.max(0, (analogTrackWidthRef.current - ANALOG_KNOB_SIZE) / 2);
+    if (maxTravel <= 0) return 0;
+    return Math.max(-maxTravel, Math.min(maxTravel, value));
+  };
+
+  const updateAnalogFromKnob = (knobX: number) => {
+    const maxTravel = Math.max(0, (analogTrackWidthRef.current - ANALOG_KNOB_SIZE) / 2);
+    analogInputRef.current = maxTravel > 0
+      ? Math.max(-1, Math.min(1, knobX / maxTravel))
+      : 0;
+  };
+
+  const releaseAnalogControl = () => {
+    analogInputRef.current = 0;
+    analogDragStartXRef.current = 0;
+    Animated.spring(analogKnobX, {
+      toValue: 0,
+      stiffness: 260,
+      damping: 22,
+      mass: 0.7,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const analogPanResponder = useRef(
+    PanResponder.create({
+      // O controle só é renderizado durante a corrida. Não usamos `started`/`gameOver`
+      // aqui porque o PanResponder é criado uma única vez e prenderia os valores
+      // iniciais desses states no closure (started=false).
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) =>
+        Math.abs(gestureState.dx) > 1,
+      onPanResponderGrant: () => {
+        analogKnobX.stopAnimation((currentX: number) => {
+          analogDragStartXRef.current = currentX || 0;
+        });
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (isNitroActive.current) return;
+        const nextX = clampAnalogKnobX(
+          analogDragStartXRef.current + gestureState.dx,
+        );
+        analogKnobX.setValue(nextX);
+        updateAnalogFromKnob(nextX);
+      },
+      onPanResponderRelease: releaseAnalogControl,
+      onPanResponderTerminate: releaseAnalogControl,
+      onPanResponderTerminationRequest: () => true,
+    }),
+  ).current;
 
   const getRandomColor = () => AVAILABLE_BOT_COLORS[Math.floor(Math.random() * AVAILABLE_BOT_COLORS.length)];
   const getRandomCarType = (): CarKey => {
@@ -300,11 +411,9 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     isNitroReadyRef.current = ready;
     setIsNitroReady(ready);
   };
-  const [angle, setAngle] = useState(0);
-
   // ---- DADOS DO PLAYER  ---- //
-  const [playerY, setPlayerY] = useState(y.current);
-  const [playerX, setPlayerX] = useState(playerXRef.current);
+  // Posição/ângulo visuais NÃO ficam mais em state.
+  // A física escreve nos refs; Animated.Value move o carro sem re-render do React.
   const [playerLives, setPlayerLives] = useState(INITIAL_LIVES);
   const playerLivesRef = useRef(INITIAL_LIVES);
   const playerIsDead = useRef(false);
@@ -319,8 +428,9 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const MAX_BOOST = 10;
   const [playerDeck, setPlayerDeck] = useState<string[]>(finalDeck);
 
-  const [bots, setBots] = useState(botsRef.current);
-  const [score, setScore] = useState(0);
+  // Snapshot React leve para HUD, minimapa e efeitos que ainda usam JSX.
+  // Movimento dos carros não depende deste tick.
+  const [, setRaceSnapshotTick] = useState(0);
 
 
   // COMEÇO DE CORRIDA
@@ -337,9 +447,44 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const [miniGamePos, setMiniGamePos] = useState({ top: 0, left: 0 });
   const miniGameClicksRef = useRef(0);
 
-  const [cameraTransform, setCameraTransform] = useState({ x: 0, scale: 1 });
   const cameraTransformRef = useRef({ x: 0, scale: 1 });
   const angleRenderRef = useRef(0);
+
+  // ================= VISUAL 60 FPS SEM RE-RENDER =================
+  // O game loop continua no JS, mas posição/câmera vão direto para nós Animated.
+  const cameraXAnim = useRef(new Animated.Value(0)).current;
+  const cameraScaleAnim = useRef(new Animated.Value(1)).current;
+
+  const playerXAnim = useRef(new Animated.Value(BASE_PLAYER_X)).current;
+  const playerYAnim = useRef(new Animated.Value(SCREEN_HEIGHT / 2)).current;
+  const playerAngleAnim = useRef(new Animated.Value(0)).current;
+
+  type RacerVisual = {
+    x: Animated.Value;
+    y: Animated.Value;
+    angle: Animated.Value;
+  };
+
+  const botVisualsRef = useRef<Record<string, RacerVisual>>({});
+
+  if (Object.keys(botVisualsRef.current).length === 0) {
+    botsRef.current.forEach(bot => {
+      botVisualsRef.current[bot.id] = {
+        x: new Animated.Value(bot.x),
+        y: new Animated.Value(bot.y),
+        angle: new Animated.Value(bot.angle || 0),
+      };
+    });
+  }
+
+  // Evita setState de arrays vazios a 30 FPS.
+  // Quando um efeito existe, ele continua recebendo snapshots a 30 FPS.
+  const lastDynamicRenderCountRef = useRef({
+    pieces: 0,
+    bullets: 0,
+    tnts: 0,
+    bubbles: 0,
+  });
   const [focusedDriver, setFocusedDriver] = useState<number | string | null>(null);
 
   const [leaderboard, setLeaderboard] = useState<{ id: string, name: string }[]>([]);
@@ -685,7 +830,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     }
 
     playerXRef.current = positions[0];
-    setPlayerX(positions[0]);
+    playerXAnim.setValue(positions[0]);
     playerLivesRef.current = INITIAL_LIVES;
     setPlayerLives(INITIAL_LIVES);
     playerIsDead.current = false;
@@ -699,7 +844,9 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     });
     setDefenseVisualEvents({});
     setIsSlowActive(false);
-    playerSpeed.current = MIN_SPEED;
+    playerSpeed.current = DYNAMIC_INITIAL_SPEED;
+    analogInputRef.current = 0;
+    analogKnobX.setValue(0);
     gameTime.current = 0;
     racePerformanceRef.current = {
       successfulAttacks: 0,
@@ -776,7 +923,19 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       newBots[i].angle = 0;
     }
     botsRef.current = newBots;
-    setBots(newBots);
+
+    // Sincroniza imediatamente os nós visuais antes da contagem regressiva.
+    newBots.forEach(bot => {
+      const visual = botVisualsRef.current[bot.id];
+      if (!visual) return;
+      visual.x.setValue(bot.x);
+      visual.y.setValue(bot.y);
+      visual.angle.setValue(bot.angle || 0);
+    });
+
+    // Atualiza metadados/HUD uma vez após sortear carros, cores e posições.
+    setRaceSnapshotTick(tick => tick + 1);
+
     setRaceRoster([
       {
         id: 'player',
@@ -816,7 +975,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       const startY = GROUND_Y - PLAYER_SIZE;
 
       y.current = startY;
-      setPlayerY(y.current);
+      playerYAnim.setValue(y.current);
 
       setupPositions();
 
@@ -1087,16 +1246,54 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       } else if (activeEffectsTimers.current['nitro_power'] && activeEffectsTimers.current['nitro_power'] > 0) {
         playerSpeed.current = DYNAMIC_MAX_SPEED * NITRO_POWER_MULTIPLIER;
       } else if (isNitroActive.current) {
-        playerSpeed.current = NITRO_SPEED;
+        playerSpeed.current = DYNAMIC_NITRO_SPEED;
         nitroTimer.current -= 1;
         if (nitroTimer.current <= 0) {
           isNitroActive.current = false;
           nitroCharge.current = 0;
           setNitroReady(false);
           setNitroPercent(0);
+          // Ao terminar o nitro, volta para o teto normal do carro.
+          playerSpeed.current = DYNAMIC_MAX_SPEED;
         }
       } else {
-        playerSpeed.current = Math.min(playerSpeed.current + ACCELERATION, DYNAMIC_MAX_SPEED);
+        // ================= CONTROLE ANALÓGICO =================
+        // Mantemos qualquer velocidade acima do teto (ex.: fim de buff) sob controle.
+        playerSpeed.current = Math.min(playerSpeed.current, DYNAMIC_MAX_SPEED);
+
+        // O efeito de controles invertidos também inverte acelerar/frear.
+        const rawAnalogInput = analogInputRef.current;
+        const analogInput = playerStatus.current.controlsInverted
+          ? -rawAnalogInput
+          : rawAnalogInput;
+
+        const magnitude = Math.abs(analogInput);
+
+        if (magnitude > ANALOG_DEAD_ZONE) {
+          // Remove a zona morta e reescala o restante para 0..1.
+          const intensity = Math.min(
+            1,
+            (magnitude - ANALOG_DEAD_ZONE) / (1 - ANALOG_DEAD_ZONE),
+          );
+
+          if (analogInput > 0) {
+            // Modelo + upgrade de aceleração controlam quanto o carro ganha por tick.
+            const accelerationPerTick = DYNAMIC_ACCELERATION_PER_TICK * intensity;
+            playerSpeed.current = Math.min(
+              DYNAMIC_MAX_SPEED,
+              playerSpeed.current + accelerationPerTick,
+            );
+          } else {
+            // Freio arcade proporcional ao carro: Ferrari, Fusca, Buggy etc.
+            // preservam suas diferenças mesmo no limite esquerdo do analógico.
+            const brakePerTick = Math.max(0.055, DYNAMIC_ACCELERATION_PER_TICK * 1.55);
+            playerSpeed.current = Math.max(
+              DYNAMIC_MIN_SPEED,
+              playerSpeed.current - brakePerTick * intensity,
+            );
+          }
+        }
+        // Em neutro não alteramos a velocidade: o player mantém o ritmo atual.
       }
 
 
@@ -1610,8 +1807,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         return;
       }
 
-      if (gameTime.current % 10 === 0) setScore(s => s + Math.floor(playerSpeed.current / 3));
-
       // --- 6 FÍSICA E COLETA DAS PEÇAS ---
       let remainingPieces: DroppedPiece[] = [];
 
@@ -1649,17 +1844,61 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
       activePiecesRef.current = remainingPieces;
 
-      // O React recebe snapshots visuais a 30 FPS; a física continua rodando a ~60 FPS.
+      // ============================================================
+      // RENDER VISUAL
+      // ============================================================
+      // Posições dos corredores e câmera são sincronizadas a cada passo da física
+      // SEM setState. Isso evita reconstruir o Mapa inteiro para mover 6 carros.
+      cameraXAnim.setValue(cameraTransformRef.current.x);
+      cameraScaleAnim.setValue(cameraTransformRef.current.scale);
+
+      playerXAnim.setValue(playerXRef.current);
+      playerYAnim.setValue(y.current);
+      playerAngleAnim.setValue(angleRenderRef.current);
+
+      botsRef.current.forEach(bot => {
+        const visual = botVisualsRef.current[bot.id];
+        if (!visual) return;
+
+        visual.x.setValue(bot.x);
+        visual.y.setValue(bot.y);
+        visual.angle.setValue(bot.angle || 0);
+      });
+
+      // HUD, minimapa, status e efeitos presos aos corredores não precisam de 60 FPS.
+      // 60 / 6 = ~10 snapshots React por segundo.
+      if (gameTime.current % 6 === 0) {
+        setRaceSnapshotTick(tick => tick + 1);
+      }
+
+      // Projéteis/loot continuam em 30 FPS SOMENTE enquanto realmente existem.
+      // Quando passam de 1+ para 0, enviamos um último [] para removê-los do JSX.
       if (gameTime.current % 2 === 0) {
-        setCameraTransform(cameraTransformRef.current);
-        setAngle(angleRenderRef.current);
-        setPiecesToRender([...activePiecesRef.current]);
-        setPlayerY(y.current);
-        setPlayerX(playerXRef.current);
-        setBots([...botsRef.current]);
-        setBulletsToRender([...activeBulletsRef.current]);
-        setTntsToRender([...activeTNTRef.current]);
-        setBubblesToRender([...activeBubblesRef.current]);
+        const counts = lastDynamicRenderCountRef.current;
+
+        const piecesCount = activePiecesRef.current.length;
+        if (piecesCount > 0 || counts.pieces > 0) {
+          setPiecesToRender([...activePiecesRef.current]);
+        }
+        counts.pieces = piecesCount;
+
+        const bulletsCount = activeBulletsRef.current.length;
+        if (bulletsCount > 0 || counts.bullets > 0) {
+          setBulletsToRender([...activeBulletsRef.current]);
+        }
+        counts.bullets = bulletsCount;
+
+        const tntsCount = activeTNTRef.current.length;
+        if (tntsCount > 0 || counts.tnts > 0) {
+          setTntsToRender([...activeTNTRef.current]);
+        }
+        counts.tnts = tntsCount;
+
+        const bubblesCount = activeBubblesRef.current.length;
+        if (bubblesCount > 0 || counts.bubbles > 0) {
+          setBubblesToRender([...activeBubblesRef.current]);
+        }
+        counts.bubbles = bubblesCount;
       }
     };
 
@@ -1826,7 +2065,10 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   /* ================= DA O IMPULSO ================= */
   function handleAddImpulse() {
     if (gameOver || isNitroActive.current) return;
-    playerSpeed.current = Math.min(playerSpeed.current + DYNAMIC_IMPULSE, DYNAMIC_MAX_SPEED);
+    playerSpeed.current = Math.min(
+      playerSpeed.current + DYNAMIC_ACCELERATION_PER_TICK,
+      DYNAMIC_MAX_SPEED,
+    );
   }
 
 
@@ -2712,7 +2954,8 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       ? (SCREEN_WIDTH / 2 - targetCenter) * toScale
       : 0;
     cameraTransformRef.current = { x: offset, scale: toScale };
-    setCameraTransform(cameraTransformRef.current);
+    cameraXAnim.setValue(offset);
+    cameraScaleAnim.setValue(toScale);
   };
 
 
@@ -2830,12 +3073,12 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const allRacersPositions = [
     {
       id: 'player',
-      x: playerX,
-      y: playerY,
+      x: playerXRef.current,
+      y: y.current,
       color: selectedColorFront || '#00D084',
       isPlayer: true,
     },
-    ...bots
+    ...botsRef.current
       .filter(bot => !bot.isDead)
       .map(bot => ({
         id: bot.id,
@@ -2858,13 +3101,13 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         return {
           ...racer,
           rosterIndex,
-          x: playerX,
+          x: playerXRef.current,
           lives: Math.max(0, playerLives),
           isDead: playerIsDead.current || playerLives <= 0,
         };
       }
 
-      const bot = bots.find(item => item.id === racer.id);
+      const bot = botsRef.current.find(item => item.id === racer.id);
       return {
         ...racer,
         rosterIndex,
@@ -3101,131 +3344,169 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         )}
       </View>
 
-      <View
+      <Animated.View
         style={[
           StyleSheet.absoluteFillObject,
           {
             zIndex: 2,
             transform: [
-              { translateX: cameraTransform.x },
-              { scale: cameraTransform.scale }
-            ]
-          }
+              { translateX: cameraXAnim },
+              { scale: cameraScaleAnim },
+            ],
+          },
         ]}
       >
-        {bots.map((bot, index) => {
+        {botsRef.current.map((bot, index) => {
           const isSwapParticipant =
             activeSwap?.callerId === bot.id ||
             currentSwapTarget === bot.id;
+
+          const visual = botVisualsRef.current[bot.id];
+          if (!visual) return null;
+
+          const rotation = visual.angle.interpolate({
+            inputRange: [-360, 360],
+            outputRange: ['-360deg', '360deg'],
+          });
 
           return (
             <Animated.View
               key={bot.id}
               style={{
                 position: 'absolute',
-                top: bot.y,
-                left: bot.x,
+                left: 0,
+                top: 0,
                 zIndex: 4,
-                transform: [
-                  { rotate: `${bot.angle || 0}deg` },
-                  { scale: isSwapParticipant ? swapScaleAnim : 1 },
-                ],
                 width: PLAYER_SIZE,
                 height: PLAYER_SIZE,
-                alignItems: 'center',
-                justifyContent: 'flex-end',
+                transform: [
+                  { translateX: visual.x },
+                  { translateY: visual.y },
+                ],
               }}
             >
-              {focusedDriver === index && (
-                <View style={styles.nameTag}>
-                  <Text style={styles.nameTagText}>{bot.name || `BOT_${index + 1}`}</Text>
-                  <View style={styles.nameTagArrow} />
-                </View>
-              )}
-
-              {bot.status?.isSlowed && (
-                <SlowSlowVisual variant="racer" size={PLAYER_SIZE} />
-              )}
-
-              <DefenseCardVisual
-                size={PLAYER_SIZE}
-                shieldCharges={bot.status?.shieldCharges || 0}
-                armorCharges={bot.status?.armorCharges || 0}
-                isGhost={Boolean(bot.status?.isGhost)}
-                secondChanceReady={Boolean(bot.status?.secondChanceReady)}
-                isInvincible={(bot.status?.invincibleTimer || 0) > 0}
-                event={defenseVisualEvents[bot.id]}
+              <Animated.View
+                style={{
+                  width: PLAYER_SIZE,
+                  height: PLAYER_SIZE,
+                  alignItems: 'center',
+                  justifyContent: 'flex-end',
+                  transform: [
+                    { rotate: rotation },
+                    { scale: isSwapParticipant ? swapScaleAnim : 1 },
+                  ],
+                }}
               >
-                <View style={{ width: '200%', alignItems: 'center' }}>
-                  <Carro
-                    carType={bot.carType}
-                    carColorFront={bot.carColorFront}
-                    carColorBack={bot.carColorBack}
-                    speed={bot.speed}
-                    skin={bot.skin}
-                    renderWidth={180}
-                  />
-                </View>
-              </DefenseCardVisual>
+                {focusedDriver === index && (
+                  <View style={styles.nameTag}>
+                    <Text style={styles.nameTagText}>{bot.name || `BOT_${index + 1}`}</Text>
+                    <View style={styles.nameTagArrow} />
+                  </View>
+                )}
+
+                {bot.status?.isSlowed && (
+                  <SlowSlowVisual variant="racer" size={PLAYER_SIZE} />
+                )}
+
+                <DefenseCardVisual
+                  size={PLAYER_SIZE}
+                  shieldCharges={bot.status?.shieldCharges || 0}
+                  armorCharges={bot.status?.armorCharges || 0}
+                  isGhost={Boolean(bot.status?.isGhost)}
+                  secondChanceReady={Boolean(bot.status?.secondChanceReady)}
+                  isInvincible={(bot.status?.invincibleTimer || 0) > 0}
+                  event={defenseVisualEvents[bot.id]}
+                >
+                  <View style={{ width: '200%', alignItems: 'center' }}>
+                    <Carro
+                      carType={bot.carType}
+                      carColorFront={bot.carColorFront}
+                      carColorBack={bot.carColorBack}
+                      speed={bot.speed}
+                      skin={bot.skin}
+                      renderWidth={180}
+                    />
+                  </View>
+                </DefenseCardVisual>
+              </Animated.View>
             </Animated.View>
           );
         })}
+
 
         <Animated.View
           style={{
             position: 'absolute',
             zIndex: 5,
-            left: playerX,
-            top: playerY,
-            transform: [
-              { rotate: `${angle}deg` },
-              {
-                scale:
-                  activeSwap?.callerId === 'player' ||
-                    currentSwapTarget === 'player'
-                    ? swapScaleAnim
-                    : 1,
-              },
-            ],
+            left: 0,
+            top: 0,
             width: PLAYER_SIZE,
             height: PLAYER_SIZE,
-            alignItems: 'center',
-            justifyContent: 'flex-end',
+            transform: [
+              { translateX: playerXAnim },
+              { translateY: playerYAnim },
+            ],
           }}
         >
-          {focusedDriver === 'player' && (
-            <View style={styles.nameTag}>
-              <Text style={styles.nameTagText}>VOCÊ</Text>
-              <View style={styles.nameTagArrow} />
-            </View>
-          )}
-          <DefenseCardVisual
-            size={PLAYER_SIZE}
-            shieldCharges={playerStatus.current.shieldCharges}
-            armorCharges={playerStatus.current.armorCharges}
-            isGhost={playerStatus.current.isGhost}
-            secondChanceReady={playerStatus.current.secondChanceReady}
-            isInvincible={playerStatus.current.invincibleTimer > 0}
-            event={defenseVisualEvents.player}
+          <Animated.View
+            style={{
+              width: PLAYER_SIZE,
+              height: PLAYER_SIZE,
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              transform: [
+                {
+                  rotate: playerAngleAnim.interpolate({
+                    inputRange: [-360, 360],
+                    outputRange: ['-360deg', '360deg'],
+                  }),
+                },
+                {
+                  scale:
+                    activeSwap?.callerId === 'player' ||
+                      currentSwapTarget === 'player'
+                      ? swapScaleAnim
+                      : 1,
+                },
+              ],
+            }}
           >
-            <View style={{ width: '200%', alignItems: 'center' }}>
-              <Carro
-                carType={selectedCar}
-                carColorFront={selectedColorFront}
-                carColorBack={selectedColorBack}
-                speed={playerSpeed.current}
-                skin="default"
-                renderWidth={180}
-              />
-            </View>
-          </DefenseCardVisual>
+            {focusedDriver === 'player' && (
+              <View style={styles.nameTag}>
+                <Text style={styles.nameTagText}>VOCÊ</Text>
+                <View style={styles.nameTagArrow} />
+              </View>
+            )}
+
+            <DefenseCardVisual
+              size={PLAYER_SIZE}
+              shieldCharges={playerStatus.current.shieldCharges}
+              armorCharges={playerStatus.current.armorCharges}
+              isGhost={playerStatus.current.isGhost}
+              secondChanceReady={playerStatus.current.secondChanceReady}
+              isInvincible={playerStatus.current.invincibleTimer > 0}
+              event={defenseVisualEvents.player}
+            >
+              <View style={{ width: '200%', alignItems: 'center' }}>
+                <Carro
+                  carType={selectedCar}
+                  carColorFront={selectedColorFront}
+                  carColorBack={selectedColorBack}
+                  speed={playerSpeed.current}
+                  skin="default"
+                  renderWidth={180}
+                />
+              </View>
+            </DefenseCardVisual>
+          </Animated.View>
         </Animated.View>
+
 
         {activeChainsState && activeChainsState.duration > 0 && (() => {
           // Precisamos achar as coordenadas X e Y do Caller e do Target
           const getCoords = (id: string) => {
-            if (id === 'player') return { x: playerX, y: playerY };
-            const bot = bots.find(b => b.id === id);
+            if (id === 'player') return { x: playerXRef.current, y: y.current };
+            const bot = botsRef.current.find(b => b.id === id);
             if (bot) return { x: bot.x, y: bot.y };
             return null;
           };
@@ -3250,8 +3531,12 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
             callerId={activeBulletEffect.callerId}
             allRacers={allRacersPositions}
             onBulletExecute={(targetId) => {
-              const callerX = activeBulletEffect.callerId === 'player' ? playerX : bots.find(b => b.id === activeBulletEffect.callerId)?.x || 0;
-              const callerY = activeBulletEffect.callerId === 'player' ? playerY : bots.find(b => b.id === activeBulletEffect.callerId)?.y || 0;
+              const callerX = activeBulletEffect.callerId === 'player'
+                ? playerXRef.current
+                : botsRef.current.find(b => b.id === activeBulletEffect.callerId)?.x || 0;
+              const callerY = activeBulletEffect.callerId === 'player'
+                ? y.current
+                : botsRef.current.find(b => b.id === activeBulletEffect.callerId)?.y || 0;
 
               activeBulletsRef.current.push({
                 id: Math.random().toString(),
@@ -3288,7 +3573,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         ))}
 
         {/* ================= RENDER DO EFEITO PRESO NA BOLHA ================= */}
-        {bots.map(bot => bot.status?.isLevitating && (
+        {botsRef.current.map(bot => bot.status?.isLevitating && (
           <BubbleLiftVisual
             key={`trap-${bot.id}`}
             variant="trap"
@@ -3302,11 +3587,11 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         {playerStatus.current.isLevitating && (
           <BubbleLiftVisual
             variant="trap"
-            x={playerX}
-            y={playerY}
+            x={playerXRef.current}
+            y={y.current}
             targetSize={PLAYER_SIZE}
             padding={10}
-            angle={angle}
+            angle={angleRenderRef.current}
           />
         )}
 
@@ -3406,98 +3691,165 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
             </View>
           );
         })}
-      </View>
+      </Animated.View>
 
 
 
 
-      <View style={styles.boostBarContainer}>
-        <View style={[styles.boostBarFill, { width: `${(boost / MAX_BOOST) * 100}%` }]} />
-        <Text style={styles.boostBarText}>💧 {boost}/{MAX_BOOST}</Text>
-      </View>
+      {/* ================= HUD INFERIOR 70 / 30 ================= */}
+      <View style={styles.bottomHud}>
+        {/* ================= ESQUERDA 70%: CARTAS + BOOST ================= */}
+        <View style={styles.bottomHudLeft}>
+          <View style={styles.deckPanel}>
+            <View style={styles.deckHandContainer}>
+              {playerDeck.map((cardId, index) => {
+                const cost = CARD_COSTS[cardId] || 0;
+                const hasboost = boost >= cost;
 
+                let currentCooldown = 0;
+                let maxCooldown = 1;
+                if (cardId === 'swap') { currentCooldown = swapCooldown; maxCooldown = SWAP_COOLDOWN; }
+                if (cardId === 'chains') { currentCooldown = chainsCooldown; maxCooldown = CHAINS_COOLDOWN; }
+                if (cardId === 'bullet') { currentCooldown = bulletCooldown; maxCooldown = BULLET_COOLDOWN; }
+                if (cardId === 'tnt') { currentCooldown = tntCooldown; maxCooldown = TNT_COOLDOWN; }
+                if (cardId === 'tornado') { currentCooldown = tornadoCooldown; maxCooldown = TORNADO_COOLDOWN; }
+                if (cardId === 'slow_slow') { currentCooldown = slowCooldown; maxCooldown = SLOW_COOLDOWN; }
+                if (cardId === 'nitro_power') { currentCooldown = nitroCooldown; maxCooldown = NITRO_COOLDOWN; }
+                if (cardId === 'bubble_lift') { currentCooldown = bubbleCooldown; maxCooldown = BUBBLE_COOLDOWN; }
+                if (cardId === 'shield') { currentCooldown = shieldCooldown; maxCooldown = SHIELD_COOLDOWN; }
+                if (cardId === 'quick_repair') { currentCooldown = quickRepairCooldown; maxCooldown = QUICK_REPAIR_COOLDOWN; }
+                if (cardId === 'ghost') { currentCooldown = ghostCooldown; maxCooldown = GHOST_COOLDOWN; }
+                if (cardId === 'second_chance') { currentCooldown = secondChanceCooldown; maxCooldown = SECOND_CHANCE_COOLDOWN; }
+                if (cardId === 'armor') { currentCooldown = armorCooldown; maxCooldown = ARMOR_COOLDOWN; }
 
-      <View style={styles.deckHandContainer}>
-        {playerDeck.map((cardId, index) => {
-          const cost = CARD_COSTS[cardId] || 0;
-          const hasboost = boost >= cost;
+                return (
+                  <TouchableOpacity
+                    key={`${cardId}-${index}`}
+                    activeOpacity={0.9}
+                    onPress={() => handleUseCard(cardId)}
+                    style={[
+                      styles.dynamicCardBtn,
+                      !hasboost && styles.dynamicCardBtnDisabled,
+                    ]}
+                  >
+                    {currentCooldown > 0 && (
+                      <View
+                        style={[
+                          styles.cardCooldownMask,
+                          { height: `${(currentCooldown / maxCooldown) * 100}%` },
+                        ]}
+                      />
+                    )}
 
-          // Recupera o estado atual de cooldown do card específico
-          let currentCooldown = 0;
-          let maxCooldown = 1;
-          if (cardId === 'swap') { currentCooldown = swapCooldown; maxCooldown = SWAP_COOLDOWN; }
-          if (cardId === 'chains') { currentCooldown = chainsCooldown; maxCooldown = CHAINS_COOLDOWN; }
-          if (cardId === 'bullet') { currentCooldown = bulletCooldown; maxCooldown = BULLET_COOLDOWN; }
-          if (cardId === 'tnt') { currentCooldown = tntCooldown; maxCooldown = TNT_COOLDOWN; }
-          if (cardId === 'tornado') { currentCooldown = tornadoCooldown; maxCooldown = TORNADO_COOLDOWN; }
-          if (cardId === 'slow_slow') { currentCooldown = slowCooldown; maxCooldown = SLOW_COOLDOWN; }
-          if (cardId === 'nitro_power') { currentCooldown = nitroCooldown; maxCooldown = NITRO_COOLDOWN; }
-          if (cardId === 'bubble_lift') { currentCooldown = bubbleCooldown; maxCooldown = BUBBLE_COOLDOWN; }
-          if (cardId === 'shield') { currentCooldown = shieldCooldown; maxCooldown = SHIELD_COOLDOWN; }
-          if (cardId === 'quick_repair') { currentCooldown = quickRepairCooldown; maxCooldown = QUICK_REPAIR_COOLDOWN; }
-          if (cardId === 'ghost') { currentCooldown = ghostCooldown; maxCooldown = GHOST_COOLDOWN; }
-          if (cardId === 'second_chance') { currentCooldown = secondChanceCooldown; maxCooldown = SECOND_CHANCE_COOLDOWN; }
-          if (cardId === 'armor') { currentCooldown = armorCooldown; maxCooldown = ARMOR_COOLDOWN; }
+                    <View style={styles.cardCostBadge}>
+                      <Text style={styles.cardCostText}>💧{cost}</Text>
+                    </View>
 
-          return (
-            <TouchableOpacity
-              key={`${cardId}-${index}`}
-              activeOpacity={0.9}
-              onPress={() => handleUseCard(cardId)}
-              style={[
-                styles.dynamicCardBtn,
-                !hasboost && { opacity: 0.4 } // Fica apagadinha/cinza sem boost!
-              ]}
-            >
-              {currentCooldown > 0 && (
-                <View style={{
-                  position: 'absolute', bottom: 0, left: 0, right: 0,
-                  height: `${(currentCooldown / maxCooldown) * 100}%`,
-                  backgroundColor: 'rgba(255,0,77,0.45)',
-                }} />
-              )}
+                    <Image
+                      source={CARD_IMAGES[cardId]}
+                      resizeMode="contain"
+                      style={styles.deckCardImage}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
 
-              <View style={styles.cardCostBadge}>
-                <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '900' }}>💧{cost}</Text>
+            {/* Barra visual de boost com aparência de líquido. */}
+            <View style={styles.boostBarContainer}>
+              <View
+                style={[
+                  styles.boostLiquidFill,
+                  { width: `${(boost / MAX_BOOST) * 100}%` },
+                ]}
+              >
+                <View style={styles.boostLiquidSheen} />
+                <View style={[styles.boostBubble, styles.boostBubbleOne]} />
+                <View style={[styles.boostBubble, styles.boostBubbleTwo]} />
+                <View style={[styles.boostBubble, styles.boostBubbleThree]} />
+                <View style={[styles.boostBubble, styles.boostBubbleFour]} />
               </View>
 
-              <Image
-                source={CARD_IMAGES[cardId]}
-                resizeMode="contain"
-                style={styles.deckCardImage}
-              />
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {started && !gameOver && (
-        <View style={styles.drivingCluster}>
-          <View style={styles.nitroBarContainer}>
-            <View
-              style={[
-                styles.nitroBarFill,
-                {
-                  width: `${nitroPercent}%`,
-                  backgroundColor: isNitroReady ? '#00FFFF' : '#FFD700',
-                },
-              ]}
-            />
-            <Text style={styles.nitroBarText}>VÁCUO</Text>
-          </View>
-
-          <View style={styles.drivingControls}>
-            {isNitroReady && (
-              <View style={styles.nitroBtn} onTouchStart={handleActivateNitro}>
-                <Text style={styles.nitroBtnText}>NITRO</Text>
-              </View>
-            )}
-            <View style={styles.throttleBtn} onTouchStart={handleAddImpulse}>
-              <Text style={styles.throttleBtnText}>ACELERAR</Text>
+              <View style={styles.boostBarGloss} />
+              <Text style={styles.boostBarText}>BOOST  💧 {boost}/{MAX_BOOST}</Text>
             </View>
           </View>
         </View>
-      )}
+
+        {/* ================= DIREITA 30%: NITRO + VÁCUO + VELOCIDADE + ANALÓGICO ================= */}
+        <View style={styles.bottomHudRight}>
+          {started && !gameOver ? (
+            <>
+              <View style={styles.performanceRow}>
+                <TouchableOpacity
+                  activeOpacity={isNitroReady ? 0.72 : 1}
+                  disabled={!isNitroReady}
+                  onPress={handleActivateNitro}
+                  style={[
+                    styles.nitroBtn,
+                    !isNitroReady && styles.nitroBtnDisabled,
+                  ]}
+                >
+                  <Text style={styles.nitroBtnIcon}>⚡</Text>
+                  <Text style={styles.nitroBtnText}>NITRO</Text>
+                </TouchableOpacity>
+
+                <View
+                  style={[
+                    styles.vacuumRing,
+                    {
+                      borderTopColor: nitroPercent > 0 ? (isNitroReady ? '#00FFFF' : '#FFD60A') : 'rgba(255,255,255,0.16)',
+                      borderRightColor: nitroPercent >= 25 ? (isNitroReady ? '#00FFFF' : '#FFD60A') : 'rgba(255,255,255,0.16)',
+                      borderBottomColor: nitroPercent >= 50 ? (isNitroReady ? '#00FFFF' : '#FFD60A') : 'rgba(255,255,255,0.16)',
+                      borderLeftColor: nitroPercent >= 75 ? (isNitroReady ? '#00FFFF' : '#FFD60A') : 'rgba(255,255,255,0.16)',
+                    },
+                  ]}
+                >
+                  <View style={styles.vacuumRingInner}>
+                    <Text style={styles.vacuumPercent}>{Math.round(nitroPercent)}%</Text>
+                    <Text style={styles.vacuumLabel}>VÁCUO</Text>
+                  </View>
+                </View>
+
+                <View style={styles.speedometer}>
+                  <Text style={styles.speedometerValue}>
+                    {Math.max(0, Math.round(playerSpeed.current * KMH_PER_PHYSICS_UNIT))}
+                  </Text>
+                  <Text style={styles.speedometerUnit}>KM/H</Text>
+                </View>
+              </View>
+
+              <View style={styles.analogPanel}>
+                <Text style={[styles.analogSideLabel, styles.analogBrakeLabel]}>FREIO</Text>
+                <View
+                  {...analogPanResponder.panHandlers}
+                  style={styles.analogTrack}
+                  onLayout={(event) => {
+                    analogTrackWidthRef.current = event.nativeEvent.layout.width;
+                  }}
+                >
+                  <View style={styles.analogBrakeZone} />
+                  <View style={styles.analogThrottleZone} />
+                  <View style={styles.analogCenterMark} />
+                  <Animated.View
+                    style={[
+                      styles.analogKnob,
+                      { transform: [{ translateX: analogKnobX }] },
+                    ]}
+                  >
+                    <View style={styles.analogKnobInner} />
+                  </Animated.View>
+                </View>
+                <Text style={[styles.analogSideLabel, styles.analogThrottleLabel]}>ACELERA</Text>
+              </View>
+            </>
+          ) : (
+            <View style={styles.controlsWaiting}>
+              <Text style={styles.controlsWaitingText}>PILOTAGEM</Text>
+            </View>
+          )}
+        </View>
+      </View>
 
       {/* ================= BOTÃO DE LARGADA PERFEITA ================= */}
       {miniGameVisible && (
@@ -3608,16 +3960,302 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 2 },
     textShadowRadius: 3,
   },
-  nitroBarContainer: { width: 150, height: 12, marginBottom: 7, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.72)', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
-  nitroBarFill: { position: 'absolute', left: 0, top: 0, bottom: 0 },
-  nitroBarText: { color: '#FFF', fontWeight: '900', fontSize: 8, fontStyle: 'italic', letterSpacing: 0.8, zIndex: 2 },
+  // HUD inferior: bloco contínuo que ocupa a faixa entre a pista e a base da tela.
+  bottomHud: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: BOTTOM_HUD_BOTTOM,
+    height: BOTTOM_HUD_HEIGHT,
+    zIndex: 35,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  bottomHudLeft: { flex: 7, minWidth: 0 },
+  bottomHudRight: {
+    flex: 3,
+    minWidth: 188,
+    borderRadius: 18,
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(8, 10, 16, 0.74)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 7,
+  },
+  deckPanel: {
+    flex: 1,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 8,
+    backgroundColor: 'rgba(8, 10, 16, 0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.24,
+    shadowRadius: 6,
+    elevation: 7,
+  },
+  deckHandContainer: {
+    height: 73,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dynamicCardBtn: {
+    width: 68,
+    height: 66,
+    borderRadius: 14,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(19, 21, 30, 0.96)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.30)',
+  },
+  dynamicCardBtnDisabled: { opacity: 0.42 },
+  cardCooldownMask: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(8, 10, 16, 0.72)',
+    zIndex: 4,
+  },
+  deckCardImage: { width: '84%', height: '84%' },
+  cardCostBadge: {
+    position: 'absolute',
+    top: 3,
+    right: 3,
+    minWidth: 27,
+    height: 17,
+    paddingHorizontal: 4,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 0, 122, 0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.80)',
+    zIndex: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardCostText: { color: '#FFF', fontSize: 9, fontWeight: '900' },
+
+  // Boost líquido: sem imagens extras e sem state novo.
+  boostBarContainer: {
+    height: 23,
+    marginTop: 2,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.58)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.30)',
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  boostLiquidFill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    overflow: 'hidden',
+    backgroundColor: '#FF007A',
+  },
+  boostLiquidSheen: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 2,
+    height: 6,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+  },
+  boostBarGloss: {
+    position: 'absolute',
+    left: 4,
+    right: 4,
+    top: 2,
+    height: 4,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.09)',
+  },
+  boostBubble: {
+    position: 'absolute',
+    borderRadius: 99,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.55)',
+    backgroundColor: 'rgba(255,255,255,0.16)',
+  },
+  boostBubbleOne: { width: 6, height: 6, left: '18%', bottom: 3 },
+  boostBubbleTwo: { width: 4, height: 4, left: '39%', top: 4 },
+  boostBubbleThree: { width: 7, height: 7, left: '62%', bottom: 2 },
+  boostBubbleFour: { width: 4, height: 4, left: '82%', top: 3 },
+  boostBarText: {
+    color: '#FFF',
+    fontWeight: '900',
+    fontSize: 9,
+    letterSpacing: 0.7,
+    zIndex: 5,
+    textShadowColor: 'rgba(0,0,0,0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+
+  performanceRow: {
+    height: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  nitroBtn: {
+    width: 54,
+    height: 50,
+    borderRadius: 15,
+    backgroundColor: '#00F0FF',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.88)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#00FFFF',
+    shadowOpacity: 0.32,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  nitroBtnDisabled: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderColor: 'rgba(255,255,255,0.16)',
+    shadowOpacity: 0,
+  },
+  nitroBtnIcon: { fontSize: 15, marginBottom: -2 },
+  nitroBtnText: { color: '#071014', fontWeight: '900', fontSize: 8, fontStyle: 'italic' },
+  vacuumRing: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 5,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ rotate: '-45deg' }],
+  },
+  vacuumRingInner: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(4, 7, 12, 0.96)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ rotate: '45deg' }],
+  },
+  vacuumPercent: { color: '#FFF', fontSize: 11, fontWeight: '900', lineHeight: 13 },
+  vacuumLabel: { color: 'rgba(255,255,255,0.58)', fontSize: 6, fontWeight: '900', letterSpacing: 0.5 },
+  speedometer: {
+    minWidth: 60,
+    height: 48,
+    paddingHorizontal: 5,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  speedometerValue: {
+    color: '#FFD60A',
+    fontSize: 18,
+    fontWeight: '900',
+    fontStyle: 'italic',
+    lineHeight: 20,
+  },
+  speedometerUnit: { color: 'rgba(255,255,255,0.62)', fontSize: 6, fontWeight: '900', letterSpacing: 0.8 },
+
+  analogPanel: {
+    height: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 5,
+  },
+  analogSideLabel: {
+    width: 35,
+    color: 'rgba(255,255,255,0.50)',
+    fontSize: 6,
+    fontWeight: '900',
+    textAlign: 'center',
+    letterSpacing: 0.3,
+  },
+  analogTrack: {
+    flex: 1,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  analogBrakeLabel: { color: 'rgba(255,107,107,0.76)' },
+  analogThrottleLabel: { color: 'rgba(0,208,132,0.82)' },
+  analogBrakeZone: {
+    position: 'absolute',
+    left: 3,
+    top: 3,
+    bottom: 3,
+    width: '47%',
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 59, 48, 0.07)',
+  },
+  analogThrottleZone: {
+    position: 'absolute',
+    right: 3,
+    top: 3,
+    bottom: 3,
+    width: '47%',
+    borderRadius: 12,
+    backgroundColor: 'rgba(0, 208, 132, 0.07)',
+  },
+  analogCenterMark: {
+    position: 'absolute',
+    width: 2,
+    top: 5,
+    bottom: 5,
+    backgroundColor: 'rgba(255,255,255,0.28)',
+  },
+  analogKnob: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#1D2430',
+    borderWidth: 2,
+    borderColor: '#FFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.36,
+    shadowRadius: 4,
+  },
+  analogKnobInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#00D084',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.72)',
+  },
+  controlsWaiting: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  controlsWaitingText: { color: 'rgba(255,255,255,0.28)', fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
+
   jumpArea: { position: 'absolute', backgroundColor: '#fff', left: 40, bottom: 30, height: 90, width: 90, borderRadius: 45, zIndex: 30, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 5 },
-  drivingCluster: { position: 'absolute', bottom: 14, right: 20, zIndex: 30, alignItems: 'flex-end' },
-  drivingControls: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  throttleBtn: { width: 76, height: 76, borderRadius: 38, backgroundColor: 'rgba(0, 208, 132, 0.82)', borderWidth: 3, borderColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 4, zIndex: 20 },
-  throttleBtnText: { color: '#FFF', fontWeight: '900', fontSize: 11, fontStyle: 'italic' },
-  nitroBtn: { width: 58, height: 58, borderRadius: 29, backgroundColor: 'rgba(0, 255, 255, 0.9)', borderWidth: 2, borderColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 5, zIndex: 20 },
-  nitroBtnText: { color: '#000', fontWeight: '900', fontSize: 11, fontStyle: 'italic' },
   block: { position: 'absolute', zIndex: 3 },
   miniGameBtn: { position: 'absolute', width: 64, height: 64, backgroundColor: '#FFCC00', borderWidth: 4, borderColor: '#1C1C1E', borderRadius: 20, justifyContent: 'center', alignItems: 'center', zIndex: 9999, elevation: 10, shadowColor: '#000', shadowOffset: { width: 2, height: 4 }, shadowOpacity: 0.4, shadowRadius: 3, },
   miniGameBtnText: { fontSize: 28, },
@@ -3676,32 +4314,4 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: 'rgba(0,0,0,0.4)',
   }, blindEffect: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgb(255, 255, 255)', zIndex: 15 },
-  boostBarContainer: { position: 'absolute', bottom: 78, left: 20, width: 110, height: 14, backgroundColor: 'rgba(0,0,0,0.58)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.72)', overflow: 'hidden', justifyContent: 'center', alignItems: 'center', zIndex: 30 },
-  boostBarFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#FF007A' },
-  boostBarText: { color: '#FFF', fontWeight: '900', fontSize: 10, zIndex: 5 },
-  deckHandContainer: {
-    position: 'absolute',
-    bottom: 7,
-    left: 140,
-    right: 190,
-    height: 72,
-    zIndex: 20,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 7
-  },
-  dynamicCardBtn: {
-    width: 72,
-    height: 68,
-    borderRadius: 13,
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#1B1B1B',
-    borderWidth: 3,
-    borderColor: '#FF004D'
-  },
-  deckCardImage: { width: '82%', height: '82%' },
-  cardCostBadge: { position: 'absolute', top: -2, right: -2, backgroundColor: '#FF007A', borderRadius: 8, paddingHorizontal: 4, paddingVertical: 1, borderWidth: 1, borderColor: '#FFF', zIndex: 10 },
 });
