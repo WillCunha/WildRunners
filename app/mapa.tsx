@@ -83,8 +83,8 @@ const PLAYER_SIZE = 50;
 // HUD inferior / pista: mantemos a linha da pista acima do painel para os carros
 // nunca ficarem escondidos atrás dos controles.
 const BOTTOM_HUD_HEIGHT = 118;
-const BOTTOM_HUD_BOTTOM = 8;
-const TRACK_TO_HUD_GAP = 8;
+const BOTTOM_HUD_BOTTOM = 0;
+const TRACK_TO_HUD_GAP = 0;
 
 // ================= VELOCIDADE / PILOTAGEM =================
 // O carMaps guarda os valores que o jogador entende como km/h.
@@ -4142,45 +4142,38 @@ const styles = StyleSheet.create({
   // HUD inferior: bloco contínuo que ocupa a faixa entre a pista e a base da tela.
   bottomHud: {
     position: 'absolute',
-    left: 12,
-    right: 12,
+    left: 0,
+    right: 0,
     bottom: BOTTOM_HUD_BOTTOM,
     height: BOTTOM_HUD_HEIGHT,
     zIndex: 35,
     flexDirection: 'row',
-    gap: 10,
+    gap: 0,
+    backgroundColor: '#080A10',
   },
   bottomHudLeft: { flex: 7, minWidth: 0 },
   bottomHudRight: {
     flex: 3,
     minWidth: 188,
-    borderRadius: 18,
+    borderRadius: 0,
     paddingHorizontal: 9,
     paddingVertical: 8,
-    backgroundColor: 'rgba(8, 10, 16, 0.74)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: 'rgba(8, 10, 16, 0.96)',
+    borderWidth: 0,
     justifyContent: 'space-between',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 7,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   deckPanel: {
     flex: 1,
-    borderRadius: 18,
+    borderRadius: 0,
     paddingHorizontal: 12,
     paddingTop: 8,
     paddingBottom: 8,
-    backgroundColor: 'rgba(8, 10, 16, 0.72)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.16)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.24,
-    shadowRadius: 6,
-    elevation: 7,
+    backgroundColor: 'rgba(8, 10, 16, 0.96)',
+    borderWidth: 0,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   deckHandContainer: {
     height: 73,
