@@ -101,8 +101,8 @@ const SLOW_SPEED_MULTIPLIER = 0.40;
 // Um único Animated.Value alimenta as três camadas do parallax.
 const SCENARIO_TRAVEL_SCALE = 0.35;
 
-// Constantes ainda usadas pela física/bots existentes.
-const MAX_SPEED = 12; // escala legada usada pelos bots por enquanto
+// Constantes legadas mantidas apenas para efeitos/compatibilidade ainda existentes.
+const MAX_SPEED = 12
 const MIN_SPEED = 3;
 const IMPULSE_FORCE = 1.5;
 const ACCELERATION = 0.3;
@@ -124,7 +124,7 @@ type BotDifficulty = 'easy' | 'balanced' | 'rival';
 // Balanceamento da IA: 2 bots mais acessíveis, 2 equilibrados e 1 rival forte.
 const BOT_DIFFICULTIES: BotDifficulty[] = ['easy', 'easy', 'balanced', 'balanced', 'rival'];
 const BOT_CATCHUP_DISTANCE = 180;
-const BOT_CATCHUP_MULTIPLIER = 1.10;
+const BOT_CATCHUP_MULTIPLIER = 1.02;
 const BOT_PLAYER_TARGET_CHANCE = 0.35;
 const BOT_LEADER_TARGET_CHANCE = 0.72;
 const BOT_CLOSE_LEADER_DISTANCE = 420;
@@ -369,10 +369,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   ).current;
 
   const getRandomColor = () => AVAILABLE_BOT_COLORS[Math.floor(Math.random() * AVAILABLE_BOT_COLORS.length)];
-  const getRandomCarType = (): CarKey => {
-    const carKeys: CarKey[] = Object.keys(carMaps) as CarKey[];
-    return carKeys[Math.floor(Math.random() * carKeys.length)];
-  };
 
   const botsRef = useRef(
     ['bot1', 'bot2', 'bot3', 'bot4', 'bot5'].map((id, index) => {
@@ -400,7 +396,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         thinkTimer: 0,
         status: { ...defaultStatus },
         activeEffectsTimers: {} as Partial<Record<CardEffect, number>>,
-        carType: getRandomCarType(),
+        carType: bStats.carType,
         carColorFront: getRandomColor(),
         carColorBack: getRandomColor(),
       }
@@ -474,6 +470,9 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     x: Animated.Value;
     y: Animated.Value;
     angle: Animated.Value;
+    lastX: number;
+    lastY: number;
+    lastAngle: number;
   };
 
   const botVisualsRef = useRef<Record<string, RacerVisual>>({});
@@ -484,9 +483,16 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         x: new Animated.Value(bot.x),
         y: new Animated.Value(bot.y),
         angle: new Animated.Value(bot.angle || 0),
+        lastX: bot.x,
+        lastY: bot.y,
+        lastAngle: bot.angle || 0,
       };
     });
   }
+
+  // Cache visual: evita atravessar a ponte JS/native com valores idênticos a cada tick.
+  const lastCameraVisualRef = useRef({ x: Number.NaN, scale: Number.NaN });
+  const lastPlayerVisualRef = useRef({ x: Number.NaN, y: Number.NaN, angle: Number.NaN });
 
   // Evita setState de arrays vazios a 30 FPS.
   // Quando um efeito existe, ele continua recebendo snapshots a 30 FPS.
@@ -801,7 +807,68 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   };
 
 
-  /* ================= CONFIGURA OS MULTIPLICADORES DE FISICA DOS BOTS ================= */
+  /* ================= MATCHMAKING + FISICA DOS BOTS ================= */
+  function getCarSpeedKmhAtLevel(carType: CarKey, level: number) {
+    const definition = carMaps[carType];
+    const safeLevel = clampUpgradeLevel(level);
+    const progress = (safeLevel - 1) / (MAX_MOTOR_LEVEL - 1);
+
+    return (
+      definition.stats.speed.base +
+      (definition.stats.speed.maxUpgrade - definition.stats.speed.base) * progress
+    );
+  }
+
+  function getCarAccelerationAtLevel(carType: CarKey, level: number) {
+    const definition = carMaps[carType];
+    const safeLevel = clampUpgradeLevel(level);
+    const progress = (safeLevel - 1) / (MAX_MOTOR_LEVEL - 1);
+
+    return (
+      definition.stats.acceleration.base +
+      (definition.stats.acceleration.maxUpgrade - definition.stats.acceleration.base) * progress
+    );
+  }
+
+  function pickMatchedBotCarType(difficulty: BotDifficulty, botSpeedLevel: number): CarKey {
+    const allCars = Object.keys(carMaps) as CarKey[];
+    const playerTier = Number(selectedCarDefinition.tier ?? 1);
+
+    // Easy/balanced ficam na mesma faixa de progressao visual do player.
+    // Apenas o rival pode aparecer com um carro do proximo tier, e mesmo assim
+    // sua velocidade REAL sera limitada logo abaixo para a corrida continuar justa.
+    const maxTier = playerTier + (difficulty === 'rival' ? 1 : 0);
+    const maxNaturalRatio =
+      difficulty === 'easy' ? 1.05 :
+      difficulty === 'balanced' ? 1.18 :
+      1.35;
+
+    const candidates = allCars.filter(carType => {
+      const definition = carMaps[carType];
+      const candidateTier = Number(definition.tier ?? 1);
+      const candidateTopSpeed = getCarSpeedKmhAtLevel(carType, botSpeedLevel);
+
+      return (
+        candidateTier <= maxTier &&
+        candidateTopSpeed <= DYNAMIC_TOP_SPEED_KMH * maxNaturalRatio
+      );
+    });
+
+    const pool = candidates.length > 0 ? candidates : [carKey as CarKey];
+    const targetRatio = difficulty === 'easy' ? 0.90 : difficulty === 'rival' ? 1.08 : 0.98;
+
+    const ranked = [...pool].sort((a, b) => {
+      const aRatio = getCarSpeedKmhAtLevel(a, botSpeedLevel) / Math.max(1, DYNAMIC_TOP_SPEED_KMH);
+      const bRatio = getCarSpeedKmhAtLevel(b, botSpeedLevel) / Math.max(1, DYNAMIC_TOP_SPEED_KMH);
+      return Math.abs(aRatio - targetRatio) - Math.abs(bRatio - targetRatio);
+    });
+
+    // Sorteia entre os 3 carros mais adequados para manter variedade sem criar
+    // grids absurdos como Buggy vs Ferrari/Lamborghini/Monster no inicio.
+    const shortlist = ranked.slice(0, Math.min(3, ranked.length));
+    return shortlist[Math.floor(Math.random() * shortlist.length)] ?? (carKey as CarKey);
+  }
+
   function generateBotsStats(playerStats: typeof carStats, difficulty: BotDifficulty = 'balanced') {
     const getLevelOffset = () => {
       const roll = Math.random();
@@ -813,21 +880,40 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       return 1;
     };
 
-    const botSpeedLevel = Math.max(1, playerStats.motor.speedLevel + getLevelOffset());
-    const botAccelLevel = Math.max(1, playerStats.motor.accelerationLevel + getLevelOffset());
-    const botJumpLevel = Math.max(1, playerStats.motor.jumpPowerLevel + getLevelOffset());
-    const botDefenseLevel = Math.max(1, playerStats.engrenagem.defenseLevel + getLevelOffset());
+    const botSpeedLevel = clampUpgradeLevel(playerStats.motor.speedLevel + getLevelOffset());
+    const botAccelLevel = clampUpgradeLevel(playerStats.motor.accelerationLevel + getLevelOffset());
+    const botJumpLevel = clampUpgradeLevel(playerStats.motor.jumpPowerLevel + getLevelOffset());
+    const botDefenseLevel = clampUpgradeLevel(playerStats.engrenagem.defenseLevel + getLevelOffset());
 
-    // Pequena diferença de pilotagem mantém os perfis distintos até no nível 1,
-    // onde um offset -1 seria limitado de volta para o nível mínimo.
-    const paceMultiplier = difficulty === 'easy' ? 0.97 : difficulty === 'rival' ? 1.015 : 1;
-    const accelMultiplier = difficulty === 'easy' ? 0.98 : difficulty === 'rival' ? 1.01 : 1;
+    const botCarType = pickMatchedBotCarType(difficulty, botSpeedLevel);
+    const naturalTopSpeedKmh = getCarSpeedKmhAtLevel(botCarType, botSpeedLevel);
+
+    // Limite competitivo relativo ao player. O modelo ainda importa, mas nenhum bot
+    // recebe uma vantagem estrutural gigantesca por ter sorteado um supercarro.
+    const competitiveCap =
+      DYNAMIC_TOP_SPEED_KMH * (
+        difficulty === 'easy' ? 0.95 :
+        difficulty === 'rival' ? 1.06 :
+        1.00
+      );
+
+    const finalTopSpeedKmh = Math.min(naturalTopSpeedKmh, competitiveCap);
+    const maxSpeed = finalTopSpeedKmh / KMH_PER_PHYSICS_UNIT;
+
+    const accelerationStat = getCarAccelerationAtLevel(botCarType, botAccelLevel);
+    const accelMultiplier = difficulty === 'easy' ? 0.92 : difficulty === 'rival' ? 1.03 : 0.98;
+    const accelerationPerTick =
+      (0.02 + Math.min(1, accelerationStat / 220) * 0.06) * accelMultiplier;
 
     return {
-      maxSpeed: (MAX_SPEED + ((botSpeedLevel - 1) * 0.8)) * paceMultiplier,
-      impulse: (IMPULSE_FORCE + ((botAccelLevel - 1) * 0.15)) * accelMultiplier,
+      carType: botCarType,
+      maxSpeed,
+      initialSpeed: maxSpeed * INITIAL_SPEED_RATIO,
+      minSpeed: maxSpeed * BRAKE_MIN_SPEED_RATIO,
+      accelerationPerTick,
       jumpForce: JUMP_FORCE - ((botJumpLevel - 1) * 0.6),
       maxLives: 4 + botDefenseLevel,
+      cruiseMinRatio: difficulty === 'easy' ? 0.82 : difficulty === 'rival' ? 0.94 : 0.88,
     };
   }
 
@@ -921,7 +1007,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       newBots[i].x = positions[i + 1];
       newBots[i].y = startY;
       newBots[i].velocity = 0;
-      newBots[i].speed = MIN_SPEED;
+      newBots[i].speed = refreshedStats.initialSpeed;
       newBots[i].stats = refreshedStats;
       newBots[i].difficulty = raceDifficulties[i] ?? 'balanced';
       newBots[i].maxLives = refreshedStats.maxLives;
@@ -930,7 +1016,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       newBots[i].status = { ...defaultStatus };
       newBots[i].activeEffectsTimers = {} as Partial<Record<CardEffect, number>>;
       newBots[i].deck = generateRandomDeck();
-      newBots[i].carType = getRandomCarType();
+      newBots[i].carType = refreshedStats.carType;
       newBots[i].carColorFront = getRandomColor();
       newBots[i].carColorBack = getRandomColor();
       newBots[i].angle = 0;
@@ -944,6 +1030,9 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       visual.x.setValue(bot.x);
       visual.y.setValue(bot.y);
       visual.angle.setValue(bot.angle || 0);
+      visual.lastX = bot.x;
+      visual.lastY = bot.y;
+      visual.lastAngle = bot.angle || 0;
     });
 
     // Atualiza metadados/HUD uma vez após sortear carros, cores e posições.
@@ -1477,7 +1566,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         // O alvo de velocidade não precisa ser sorteado 60 vezes por segundo por bot.
         // Atualizamos 4x/s: menos Math.random/GC e comportamento menos "nervoso".
         if (gameTime.current % 15 === 0) {
-          bot.targetSpeed = bot.stats.maxSpeed * (0.85 + Math.random() * 0.2);
+          bot.targetSpeed = bot.stats.maxSpeed * (bot.stats.cruiseMinRatio + Math.random() * (1 - bot.stats.cruiseMinRatio));
 
           if (bot.x < playerXRef.current - BOT_CATCHUP_DISTANCE) {
             bot.targetSpeed = bot.stats.maxSpeed * BOT_CATCHUP_MULTIPLIER;
@@ -1505,11 +1594,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
         // ================= ACELERAÇÃO NORMAL =================
         if (bot.speed < targetSpeed) {
-          bot.speed += (
-            ACCELERATION *
-            (1 + (bot.stats.impulse - IMPULSE_FORCE))
-          );
-
+          bot.speed += bot.stats.accelerationPerTick;
           bot.speed = Math.min(bot.speed, targetSpeed);
         }
 
@@ -1887,7 +1972,11 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         scenarioTravelRef.current +=
           Math.max(0, playerSpeed.current) * SCENARIO_TRAVEL_SCALE;
 
-        scenarioTravelAnim.setValue(scenarioTravelRef.current);
+        // O fundo não precisa de 60 atualizações JS/native por segundo.
+        // A distância continua acumulada a 60 Hz, mas é publicada a 30 Hz.
+        if (gameTime.current % 2 === 0) {
+          scenarioTravelAnim.setValue(scenarioTravelRef.current);
+        }
       }
 
       // ============================================================
@@ -1895,20 +1984,54 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       // ============================================================
       // Posições dos corredores e câmera são sincronizadas a cada passo da física
       // SEM setState. Isso evita reconstruir o Mapa inteiro para mover 6 carros.
-      cameraXAnim.setValue(cameraTransformRef.current.x);
-      cameraScaleAnim.setValue(cameraTransformRef.current.scale);
+      const cameraX = cameraTransformRef.current.x;
+      const cameraScale = cameraTransformRef.current.scale;
 
-      playerXAnim.setValue(playerXRef.current);
-      playerYAnim.setValue(y.current);
-      playerAngleAnim.setValue(angleRenderRef.current);
+      if (!Number.isFinite(lastCameraVisualRef.current.x) || Math.abs(cameraX - lastCameraVisualRef.current.x) > 0.01) {
+        cameraXAnim.setValue(cameraX);
+        lastCameraVisualRef.current.x = cameraX;
+      }
+      if (!Number.isFinite(lastCameraVisualRef.current.scale) || Math.abs(cameraScale - lastCameraVisualRef.current.scale) > 0.001) {
+        cameraScaleAnim.setValue(cameraScale);
+        lastCameraVisualRef.current.scale = cameraScale;
+      }
+
+      const playerAngle = angleRenderRef.current;
+      if (!Number.isFinite(lastPlayerVisualRef.current.x) || Math.abs(playerXRef.current - lastPlayerVisualRef.current.x) > 0.01) {
+        playerXAnim.setValue(playerXRef.current);
+        lastPlayerVisualRef.current.x = playerXRef.current;
+      }
+      if (!Number.isFinite(lastPlayerVisualRef.current.y) || Math.abs(y.current - lastPlayerVisualRef.current.y) > 0.05) {
+        playerYAnim.setValue(y.current);
+        lastPlayerVisualRef.current.y = y.current;
+      }
+      if (!Number.isFinite(lastPlayerVisualRef.current.angle) || Math.abs(playerAngle - lastPlayerVisualRef.current.angle) > 0.05) {
+        playerAngleAnim.setValue(playerAngle);
+        lastPlayerVisualRef.current.angle = playerAngle;
+      }
 
       botsRef.current.forEach(bot => {
         const visual = botVisualsRef.current[bot.id];
         if (!visual) return;
 
-        visual.x.setValue(bot.x);
-        visual.y.setValue(bot.y);
-        visual.angle.setValue(bot.angle || 0);
+        // X muda praticamente todo tick e continua em 60 FPS.
+        if (Math.abs(bot.x - visual.lastX) > 0.01) {
+          visual.x.setValue(bot.x);
+          visual.lastX = bot.x;
+        }
+
+        // Em pista reta, Y e angulo ficam iguais na maior parte da corrida.
+        // Só atravessam a ponte quando salto/efeito/explosao realmente os altera.
+        if (Math.abs(bot.y - visual.lastY) > 0.05) {
+          visual.y.setValue(bot.y);
+          visual.lastY = bot.y;
+        }
+
+        const botAngle = bot.angle || 0;
+        if (Math.abs(botAngle - visual.lastAngle) > 0.05) {
+          visual.angle.setValue(botAngle);
+          visual.lastAngle = botAngle;
+        }
       });
 
       // HUD, minimapa, status e efeitos presos aos corredores não precisam de 60 FPS.
