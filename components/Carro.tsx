@@ -35,7 +35,9 @@ function Carro({
   renderWidth = 180,
 }: CarroProps) {
   const car = carMaps[carType];
-  const spinAnim = useRef(new Animated.Value(0)).current;
+  const spinRef = useRef<Animated.Value | null>(null);
+  if (spinRef.current === null) spinRef.current = new Animated.Value(0);
+  const spinAnim = spinRef.current;
   const speedBand = getSpeedBand(speed);
 
   useEffect(() => {
@@ -59,11 +61,15 @@ function Carro({
         duration,
         easing: Easing.linear,
         useNativeDriver: true,
+        isInteraction: false,
       }),
     );
 
     loop.start();
-    return () => loop.stop();
+    return () => {
+      loop.stop();
+      spinAnim.stopAnimation();
+    };
   }, [speedBand, spinAnim]);
 
   const spin = useMemo(
