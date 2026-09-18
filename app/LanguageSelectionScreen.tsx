@@ -77,18 +77,11 @@ export default function LanguageSelectionScreen() {
       );
 
       const nextScreen =
-        params.next ===
-          '/CarSelectionScreen'
-          ? '/CarSelectionScreen'
+        params.next === '/LoadingScreen'
+          ? '/LoadingScreen'
           : '/RegistrationScreen';
 
-      router.replace({
-        pathname: '/LoadingScreen',
-
-        params: {
-          next: nextScreen,
-        },
-      });
+      router.replace(nextScreen as any);
     } finally {
       setSaving(false);
     }

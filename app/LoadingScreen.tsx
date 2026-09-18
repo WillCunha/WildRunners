@@ -232,7 +232,7 @@ export default function LoadingScreen() {
 
         <Text style={styles.progressText}>
           {total > 0
-            ? `${percentage}%  •  ${completed}/${total}`
+            ? `${percentage}%`
             : '0%'}
         </Text>
 
