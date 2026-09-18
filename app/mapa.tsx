@@ -86,7 +86,7 @@ const PLAYER_SIZE = 50;
 // nunca ficarem escondidos atrás dos controles.
 const BOTTOM_HUD_HEIGHT = 118;
 const BOTTOM_HUD_BOTTOM = 0;
-const TRACK_TO_HUD_GAP = 4;
+const TRACK_TO_HUD_GAP = 6;
 
 // ================= VELOCIDADE / PILOTAGEM =================
 // O carMaps guarda os valores que o jogador entende como km/h.
@@ -190,6 +190,17 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const [tutorialVisible, setTutorialVisible] =
     useState(isTutorial);
 
+  // Durante uma dica, a engine continua montada, mas a simulação fica congelada.
+  // O ref permite ao game loop enxergar a pausa imediatamente sem depender de render.
+  const [tutorialPaused, setTutorialPaused] =
+    useState(isTutorial);
+  const tutorialPausedRef = useRef(isTutorial);
+
+  const setTutorialPause = useCallback((paused: boolean) => {
+    tutorialPausedRef.current = paused;
+    setTutorialPaused(paused);
+  }, []);
+
   const [tutorialPerfectStartHits, setTutorialPerfectStartHits] =
     useState(0);
 
@@ -209,7 +220,11 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
     tutorialStepRef.current = nextStep;
     setTutorialStep(nextStep);
-  }, []);
+
+    // Cada nova explicação congela a corrida até o jogador tocar CONTINUAR.
+    setTutorialVisible(true);
+    setTutorialPause(true);
+  }, [setTutorialPause]);
 
   const finishTutorial = useCallback(() => {
     if (!tutorialModeRef.current) return;
@@ -218,12 +233,9 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     tutorialDoneRef.current = true;
     tutorialModeRef.current = false;
     setTutorialVisible(false);
+    setTutorialPause(false);
     markTutorialCompleted();
-  }, [markTutorialCompleted]);
-
-  const handleSkipTutorial = useCallback(() => {
-    finishTutorial();
-  }, [finishTutorial]);
+  }, [markTutorialCompleted, setTutorialPause]);
 
   const { selectedCar, selectedColorFront, selectedColorBack } = useCarSelection();
 
@@ -525,6 +537,30 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const [miniGameVisible, setMiniGameVisible] = useState(false);
   const [miniGamePos, setMiniGamePos] = useState({ top: 0, left: 0 });
   const miniGameClicksRef = useRef(0);
+
+  // A música acompanha a pausa didática. playMusic sem restart retoma do ponto
+  // em que foi pausada, então a dica realmente congela a sensação da corrida.
+  useEffect(() => {
+    if (!isTutorial || !started || gameOver) return;
+
+    if (tutorialPaused) {
+      pauseMusic();
+      return;
+    }
+
+    playMusic(MAP_MUSIC, {
+      volume: 0.5,
+      loop: true,
+      restart: false,
+    });
+  }, [
+    gameOver,
+    isTutorial,
+    pauseMusic,
+    playMusic,
+    started,
+    tutorialPaused,
+  ]);
 
   const cameraTransformRef = useRef({ x: 0, scale: 1 });
   const angleRenderRef = useRef(0);
@@ -1164,7 +1200,12 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
       setTimeout(() => {
         hideLoading();
-        startRaceSequence();
+
+        // Na primeira corrida, a largada só começa depois que o jogador
+        // ler a primeira dica e tocar CONTINUAR.
+        if (!isTutorial) {
+          startRaceSequence();
+        }
       }, 2000);
     }
   }, [SCREEN_HEIGHT, SCREEN_WIDTH]);
@@ -1469,6 +1510,16 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
           setNitroReady(false);
           setNitroPercent(0);
           playerSpeed.current = effectiveNormalMaxSpeed;
+
+          // Se o jogador conquistou a largada perfeita, esperamos o impulso
+          // terminar de verdade antes de congelar a corrida para ensinar
+          // o acelerador. Assim o controle já estará disponível ao continuar.
+          if (
+            tutorialModeRef.current &&
+            tutorialStepRef.current === 'perfect_start'
+          ) {
+            moveTutorialTo('perfect_start', 'accelerate');
+          }
         }
       } else {
         // ================= CONTROLE ANALÓGICO =================
@@ -2170,6 +2221,15 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     };
 
     const loop = (timestamp: number) => {
+      // Pausa real do tutorial: mantemos o RAF vivo para não desmontar a engine,
+      // mas descartamos o tempo parado. Ao continuar não existe catch-up de física.
+      if (tutorialPausedRef.current) {
+        previousFrameAt = timestamp;
+        accumulator = 0;
+        animationFrameId = requestAnimationFrame(loop);
+        return;
+      }
+
       if (previousFrameAt === 0) previousFrameAt = timestamp;
 
       const frameDelta = Math.min(timestamp - previousFrameAt, 50);
@@ -2197,6 +2257,8 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
     const tick = (value: number) => value > 0 ? Math.max(0, value - 100) : value;
     const globalInterval = setInterval(() => {
+      if (tutorialPausedRef.current) return;
+
       setSwapCooldown(tick);
       setChainsCooldown(tick);
       setBulletCooldown(tick);
@@ -3326,22 +3388,51 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
     if (
       tutorialModeRef.current &&
-      tutorialStepRef.current === 'perfect_start'
+      tutorialStepRef.current === 'perfect_start' &&
+      !earnedPerfectStart
     ) {
-      if (earnedPerfectStart) {
-        // O analógico ignora movimentos enquanto o Nitro está ativo.
-        // Mantemos a celebração na tela durante o impulso e só então
-        // pedimos ao novato para acelerar manualmente.
-        setTimeout(() => {
-          moveTutorialTo('perfect_start', 'accelerate');
-        }, 2800);
-      } else {
-        moveTutorialTo('perfect_start', 'accelerate');
-      }
+      // Sem Nitro de largada, já podemos ensinar o acelerador.
+      // Se houve largada perfeita, a mudança acontece no instante exato
+      // em que o nitro inicial termina dentro do game loop.
+      moveTutorialTo('perfect_start', 'accelerate');
     }
 
     await sleep(800);
     setCountdownStep(null);
+  };
+
+  const handleTutorialContinue = () => {
+    if (!tutorialModeRef.current || tutorialDoneRef.current) return;
+
+    const currentStep = tutorialStepRef.current;
+
+    // Na primeira dica, CONTINUAR é literalmente o gatilho da largada.
+    if (currentStep === 'perfect_start' && !started && !isCountingRef.current) {
+      setTutorialVisible(false);
+      setTutorialPause(false);
+      startRaceSequence();
+      return;
+    }
+
+    // A última dica encerra o onboarding. A corrida segue livre dali em diante.
+    if (currentStep === 'finish') {
+      finishTutorial();
+      return;
+    }
+
+    setTutorialVisible(false);
+    setTutorialPause(false);
+  };
+
+  const handleSkipTutorial = () => {
+    const shouldStartRace = !started && !isCountingRef.current;
+
+    finishTutorial();
+
+    // Se PULAR for usado antes da contagem, não deixamos a corrida parada.
+    if (shouldStartRace) {
+      startRaceSequence();
+    }
   };
 
   /* ================= TRANSIÇÃO DE TELA APÓS TERMINO DA CORRIDA ================= */
@@ -3459,7 +3550,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   return (
     <View style={styles.container}>
       <MemoCenarioBackground
-        isMoving={started && !gameOver}
+        isMoving={started && !gameOver && !tutorialPaused}
         mapId={selectedMapId}
         skyTheme={selectedSkyTheme}
         groundY={GROUND_Y}
@@ -4245,6 +4336,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         }
         step={tutorialStep}
         perfectStartHits={tutorialPerfectStartHits}
+        onContinue={handleTutorialContinue}
         onSkip={handleSkipTutorial}
       />
 

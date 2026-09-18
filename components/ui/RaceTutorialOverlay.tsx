@@ -1,6 +1,12 @@
 import { useLanguage } from '@/context/LanguageContext';
-import React, { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useRef } from 'react';
+import {
+  Animated,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 export type TutorialStep =
   | 'perfect_start'
@@ -20,6 +26,7 @@ type Props = {
   visible: boolean;
   step: TutorialStep;
   perfectStartHits?: number;
+  onContinue: () => void;
   onSkip: () => void;
 };
 
@@ -60,11 +67,11 @@ const COPY: Record<
     },
     nitro: {
       title: 'SOLTE O NITRO',
-      body: 'Quando o indicador chegar a 100% e o botão NITRO acender, toque nele.',
+      body: 'Continue no vácuo até o indicador chegar a 100%. Quando NITRO acender, toque no botão.',
     },
     finish: {
-      title: 'AGORA É COM VOCÊ',
-      body: 'Corra até o fim. Sobreviva para levar os recursos coletados e busque o 1º lugar para ganhar um troféu!',
+      title: 'AGORA É COM VOCÊ 🏁',
+      body: 'Sobreviva para levar os recursos coletados. Termine em 1º lugar para conquistar um troféu. Boa corrida!',
     },
   },
   en: {
@@ -90,11 +97,11 @@ const COPY: Record<
     },
     nitro: {
       title: 'USE NITRO',
-      body: 'When the meter reaches 100% and NITRO lights up, tap the button.',
+      body: 'Stay in the draft until the meter reaches 100%. When NITRO lights up, tap the button.',
     },
     finish: {
-      title: 'YOUR TURN',
-      body: 'Race to the finish. Survive to keep collected resources and take 1st place to earn a trophy!',
+      title: 'YOUR TURN 🏁',
+      body: 'Survive to keep the resources you collect. Finish 1st to earn a trophy. Good race!',
     },
   },
   es: {
@@ -120,11 +127,11 @@ const COPY: Record<
     },
     nitro: {
       title: 'USA EL NITRO',
-      body: 'Cuando el indicador llegue al 100% y NITRO se encienda, toca el botón.',
+      body: 'Mantente en el rebufo hasta llegar al 100%. Cuando NITRO se encienda, toca el botón.',
     },
     finish: {
-      title: 'AHORA TE TOCA',
-      body: 'Llega al final. Sobrevive para conservar los recursos y termina 1º para ganar un trofeo.',
+      title: 'AHORA TE TOCA 🏁',
+      body: 'Sobrevive para conservar los recursos. Termina 1º para ganar un trofeo. ¡Buena carrera!',
     },
   },
 };
@@ -135,28 +142,21 @@ const SKIP_LABEL = {
   es: 'SALTAR',
 } as const;
 
-const PERFECT_START_SUCCESS = {
-  'pt-BR': {
-    title: 'LARGADA PERFEITA! ⚡',
-    body: '3/3! Nitro ativado. Aproveite o impulso e prepare-se para assumir o controle.',
-  },
-  en: {
-    title: 'PERFECT START! ⚡',
-    body: '3/3! Nitro activated. Enjoy the boost and get ready to take control.',
-  },
-  es: {
-    title: '¡SALIDA PERFECTA! ⚡',
-    body: '¡3/3! Nitro activado. Aprovecha el impulso y prepárate para tomar el control.',
-  },
+const CONTINUE_LABEL = {
+  'pt-BR': 'CONTINUAR',
+  en: 'CONTINUE',
+  es: 'CONTINUAR',
 } as const;
 
 export default function RaceTutorialOverlay({
   visible,
   step,
   perfectStartHits = 0,
+  onContinue,
   onSkip,
 }: Props) {
   const { language } = useLanguage();
+  const continueScale = useRef(new Animated.Value(1)).current;
 
   const lang: 'pt-BR' | 'en' | 'es' =
     language === 'en'
@@ -166,23 +166,48 @@ export default function RaceTutorialOverlay({
         : 'pt-BR';
 
   const copy = COPY[lang][step];
-  const activeCopy =
-    step === 'perfect_start' && perfectStartHits >= 3
-      ? PERFECT_START_SUCCESS[lang]
-      : copy;
 
   const stepNumber = useMemo(
     () => STEP_ORDER.indexOf(step) + 1,
     [step],
   );
 
+  useEffect(() => {
+    if (!visible) {
+      continueScale.stopAnimation();
+      continueScale.setValue(1);
+      return;
+    }
+
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(continueScale, {
+          toValue: 1.055,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+        Animated.timing(continueScale, {
+          toValue: 1,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    pulse.start();
+
+    return () => {
+      pulse.stop();
+      continueScale.setValue(1);
+    };
+  }, [continueScale, visible]);
+
   if (!visible) return null;
 
   return (
-    <View
-      pointerEvents="box-none"
-      style={styles.host}
-    >
+    <View style={styles.host}>
+      <View style={styles.dimLayer} />
+
       <View style={styles.card}>
         <View style={styles.headerRow}>
           <Text style={styles.stepText}>
@@ -201,11 +226,11 @@ export default function RaceTutorialOverlay({
         </View>
 
         <Text style={styles.title}>
-          {activeCopy.title}
+          {copy.title}
         </Text>
 
         <Text style={styles.body}>
-          {activeCopy.body}
+          {copy.body}
         </Text>
 
         {step === 'perfect_start' && (
@@ -228,6 +253,24 @@ export default function RaceTutorialOverlay({
           </View>
         )}
 
+        <Animated.View
+          style={[
+            styles.continueButtonWrap,
+            { transform: [{ scale: continueScale }] },
+          ]}
+        >
+          <TouchableOpacity
+            activeOpacity={0.86}
+            onPress={onContinue}
+            style={styles.continueButton}
+          >
+            <Text style={styles.continueText}>
+              {CONTINUE_LABEL[lang]}
+            </Text>
+            <Text style={styles.continueArrow}>›</Text>
+          </TouchableOpacity>
+        </Animated.View>
+
         <View style={styles.progressTrack}>
           <View
             style={[
@@ -245,13 +288,18 @@ export default function RaceTutorialOverlay({
 
 const styles = StyleSheet.create({
   host: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 132,
+    ...StyleSheet.absoluteFillObject,
     zIndex: 210,
+    elevation: 30,
     alignItems: 'center',
+    justifyContent: 'flex-end',
     paddingHorizontal: 10,
+    paddingBottom: 132,
+  },
+
+  dimLayer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.30)',
   },
 
   card: {
@@ -262,9 +310,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 10,
     paddingBottom: 12,
-    backgroundColor: 'rgba(8, 10, 14, 0.92)',
+    backgroundColor: 'rgba(8, 10, 14, 0.96)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 214, 10, 0.72)',
+    borderColor: 'rgba(255, 214, 10, 0.82)',
     elevation: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 5 },
@@ -354,9 +402,43 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
 
+  continueButtonWrap: {
+    alignSelf: 'center',
+    marginTop: 12,
+  },
+
+  continueButton: {
+    minWidth: 150,
+    minHeight: 38,
+    paddingHorizontal: 22,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFD60A',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.55)',
+  },
+
+  continueText: {
+    color: '#111113',
+    fontSize: 10,
+    fontWeight: '900',
+    fontStyle: 'italic',
+    letterSpacing: 0.9,
+  },
+
+  continueArrow: {
+    marginLeft: 8,
+    marginTop: -1,
+    color: '#111113',
+    fontSize: 19,
+    fontWeight: '900',
+  },
+
   progressTrack: {
     height: 3,
-    marginTop: 9,
+    marginTop: 10,
     borderRadius: 999,
     overflow: 'hidden',
     backgroundColor: 'rgba(255,255,255,0.12)',
