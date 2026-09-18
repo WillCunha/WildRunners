@@ -1,20 +1,21 @@
 import { useLanguage } from '@/context/LanguageContext';
 import { usePlayerStore } from '@/src/store/playerStore';
+import { useTutorialStore } from '@/src/store/tutorialStore';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
-    Image,
-    ImageBackground,
-    KeyboardAvoidingView,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    useWindowDimensions,
-    View,
+  Image,
+  ImageBackground,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
 } from 'react-native';
 
 const ACCENT = '#61E7FF';
@@ -41,6 +42,10 @@ export default function RegistrationScreen() {
 
   const createProfile = usePlayerStore(
     state => state.createProfile,
+  );
+
+  const resetTutorial = useTutorialStore(
+    state => state.resetTutorial,
   );
 
   const isCompactLandscape = height < 430;
@@ -92,8 +97,13 @@ export default function RegistrationScreen() {
       safeEmail,
     );
 
+    // Todo novo perfil começa com o onboarding pendente.
+    resetTutorial();
+
+    // Mantém o fluxo de preload centralizado.
+    // A LoadingScreen decide entre tutorial e raiz normal.
     router.replace(
-      '/CarSelectionScreen',
+      '/LoadingScreen',
     );
   };
 

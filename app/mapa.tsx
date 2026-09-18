@@ -13,12 +13,14 @@ import ExplosionVisual from '@/components/ui/ExplosionVisual';
 import GuidedBulletVisual from '@/components/ui/GuidedBulletVisual';
 import RaceFinishTransition from '@/components/ui/RaceFinishTransition';
 import RaceObjectivesHUD from '@/components/ui/RaceObjectivesHUD';
+import RaceTutorialOverlay, { type TutorialStep } from '@/components/ui/RaceTutorialOverlay';
 import TornadoVisual from '@/components/ui/TornadoVisual';
 import { AudioContext } from '@/context/AudioContext';
 import { useCarSelection } from '@/context/CarContext';
 import { raceRewardsService } from '@/src/services/raceRewardsService';
 import { useLoadingStore } from '@/src/store/LoadingStore';
 import { usePlayerStore } from '@/src/store/playerStore';
+import { useTutorialStore } from '@/src/store/tutorialStore';
 import { carMaps } from '@/src/utils/carMaps';
 import {
   evaluateRaceObjectivesLive,
@@ -167,9 +169,61 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   );
 
 
-  const params = useLocalSearchParams<{ deck?: string; mapId?: string; skyTheme?: string; }>();
+  const params = useLocalSearchParams<{
+    deck?: string;
+    mapId?: string;
+    skyTheme?: string;
+    mode?: string;
+  }>();
+
+  const isTutorial = params.mode === 'tutorial';
   const selectedMapId = (params.mapId as CenarioId) || 'sao_paulo';
   const selectedSkyTheme = (params.skyTheme as SkyTheme) || 'day';
+
+  const markTutorialCompleted = useTutorialStore(
+    state => state.markCompleted,
+  );
+
+  const [tutorialStep, setTutorialStep] =
+    useState<TutorialStep>('perfect_start');
+
+  const [tutorialVisible, setTutorialVisible] =
+    useState(isTutorial);
+
+  const [tutorialPerfectStartHits, setTutorialPerfectStartHits] =
+    useState(0);
+
+  // O PanResponder é criado uma única vez. Por isso o tutorial usa refs
+  // para que o analógico sempre enxergue a etapa atual, sem closure velha.
+  const tutorialModeRef = useRef(isTutorial);
+  const tutorialStepRef = useRef<TutorialStep>('perfect_start');
+  const tutorialDoneRef = useRef(false);
+
+  const moveTutorialTo = useCallback((
+    expectedStep: TutorialStep,
+    nextStep: TutorialStep,
+  ) => {
+    if (!tutorialModeRef.current) return;
+    if (tutorialDoneRef.current) return;
+    if (tutorialStepRef.current !== expectedStep) return;
+
+    tutorialStepRef.current = nextStep;
+    setTutorialStep(nextStep);
+  }, []);
+
+  const finishTutorial = useCallback(() => {
+    if (!tutorialModeRef.current) return;
+    if (tutorialDoneRef.current) return;
+
+    tutorialDoneRef.current = true;
+    tutorialModeRef.current = false;
+    setTutorialVisible(false);
+    markTutorialCompleted();
+  }, [markTutorialCompleted]);
+
+  const handleSkipTutorial = useCallback(() => {
+    finishTutorial();
+  }, [finishTutorial]);
 
   const { selectedCar, selectedColorFront, selectedColorBack } = useCarSelection();
 
@@ -221,7 +275,9 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
   const DYNAMIC_JUMP_FORCE = JUMP_FORCE - ((carStats.motor.jumpPowerLevel - 1) * 0.6);
   // Nível 1 = 5 Vidas, Nível 2 = 6 Vidas...
-  const INITIAL_LIVES = 4 + carStats.engrenagem.defenseLevel;
+  const INITIAL_LIVES = isTutorial
+    ? 8
+    : 4 + carStats.engrenagem.defenseLevel;
 
   const BASE_PLAYER_X = SCREEN_WIDTH * 0.4;
   const GAP_BETWEEN_RACERS = 130;
@@ -361,6 +417,22 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         );
         analogKnobX.setValue(nextX);
         updateAnalogFromKnob(nextX);
+
+        if (
+          tutorialModeRef.current &&
+          tutorialStepRef.current === 'accelerate' &&
+          analogInputRef.current >= 0.45
+        ) {
+          moveTutorialTo('accelerate', 'brake');
+        }
+
+        if (
+          tutorialModeRef.current &&
+          tutorialStepRef.current === 'brake' &&
+          analogInputRef.current <= -0.35
+        ) {
+          moveTutorialTo('brake', 'card');
+        }
       },
       onPanResponderRelease: releaseAnalogControl,
       onPanResponderTerminate: releaseAnalogControl,
@@ -766,6 +838,13 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       racePerformanceRef.current.defensiveCardsUsed += 1;
     }
 
+    if (
+      tutorialModeRef.current &&
+      tutorialStepRef.current === 'card'
+    ) {
+      moveTutorialTo('card', 'draft');
+    }
+
     syncRaceObjectivesHud();
   };
 
@@ -1053,7 +1132,9 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       })),
     ]);
 
-    const randomSeconds = Math.floor(Math.random() * (180 - 60 + 1)) + 60;
+    const randomSeconds = isTutorial
+      ? 90
+      : Math.floor(Math.random() * (180 - 60 + 1)) + 60;
     raceTimeRef.current = randomSeconds;
     timeRemainingRef.current = randomSeconds;
     setTimeRemaining(randomSeconds);
@@ -1235,7 +1316,15 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     }
 
     /* ================================
-       5. TRANSIÇÃO VISUAL
+       5. FINALIZA O ONBOARDING
+    ================================ */
+
+    if (isTutorial) {
+      finishTutorial();
+    }
+
+    /* ================================
+       6. TRANSIÇÃO VISUAL
     ================================ */
 
     setShowFinishTransition(true);
@@ -1247,6 +1336,8 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     carKey,
     selectedColorFront,
     selectedColorBack,
+    isTutorial,
+    finishTutorial,
   ]);
 
   /* ================= PRESSÃO DOS 30 SEGUNDOS FINAIS ================= */
@@ -1431,6 +1522,13 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       });
 
       if (isDrafting && !isNitroActive.current && nitroCharge.current < 100) {
+        if (
+          tutorialModeRef.current &&
+          tutorialStepRef.current === 'draft'
+        ) {
+          moveTutorialTo('draft', 'nitro');
+        }
+
         nitroCharge.current += 0.8;
         if (nitroCharge.current >= 100) { nitroCharge.current = 100; if (!isNitroReadyRef.current) setNitroReady(true); }
         if (gameTime.current % 5 === 0) setNitroPercent(nitroCharge.current);
@@ -3133,22 +3231,42 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     if (isCountingRef.current) return;
     isCountingRef.current = true;
     miniGameClicksRef.current = 0;
+    if (tutorialModeRef.current) {
+      setTutorialPerfectStartHits(0);
+    }
 
     setCountdownStep('PREPARANDO');
     await sleep(1500);
 
-    const triggerMiniGame = () => {
+    const triggerMiniGame = (slotIndex: number) => {
       const maxTop = SCREEN_HEIGHT - 120;
       const maxLeft = SCREEN_WIDTH - 120;
 
-      setMiniGamePos({
-        top: Math.max(50, Math.floor(Math.random() * maxTop)),
-        left: Math.max(50, Math.floor(Math.random() * maxLeft))
-      })
-      setMiniGameVisible(true)
+      if (tutorialModeRef.current) {
+        // Na primeira corrida, os três raios continuam usando o minigame REAL,
+        // mas aparecem em posições previsíveis e longe do HUD inferior.
+        const tutorialPositions = [
+          { left: SCREEN_WIDTH * 0.20, top: SCREEN_HEIGHT * 0.20 },
+          { left: SCREEN_WIDTH * 0.48, top: SCREEN_HEIGHT * 0.28 },
+          { left: SCREEN_WIDTH * 0.76, top: SCREEN_HEIGHT * 0.20 },
+        ];
 
+        const position = tutorialPositions[Math.min(slotIndex, 2)];
+
+        setMiniGamePos({
+          top: Math.max(44, Math.min(maxTop, position.top)),
+          left: Math.max(44, Math.min(maxLeft, position.left)),
+        });
+      } else {
+        setMiniGamePos({
+          top: Math.max(50, Math.floor(Math.random() * maxTop)),
+          left: Math.max(50, Math.floor(Math.random() * maxLeft)),
+        });
+      }
+
+      setMiniGameVisible(true);
       setTimeout(() => setMiniGameVisible(false), 800);
-    }
+    };
 
     if (botsRef.current[0]) {
       playBeep();
@@ -3157,7 +3275,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       setFocusedDriver(null);
       setFocusedDriver(0);
       focusOn(botsRef.current[0].x);
-      triggerMiniGame();
+      triggerMiniGame(0);
     }
     await sleep(1000);
 
@@ -3168,7 +3286,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       setFocusedDriver(null);
       setFocusedDriver(1);
       focusOn(botsRef.current[1].x);
-      triggerMiniGame();
+      triggerMiniGame(1);
 
     }
     await sleep(1000);
@@ -3180,7 +3298,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       setFocusedDriver(null);
       setFocusedDriver(2);
       focusOn(botsRef.current[2].x);
-      triggerMiniGame();
+      triggerMiniGame(2);
     }
     await sleep(1000);
 
@@ -3198,9 +3316,28 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
     isCountingRef.current = false;
 
-    if (miniGameClicksRef.current >= 3) {
+    const earnedPerfectStart =
+      miniGameClicksRef.current >= 3;
+
+    if (earnedPerfectStart) {
       isNitroActive.current = true;
       nitroTimer.current = NITRO_DURATION;
+    }
+
+    if (
+      tutorialModeRef.current &&
+      tutorialStepRef.current === 'perfect_start'
+    ) {
+      if (earnedPerfectStart) {
+        // O analógico ignora movimentos enquanto o Nitro está ativo.
+        // Mantemos a celebração na tela durante o impulso e só então
+        // pedimos ao novato para acelerar manualmente.
+        setTimeout(() => {
+          moveTutorialTo('perfect_start', 'accelerate');
+        }, 2800);
+      } else {
+        moveTutorialTo('perfect_start', 'accelerate');
+      }
     }
 
     await sleep(800);
@@ -3217,7 +3354,18 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   /* ================= NITRO COMEÇO DA CORRIDA ================= */
   const handleMiniGamePress = () => {
     if (!miniGameVisible) return;
+
     miniGameClicksRef.current += 1;
+
+    if (
+      tutorialModeRef.current &&
+      tutorialStepRef.current === 'perfect_start'
+    ) {
+      setTutorialPerfectStartHits(
+        Math.min(miniGameClicksRef.current, 3),
+      );
+    }
+
     setMiniGameVisible(false);
   };
 
@@ -3235,7 +3383,18 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
 
   /* ================= ATIVA O NITRO ================= */
   function handleActivateNitro() {
-    if (isNitroReady && !isNitroActive.current) { isNitroActive.current = true; nitroTimer.current = NITRO_DURATION; setNitroReady(false); }
+    if (isNitroReady && !isNitroActive.current) {
+      isNitroActive.current = true;
+      nitroTimer.current = NITRO_DURATION;
+      setNitroReady(false);
+
+      if (
+        tutorialModeRef.current &&
+        tutorialStepRef.current === 'nitro'
+      ) {
+        moveTutorialTo('nitro', 'finish');
+      }
+    }
   }
 
   /* ================= POSIÇÕES DOS PLAYERS E BOTS ================= */
@@ -3482,9 +3641,11 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
           </Text>
         </Animated.View>
 
-        <View style={styles.objectivesSlot}>
-          <RaceObjectivesHUD objectives={raceObjectivesHud} />
-        </View>
+        {!isTutorial && (
+          <View style={styles.objectivesSlot}>
+            <RaceObjectivesHUD objectives={raceObjectivesHud} />
+          </View>
+        )}
 
         {hasActiveProtection && (
           <View style={styles.protectionPanel}>
@@ -3900,6 +4061,10 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
                     style={[
                       styles.dynamicCardBtn,
                       !hasboost && styles.dynamicCardBtnDisabled,
+                      isTutorial &&
+                        tutorialStep === 'card' &&
+                        index === 0 &&
+                        styles.tutorialControlHighlight,
                     ]}
                   >
                     {currentCooldown > 0 && (
@@ -3958,6 +4123,9 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
                   style={[
                     styles.nitroBtn,
                     !isNitroReady && styles.nitroBtnDisabled,
+                    isTutorial &&
+                      tutorialStep === 'nitro' &&
+                      styles.tutorialControlHighlight,
                   ]}
                 >
                   <Text style={styles.nitroBtnIcon}>⚡</Text>
@@ -3998,7 +4166,15 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
                 </View>
               </View>
 
-              <View style={styles.analogPanel}>
+              <View
+                style={[
+                  styles.analogPanel,
+                  isTutorial &&
+                    (tutorialStep === 'accelerate' ||
+                      tutorialStep === 'brake') &&
+                    styles.tutorialControlHighlight,
+                ]}
+              >
                 <Text style={[styles.analogSideLabel, styles.analogBrakeLabel]}>FREIO</Text>
                 <View
                   {...analogPanResponder.panHandlers}
@@ -4037,6 +4213,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
           onPress={handleMiniGamePress}
           style={[
             styles.miniGameBtn,
+            isTutorial && tutorialStep === 'perfect_start' && styles.tutorialMiniGameBtn,
             { top: miniGamePos.top, left: miniGamePos.left }
           ]}
         >
@@ -4047,7 +4224,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
       {countdownStep && (
         <View style={styles.overlay} pointerEvents="none">
           {countdownStep === 'PREPARANDO' && <Text style={styles.titleText}>PREPARANDO...</Text>}
-          {countdownStep === 'GO' && <Text style={[styles.titleText, { color: '#00D084' }]}>JÁ!</Text>}
+          {countdownStep === 'JÁ!' && <Text style={[styles.titleText, { color: '#00D084' }]}>JÁ!</Text>}
 
           {typeof countdownStep === 'number' && (
             <View style={styles.trafficLightContainer}>
@@ -4059,6 +4236,17 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         </View>
       )}
 
+
+      <RaceTutorialOverlay
+        visible={
+          tutorialVisible &&
+          !gameOver &&
+          (tutorialStep === 'perfect_start' || started)
+        }
+        step={tutorialStep}
+        perfectStartHits={tutorialPerfectStartHits}
+        onSkip={handleSkipTutorial}
+      />
 
       <RaceFinishTransition
         visible={
@@ -4431,11 +4619,28 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.72)',
   },
   controlsWaiting: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  tutorialControlHighlight: {
+    borderWidth: 2,
+    borderColor: '#FFD60A',
+    elevation: 12,
+    shadowColor: '#FFD60A',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.75,
+    shadowRadius: 8,
+  },
+
   controlsWaitingText: { color: 'rgba(255,255,255,0.28)', fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
 
   jumpArea: { position: 'absolute', backgroundColor: '#fff', left: 40, bottom: 30, height: 90, width: 90, borderRadius: 45, zIndex: 30, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 5 },
   block: { position: 'absolute', zIndex: 3 },
   miniGameBtn: { position: 'absolute', width: 64, height: 64, backgroundColor: '#FFCC00', borderWidth: 4, borderColor: '#1C1C1E', borderRadius: 20, justifyContent: 'center', alignItems: 'center', zIndex: 9999, elevation: 10, shadowColor: '#000', shadowOffset: { width: 2, height: 4 }, shadowOpacity: 0.4, shadowRadius: 3, },
+  tutorialMiniGameBtn: {
+    borderColor: '#FFFFFF',
+    borderWidth: 5,
+    elevation: 18,
+    shadowOpacity: 0.75,
+    shadowRadius: 9,
+  },
   miniGameBtnText: { fontSize: 28, },
   overlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', zIndex: 20 },
   titleText: { fontSize: 48, fontWeight: '900', color: '#FFD700', textShadowColor: '#FF4500', textShadowOffset: { width: 3, height: 3 }, textShadowRadius: 5, },

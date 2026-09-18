@@ -1,5 +1,6 @@
 import EntryAssetPreloader from '@/components/EntryAssetPreloader';
 import { useLanguage } from '@/context/LanguageContext';
+import { useTutorialStore } from '@/src/store/tutorialStore';
 import {
   getRandomLoadingTipKey,
   LOADING_TIP_KEYS,
@@ -26,6 +27,13 @@ const ACCENT = '#FFD60A';
 export default function LoadingScreen() {
   const router = useRouter();
   const { t } = useLanguage();
+
+  const tutorialCompleted = useTutorialStore(
+    state => state.completed,
+  );
+  const tutorialHydrated = useTutorialStore(
+    state => state.hydrated,
+  );
 
   const [completed, setCompleted] =
     useState(0);
@@ -91,6 +99,8 @@ export default function LoadingScreen() {
     setFailed(0);
     setAssetsReady(true);
 
+    // 100% aqui é real: EntryAssetPreloader
+    // confirmou que todos os assets dispararam onLoad.
     progress.stopAnimation();
     progress.setValue(1);
   }, [progress]);
@@ -137,6 +147,7 @@ export default function LoadingScreen() {
   useEffect(() => {
     if (!assetsReady) return;
     if (failed > 0) return;
+    if (!tutorialHydrated) return;
     if (navigationStartedRef.current) {
       return;
     }
@@ -149,7 +160,9 @@ export default function LoadingScreen() {
     const frameId = requestAnimationFrame(
       () => {
         router.replace(
-          '/CarSelectionScreen',
+          tutorialCompleted
+            ? '/CarSelectionScreen'
+            : '/TutorialRaceEntry',
         );
       },
     );
@@ -160,6 +173,8 @@ export default function LoadingScreen() {
   }, [
     assetsReady,
     failed,
+    tutorialHydrated,
+    tutorialCompleted,
     router,
   ]);
 
@@ -217,7 +232,7 @@ export default function LoadingScreen() {
 
         <Text style={styles.progressText}>
           {total > 0
-            ? `${percentage}% `
+            ? `${percentage}%  •  ${completed}/${total}`
             : '0%'}
         </Text>
 
