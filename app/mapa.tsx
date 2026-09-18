@@ -17,6 +17,7 @@ import RaceTutorialOverlay, { type TutorialStep } from '@/components/ui/RaceTuto
 import TornadoVisual from '@/components/ui/TornadoVisual';
 import { AudioContext } from '@/context/AudioContext';
 import { useCarSelection } from '@/context/CarContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { raceRewardsService } from '@/src/services/raceRewardsService';
 import { useLoadingStore } from '@/src/store/LoadingStore';
 import { usePlayerStore } from '@/src/store/playerStore';
@@ -139,6 +140,9 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
   const GROUND_Y = SCREEN_HEIGHT - (BOTTOM_HUD_HEIGHT + BOTTOM_HUD_BOTTOM + TRACK_TO_HUD_GAP);
   const router = useRouter();
+
+    const { t } = useLanguage();
+  
 
   const showLoading = useLoadingStore((state) => state.showLoading);
   const hideLoading = useLoadingStore((state) => state.hideLoading);
@@ -4266,7 +4270,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
                     styles.tutorialControlHighlight,
                 ]}
               >
-                <Text style={[styles.analogSideLabel, styles.analogBrakeLabel]}>FREIO</Text>
+                <Text style={[styles.analogSideLabel, styles.analogBrakeLabel]}>{t('race.slowDown')}</Text>
                 <View
                   {...analogPanResponder.panHandlers}
                   style={styles.analogTrack}
@@ -4286,12 +4290,12 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
                     <View style={styles.analogKnobInner} />
                   </Animated.View>
                 </View>
-                <Text style={[styles.analogSideLabel, styles.analogThrottleLabel]}>ACELERA</Text>
+                <Text style={[styles.analogSideLabel, styles.analogThrottleLabel]}>{t('race.speedUp')}</Text>
               </View>
             </>
           ) : (
             <View style={styles.controlsWaiting}>
-              <Text style={styles.controlsWaitingText}>PILOTAGEM</Text>
+              <Text style={styles.controlsWaitingText}>{t('race.pilotagem')}</Text>
             </View>
           )}
         </View>

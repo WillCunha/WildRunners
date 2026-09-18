@@ -53,6 +53,9 @@ const ptBR = {
     finalStretch: 'RETA FINAL!',
     finished: 'CORRIDA FINALIZADA',
     victory: 'VITÓRIA!',
+    slowDown: 'FREAR',
+    speedUp: 'ACELERAR',
+    pilotagem: 'PILOTAGEM',
     defeat: 'DERROTA',
   },
 
