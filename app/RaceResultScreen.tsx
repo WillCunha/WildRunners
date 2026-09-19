@@ -1346,12 +1346,13 @@ export default function RaceResultScreen() {
 
                     {/* COLUNA DIREITA */}
 
-                    <ScrollView
-                        style={styles.rightColumn}
-                        contentContainerStyle={styles.rightColumnContent}
-                        showsVerticalScrollIndicator={false}
-                        bounces={false}
-                    >
+                    <View style={styles.rightColumn}>
+                        <ScrollView
+                            style={styles.rightColumnScroll}
+                            contentContainerStyle={styles.rightColumnContent}
+                            showsVerticalScrollIndicator={false}
+                            bounces={false}
+                        >
                         <Text style={styles.sectionTitle}>
                             {t('raceResult.rewards')}
                         </Text>
@@ -1424,6 +1425,8 @@ export default function RaceResultScreen() {
                             </View>
                         )}
 
+                        </ScrollView>
+
                         <View style={styles.actions}>
                             <TouchableOpacity
                                 style={styles.continueButton}
@@ -1443,7 +1446,7 @@ export default function RaceResultScreen() {
                                 </Text>
                             </TouchableOpacity>
                         </View>
-                    </ScrollView>
+                    </View>
                 </View>
             </SafeAreaView>
         </LinearGradient>
@@ -1488,10 +1491,14 @@ const styles =
             minWidth: 0,
             minHeight: 0,
         },
+        rightColumnScroll: {
+            flex: 1,
+            minHeight: 0,
+        },
         rightColumnContent: {
             flexGrow: 1,
             justifyContent: 'center',
-            paddingBottom: 8,
+            paddingBottom: 12,
         },
         completedText: {
             color: 'rgba(255,255,255,0.72)',
@@ -1818,7 +1825,9 @@ const styles =
         actions: {
             flexDirection: 'row',
             gap: 9,
-            marginTop: 16,
+            marginTop: 10,
+            paddingTop: 10,
+            flexShrink: 0,
         },
         secondaryButton: {
             flex: 1,
