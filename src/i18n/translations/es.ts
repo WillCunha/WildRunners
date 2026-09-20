@@ -600,6 +600,9 @@ const es = {
     attacks: '2 ATAQUES',
     overtakes: '3 ADELANTAMIENTOS',
   },
+  tutorial: {
+    preparingFirstRace: 'PREPARANDO PRIMERA CARRERA...',
+  }
 };
 
 export default es;

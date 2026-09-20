@@ -1,4 +1,5 @@
 import { useCarSelection } from '@/context/CarContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { useRouter } from 'expo-router';
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -12,7 +13,7 @@ const TUTORIAL_DECK = [
 
 export default function TutorialRaceEntry() {
   const router = useRouter();
-
+  const { t } = useLanguage();
   const {
     setSelectedCar,
     setSelectedColorFront,
@@ -50,7 +51,7 @@ export default function TutorialRaceEntry() {
   return (
     <View style={styles.container}>
       <Text style={styles.text}>
-        PREPARANDO PRIMEIRA CORRIDA...
+        {t('tutorial.preparingFirstRace')}
       </Text>
     </View>
   );

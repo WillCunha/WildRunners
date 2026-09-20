@@ -484,6 +484,9 @@ const en = {
     attacks: '2 ATTACKS',
     overtakes: '3 OVERTAKES',
   },
+  tutorial: {
+    preparingFirstRace: 'PREPARING FIRST RACE...',
+  }
 
 };
 

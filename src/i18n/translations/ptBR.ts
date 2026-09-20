@@ -484,6 +484,9 @@ const ptBR = {
     attacks: '2 ATAQUES',
     overtakes: '3 ULTRAPASSAGENS',
   },
+  tutorial: {
+    preparingFirstRace: 'PREPARANDO PRIMEIRA CORRIDA...',
+  }
 };
 
 export default ptBR;
