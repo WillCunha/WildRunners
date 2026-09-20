@@ -347,12 +347,7 @@ export default function SelectionCar() {
     setSelectedFinishId(previewFinishId);
     setSelectedEquipment(previewEquipment);
 
-    router.push({
-      pathname: '/LoadingScreen',
-      params: {
-        next: '/OficinaScreen',
-      },
-    });
+    router.push('/OficinaScreen' as any);
   };
 
   const mainButtonText = isLocked
