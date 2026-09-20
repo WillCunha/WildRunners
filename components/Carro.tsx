@@ -1,7 +1,9 @@
 
+import type { EquippedCarEquipment, PaintFinishId } from '@/src/types/playerTypes';
 import { carMaps } from '@/src/utils/carMaps';
 import React, { memo, useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
+import CarEquipmentLayers from './Game/CarEquipmentLayers';
 import SkiaCarBody from './Game/SkiaCarBody';
 
 type CarKey = keyof typeof carMaps;
@@ -12,6 +14,8 @@ interface CarroProps {
   carType?: CarKey;
   carColorFront?: string;
   carColorBack?: string;
+  paintFinishId?: PaintFinishId;
+  equipment?: EquippedCarEquipment;
   renderWidth?: number;
 }
 
@@ -32,6 +36,8 @@ function Carro({
   carType = 'fusca',
   carColorFront = '#cc0000',
   carColorBack = '#000000',
+  paintFinishId = 'solid',
+  equipment,
   renderWidth = 180,
 }: CarroProps) {
   const car = carMaps[carType];
@@ -117,7 +123,15 @@ function Carro({
         width={RENDER_WIDTH}
         primaryColor={carColorFront}
         secondaryColor={carColorBack}
+        finishId={paintFinishId}
         style={styles.carBase}
+      />
+
+      <CarEquipmentLayers
+        carId={carType}
+        width={RENDER_WIDTH}
+        height={RENDER_HEIGHT}
+        equipped={equipment}
       />
 
       <Animated.Image
@@ -171,6 +185,11 @@ function arePropsEqual(prev: CarroProps, next: CarroProps) {
     prev.skin === next.skin &&
     prev.carColorFront === next.carColorFront &&
     prev.carColorBack === next.carColorBack &&
+    prev.paintFinishId === next.paintFinishId &&
+    prev.equipment?.frontBumper === next.equipment?.frontBumper &&
+    prev.equipment?.rearBumper === next.equipment?.rearBumper &&
+    prev.equipment?.spoiler === next.equipment?.spoiler &&
+    prev.equipment?.sideSkirt === next.equipment?.sideSkirt &&
     prev.renderWidth === next.renderWidth &&
     getSpeedBand(prev.speed) === getSpeedBand(next.speed)
   );

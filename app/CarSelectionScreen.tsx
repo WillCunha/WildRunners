@@ -1,10 +1,13 @@
+import CarEquipmentLayers from '@/components/Game/CarEquipmentLayers';
 import SkiaCarBody from '@/components/Game/SkiaCarBody';
 import { AudioContext } from '@/context/AudioContext';
 import { useCarSelection } from '@/context/CarContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { raceRewardsService } from '@/src/services/raceRewardsService';
 import { usePlayerStore } from '@/src/store/playerStore';
+import type { EquippedCarEquipment, PaintFinishId } from '@/src/types/playerTypes';
 import { carMaps } from '@/src/utils/carMaps';
+import { CAR_PAINT_FINISHES, DEFAULT_CAR_PAINT } from '@/src/utils/carPaints';
 import { getPlayerLevel } from '@/src/utils/progression';
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
@@ -29,18 +32,11 @@ type CarCanvasProps = {
     width: number;
     colorFront: string;
     colorBack: string;
+    finishId: PaintFinishId;
+    equipment: EquippedCarEquipment;
 };
 
-const AVAILABLE_COLORS = [
-    '#C8423A', // vermelho
-    '#3F8F5B', // verde
-    '#3478B8', // azul
-    '#D6AD32', // amarelo
-    '#C97830', // laranja
-    '#8057A3', // roxo
-    '#E4E4E2', // branco/prata
-    '#29292B', // grafite
-];
+
 
 const MAX_UPGRADE_LEVEL = 10;
 const ACCENT = '#FFD60A';
@@ -48,7 +44,7 @@ const ACCENT = '#FFD60A';
 const DASHBOARD_MUSIC = require('@/assets/audio/dashboard/audio_one.mp3');
 
 const CarCanvas = React.memo(
-    ({ carId, width, colorFront, colorBack }: CarCanvasProps) => {
+    ({ carId, width, colorFront, colorBack, finishId, equipment }: CarCanvasProps) => {
         const car = carMaps[carId];
         const scale = width / car.baseSize.width;
         const height = car.baseSize.height * scale;
@@ -60,7 +56,14 @@ const CarCanvas = React.memo(
                     width={width}
                     primaryColor={colorFront}
                     secondaryColor={colorBack}
+                    finishId={finishId}
                     style={styles.carLayer}
+                />
+                <CarEquipmentLayers
+                    carId={carId}
+                    width={width}
+                    height={height}
+                    equipped={equipment}
                 />
                 <Image
                     source={car.wheelImage as ImageSourcePropType}
@@ -150,6 +153,8 @@ export default function CarSelectionScreen() {
         setSelectedCar,
         setSelectedColorFront,
         setSelectedColorBack,
+        setSelectedFinishId,
+        setSelectedEquipment,
     } = useCarSelection();
 
     const profile = usePlayerStore(state => state.profile);
@@ -168,11 +173,15 @@ export default function CarSelectionScreen() {
 
     const [previewCar, setPreviewCar] = useState<CarKey | null>(selectedOwnedCar);
     const [previewColorFront, setPreviewColorFront] = useState(
-        selectedColorFront || AVAILABLE_COLORS[0],
+        selectedColorFront || DEFAULT_CAR_PAINT.primaryColor,
     );
     const [previewColorBack, setPreviewColorBack] = useState(
-        selectedColorBack || AVAILABLE_COLORS[2],
+        selectedColorBack || DEFAULT_CAR_PAINT.secondaryColor,
     );
+    const [previewFinishId, setPreviewFinishId] = useState<PaintFinishId>('solid');
+    const [previewEquipment, setPreviewEquipment] = useState<EquippedCarEquipment>({
+        frontBumper: null, rearBumper: null, spoiler: null, sideSkirt: null,
+    });
 
     useFocusEffect(
         useCallback(() => {
@@ -207,6 +216,18 @@ export default function CarSelectionScreen() {
         });
     }, [carKeys, profile]);
 
+    useEffect(() => {
+        if (!previewCar) return;
+        const owned = profile?.garage?.[previewCar];
+        const paint = owned?.customization?.paint ?? DEFAULT_CAR_PAINT;
+        setPreviewColorFront(paint.primaryColor);
+        setPreviewColorBack(paint.secondaryColor);
+        setPreviewFinishId(paint.finishId);
+        setPreviewEquipment(owned?.customization?.equipment ?? {
+            frontBumper: null, rearBumper: null, spoiler: null, sideSkirt: null,
+        });
+    }, [previewCar, profile]);
+
     const playerTier = getPlayerLevel(profile?.xp ?? 0);
     const currentCarData = previewCar ? carMaps[previewCar] : null;
     const ownedCarData = previewCar ? profile?.garage?.[previewCar] : undefined;
@@ -232,9 +253,11 @@ export default function CarSelectionScreen() {
             setSelectedCar(previewCar);
             setSelectedColorFront(previewColorFront);
             setSelectedColorBack(previewColorBack);
+            setSelectedFinishId(previewFinishId);
+            setSelectedEquipment(previewEquipment);
         }
 
-        router.push('/CarStore' as any);
+        router.push({ pathname: '/LoadingScreen', params: { next: '/CarStore' } });
     };
 
     const resetProfile =
@@ -248,9 +271,11 @@ export default function CarSelectionScreen() {
             setSelectedCar(previewCar);
             setSelectedColorFront(previewColorFront);
             setSelectedColorBack(previewColorBack);
+            setSelectedFinishId(previewFinishId);
+            setSelectedEquipment(previewEquipment);
         }
 
-        router.push('/OficinaScreen' as any);
+        router.push({ pathname: '/LoadingScreen', params: { next: '/OficinaScreen' } });
     };
 
     const handleContinue = () => {
@@ -265,6 +290,8 @@ export default function CarSelectionScreen() {
         setSelectedCar(previewCar);
         setSelectedColorFront(previewColorFront);
         setSelectedColorBack(previewColorBack);
+        setSelectedFinishId(previewFinishId);
+        setSelectedEquipment(previewEquipment);
         router.navigate('/deckselection' as any);
     };
 
@@ -421,6 +448,8 @@ export default function CarSelectionScreen() {
                                         width={previewWidth}
                                         colorFront={previewColorFront}
                                         colorBack={previewColorBack}
+                                        finishId={previewFinishId}
+                                        equipment={previewEquipment}
                                     />
                                 ) : (
                                     <View style={styles.emptyGarage}>
@@ -433,41 +462,16 @@ export default function CarSelectionScreen() {
                                 )}
                             </View>
 
-                            <View style={styles.paintPanel}>
-                                <View style={styles.paintColumn}>
-                                    <Text style={styles.paintLabel}>{t('carSelection.primaryColor')}</Text>
-                                    <View style={styles.colorRow}>
-                                        {AVAILABLE_COLORS.map(color => (
-                                            <TouchableOpacity
-                                                key={`front-${color}`}
-                                                activeOpacity={0.8}
-                                                onPress={() => setPreviewColorFront(color)}
-                                                style={[
-                                                    styles.colorOption,
-                                                    { backgroundColor: color },
-                                                    previewColorFront === color && styles.colorOptionSelected,
-                                                ]}
-                                            />
-                                        ))}
-                                    </View>
+                            <View style={styles.paintSummaryPanel}>
+                                <View style={styles.paintSummaryColors}>
+                                    <View style={[styles.paintSummarySwatch, { backgroundColor: previewColorFront }]} />
+                                    <View style={[styles.paintSummarySwatch, { backgroundColor: previewColorBack }]} />
                                 </View>
-
-                                <View style={styles.paintColumn}>
-                                    <Text style={styles.paintLabel}>{t('carSelection.secondaryColor')}</Text>
-                                    <View style={styles.colorRow}>
-                                        {AVAILABLE_COLORS.map(color => (
-                                            <TouchableOpacity
-                                                key={`back-${color}`}
-                                                activeOpacity={0.8}
-                                                onPress={() => setPreviewColorBack(color)}
-                                                style={[
-                                                    styles.colorOption,
-                                                    { backgroundColor: color },
-                                                    previewColorBack === color && styles.colorOptionSelected,
-                                                ]}
-                                            />
-                                        ))}
-                                    </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={styles.paintSummaryTitle}>PINTURA EQUIPADA</Text>
+                                    <Text style={styles.paintSummaryText}>
+                                        {CAR_PAINT_FINISHES[previewFinishId].name} • personalize na Oficina
+                                    </Text>
                                 </View>
                             </View>
                         </View>
@@ -784,7 +788,7 @@ const styles = StyleSheet.create({
     },
     previewArea: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 4 },
     carLayer: { position: 'absolute', left: 0, top: 0, zIndex: 2 },
-    wheel: { position: 'absolute', zIndex: 30 },
+    wheel: { position: 'absolute', zIndex: 1 },
     emptyGarage: { alignItems: 'center', maxWidth: 290 },
     emptyGarageIcon: { fontSize: 30 },
     emptyGarageTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '900', marginTop: 6 },
@@ -818,6 +822,16 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(255,255,255,0.22)',
     },
     colorOptionSelected: { borderWidth: 3, borderColor: '#FFFFFF', transform: [{ scale: 1.08 }] },
+    paintSummaryPanel: {
+        minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 10,
+        paddingHorizontal: 12, paddingVertical: 7, borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: 'rgba(255,255,255,0.16)', backgroundColor: 'rgba(15,15,17,0.74)',
+    },
+    paintSummaryColors: { flexDirection: 'row', gap: 5 },
+    paintSummarySwatch: { width: 27, height: 27, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.36)' },
+    paintSummaryTitle: { color: '#FFFFFF', fontSize: 8, fontWeight: '900', letterSpacing: 0.7 },
+    paintSummaryText: { color: '#85858C', fontSize: 7, fontWeight: '800', marginTop: 2 },
+
     detailsPane: {
         flex: 3.5,
         maxWidth: '25%',

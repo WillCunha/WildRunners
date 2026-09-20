@@ -1,4 +1,6 @@
 import { carMaps } from '@/src/utils/carMaps';
+import { getPaintFinish } from '@/src/utils/carPaints';
+import type { PaintFinishId } from '@/src/types/playerTypes';
 import {
   Canvas,
   ColorMatrix,
@@ -12,12 +14,12 @@ import { StyleProp, ViewStyle } from 'react-native';
 
 type CarKey = keyof typeof carMaps;
 
-
 type SkiaCarBodyProps = {
   carId: CarKey;
   width: number;
   primaryColor: string;
   secondaryColor: string;
+  finishId?: PaintFinishId;
   opacity?: number;
   /**
    * Luminância aproximada do cinza-base usado na arte exportada.
@@ -57,19 +59,6 @@ const hexToRgb = (hex: string): RGB => {
   return { r: 1, g: 1, b: 1 };
 };
 
-const desaturateColor = (color: RGB, saturation = 0.72): RGB => {
-  const luminance =
-    color.r * 0.2126 +
-    color.g * 0.7152 +
-    color.b * 0.0722;
-
-  return {
-    r: luminance + (color.r - luminance) * saturation,
-    g: luminance + (color.g - luminance) * saturation,
-    b: luminance + (color.b - luminance) * saturation,
-  };
-};
-
 /**
  * Recolore uma camada neutra em grayscale sem apagar o relevo 2.5D.
  *
@@ -81,16 +70,11 @@ const makePaintMatrix = (
   sourcePivot: number,
   shadingStrength: number,
 ) => {
-  const originalColor = hexToRgb(color);
-
-  const { r, g, b } = desaturateColor(
-    originalColor,
-    0.72,
-  );
-
+  const { r, g, b } = hexToRgb(color);
   const pivot = clamp01(sourcePivot);
   const strength = Math.max(0, shadingStrength);
 
+  // Rec. 709: luminância perceptual aproximada.
   const lr = 0.2126 * strength;
   const lg = 0.7152 * strength;
   const lb = 0.0722 * strength;
@@ -110,29 +94,31 @@ function SkiaCarBody({
   width,
   primaryColor,
   secondaryColor,
+  finishId = 'solid',
   opacity = 1,
-  sourcePivot = 0.46,
-  shadingStrength = 0.82,
+  sourcePivot,
+  shadingStrength,
   style,
 }: SkiaCarBodyProps) {
   const car = carMaps[carId];
   const height = width * (car.baseSize.height / car.baseSize.width);
+  const finish = getPaintFinish(finishId);
+  const effectivePivot = sourcePivot ?? finish.sourcePivot;
+  const effectiveShading = shadingStrength ?? finish.shadingStrength;
 
   const primaryImage = useImage(car.corpoBrancoFrente as any);
   const secondaryImage = useImage(car.corpoBrancoTras as any);
   const componentsImage = useImage(car.corpoTransparente as any);
 
   const primaryMatrix = useMemo(
-    () => makePaintMatrix(primaryColor, sourcePivot, shadingStrength),
-    [primaryColor, sourcePivot, shadingStrength],
+    () => makePaintMatrix(primaryColor, effectivePivot, effectiveShading),
+    [primaryColor, effectivePivot, effectiveShading],
   );
 
   const secondaryMatrix = useMemo(
-    () => makePaintMatrix(secondaryColor, sourcePivot, shadingStrength),
-    [secondaryColor, sourcePivot, shadingStrength],
+    () => makePaintMatrix(secondaryColor, effectivePivot, effectiveShading),
+    [secondaryColor, effectivePivot, effectiveShading],
   );
-
-
 
   return (
     <Canvas

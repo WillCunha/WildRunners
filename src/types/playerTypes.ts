@@ -4,6 +4,27 @@ export interface PlayerParts {
   engrenagem: number;
 }
 
+export type PaintFinishId = 'solid' | 'metallic' | 'matte' | 'pearlescent';
+
+export type EquippedCarEquipment = {
+  frontBumper: string | null;
+  rearBumper: string | null;
+  spoiler: string | null;
+  sideSkirt: string | null;
+};
+
+export type CarPaintConfiguration = {
+  primaryColor: string;
+  secondaryColor: string;
+  finishId: PaintFinishId;
+};
+
+export type CarCustomization = {
+  paint: CarPaintConfiguration;
+  equipment: EquippedCarEquipment;
+  ownedEquipment: string[];
+};
+
 export interface CarUpgrades {
   motor: {
     speedLevel: number;
@@ -11,6 +32,10 @@ export interface CarUpgrades {
     jumpPowerLevel: number;
   };
 
+  /**
+   * Mantido temporariamente para compatibilidade com saves antigos.
+   * rarityLevel deixa de ser usado pela Oficina 2.0.
+   */
   spray: {
     rarityLevel: number;
     unlockedSkins: string[];
@@ -19,6 +44,8 @@ export interface CarUpgrades {
   engrenagem: {
     defenseLevel: number;
   };
+
+  customization: CarCustomization;
 }
 
 export interface PlayerUnlocks {
@@ -47,20 +74,23 @@ export type CarStat =
   | 'defenseLevel'
   | 'rarityLevel';
 
-export type PartCategory =
-  | 'motor'
-  | 'spray'
-  | 'engrenagem';
+export type PartCategory = 'motor' | 'spray' | 'engrenagem';
+
+export type EquipmentSlot = keyof EquippedCarEquipment;
+
+export type CustomizationPurchaseResult =
+  | 'success'
+  | 'equipped'
+  | 'no_profile'
+  | 'car_not_owned'
+  | 'level_locked'
+  | 'insufficient_spray'
+  | 'invalid';
 
 export type MatchRewards = {
   motor: number;
   spray: number;
   engrenagem: number;
   trophies: number;
-
-  /**
-   * Opcional para manter chamadas legadas compilando.
-   * O fluxo novo de corrida sempre envia XP calculado pelo raceRewardsService.
-   */
   xp?: number;
 };

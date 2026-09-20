@@ -17,7 +17,6 @@ import RaceTutorialOverlay, { type TutorialStep } from '@/components/ui/RaceTuto
 import TornadoVisual from '@/components/ui/TornadoVisual';
 import { AudioContext } from '@/context/AudioContext';
 import { useCarSelection } from '@/context/CarContext';
-import { useLanguage } from '@/context/LanguageContext';
 import { raceRewardsService } from '@/src/services/raceRewardsService';
 import { useLoadingStore } from '@/src/store/LoadingStore';
 import { usePlayerStore } from '@/src/store/playerStore';
@@ -87,7 +86,7 @@ const PLAYER_SIZE = 50;
 // nunca ficarem escondidos atrás dos controles.
 const BOTTOM_HUD_HEIGHT = 118;
 const BOTTOM_HUD_BOTTOM = 0;
-const TRACK_TO_HUD_GAP = 6;
+const TRACK_TO_HUD_GAP = 0;
 
 // ================= VELOCIDADE / PILOTAGEM =================
 // O carMaps guarda os valores que o jogador entende como km/h.
@@ -140,9 +139,6 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
   const GROUND_Y = SCREEN_HEIGHT - (BOTTOM_HUD_HEIGHT + BOTTOM_HUD_BOTTOM + TRACK_TO_HUD_GAP);
   const router = useRouter();
-
-    const { t } = useLanguage();
-  
 
   const showLoading = useLoadingStore((state) => state.showLoading);
   const hideLoading = useLoadingStore((state) => state.hideLoading);
@@ -241,7 +237,13 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
     markTutorialCompleted();
   }, [markTutorialCompleted, setTutorialPause]);
 
-  const { selectedCar, selectedColorFront, selectedColorBack } = useCarSelection();
+  const {
+    selectedCar,
+    selectedColorFront,
+    selectedColorBack,
+    selectedFinishId,
+    selectedEquipment,
+  } = useCarSelection();
 
   const fallbackDeck = ['swap', 'bullet', 'chains', 'tnt'];
   const finalDeck = params.deck ? JSON.parse(params.deck as string) : fallbackDeck;
@@ -3918,6 +3920,8 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
                   carType={selectedCar}
                   carColorFront={selectedColorFront}
                   carColorBack={selectedColorBack}
+                  paintFinishId={selectedFinishId}
+                  equipment={selectedEquipment}
                   speed={playerSpeed.current}
                   skin="default"
                   renderWidth={180}
@@ -4270,7 +4274,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
                     styles.tutorialControlHighlight,
                 ]}
               >
-                <Text style={[styles.analogSideLabel, styles.analogBrakeLabel]}>{t('race.slowDown')}</Text>
+                <Text style={[styles.analogSideLabel, styles.analogBrakeLabel]}>FREIO</Text>
                 <View
                   {...analogPanResponder.panHandlers}
                   style={styles.analogTrack}
@@ -4290,12 +4294,12 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
                     <View style={styles.analogKnobInner} />
                   </Animated.View>
                 </View>
-                <Text style={[styles.analogSideLabel, styles.analogThrottleLabel]}>{t('race.speedUp')}</Text>
+                <Text style={[styles.analogSideLabel, styles.analogThrottleLabel]}>ACELERA</Text>
               </View>
             </>
           ) : (
             <View style={styles.controlsWaiting}>
-              <Text style={styles.controlsWaitingText}>{t('race.pilotagem')}</Text>
+              <Text style={styles.controlsWaitingText}>PILOTAGEM</Text>
             </View>
           )}
         </View>

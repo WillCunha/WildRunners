@@ -1,6 +1,9 @@
 import {
+  CarPaintConfiguration,
   CarStat,
   CarUpgrades,
+  CustomizationPurchaseResult,
+  EquipmentSlot,
   MatchRewards,
   PartCategory,
   PlayerProfile,
@@ -76,6 +79,27 @@ type PlayerState = {
     cost: number,
   ) => boolean;
 
+  applyCarPaint: (
+    carId: string,
+    paint: CarPaintConfiguration,
+    requiredLevel: number,
+    cost: number,
+  ) => CustomizationPurchaseResult;
+
+  purchaseAndEquipEquipment: (
+    carId: string,
+    slot: EquipmentSlot,
+    itemId: string,
+    requiredLevel: number,
+    cost: number,
+  ) => CustomizationPurchaseResult;
+
+  setEquippedEquipment: (
+    carId: string,
+    slot: EquipmentSlot,
+    itemId: string | null,
+  ) => boolean;
+
   upgradeCar: (
     carId: string,
     partCategory: PartCategory,
@@ -99,6 +123,21 @@ const createBaseGarageCar = (): CarUpgrades => ({
   engrenagem: {
     defenseLevel: 1,
   },
+
+  customization: {
+    paint: {
+      primaryColor: '#FF3B30',
+      secondaryColor: '#FF3B30',
+      finishId: 'solid',
+    },
+    equipment: {
+      frontBumper: null,
+      rearBumper: null,
+      spoiler: null,
+      sideSkirt: null,
+    },
+    ownedEquipment: [],
+  },
 });
 
 const createBaseUnlocks = (): PlayerUnlocks => ({
@@ -109,6 +148,44 @@ const createBaseUnlocks = (): PlayerUnlocks => ({
 
 const sanitizeReward = (value: number) =>
   Math.max(0, Math.floor(value));
+
+
+const isValidHexColor = (value: string) =>
+  /^#[0-9A-Fa-f]{6}$/.test(value);
+
+const normalizeCustomization = (car: any): CarUpgrades => ({
+  ...car,
+  spray: {
+    rarityLevel: Math.max(1, Math.floor(car?.spray?.rarityLevel ?? 1)),
+    unlockedSkins: Array.isArray(car?.spray?.unlockedSkins)
+      ? car.spray.unlockedSkins
+      : ['default'],
+  },
+  customization: {
+    paint: {
+      primaryColor: isValidHexColor(car?.customization?.paint?.primaryColor)
+        ? car.customization.paint.primaryColor.toUpperCase()
+        : '#FF3B30',
+      secondaryColor: isValidHexColor(car?.customization?.paint?.secondaryColor)
+        ? car.customization.paint.secondaryColor.toUpperCase()
+        : '#FF3B30',
+      finishId: ['solid', 'metallic', 'matte', 'pearlescent'].includes(
+        car?.customization?.paint?.finishId,
+      )
+        ? car.customization.paint.finishId
+        : 'solid',
+    },
+    equipment: {
+      frontBumper: car?.customization?.equipment?.frontBumper ?? null,
+      rearBumper: car?.customization?.equipment?.rearBumper ?? null,
+      spoiler: car?.customization?.equipment?.spoiler ?? null,
+      sideSkirt: car?.customization?.equipment?.sideSkirt ?? null,
+    },
+    ownedEquipment: Array.isArray(car?.customization?.ownedEquipment)
+      ? car.customization.ownedEquipment
+      : [],
+  },
+});
 
 export const usePlayerStore = create<PlayerState>()(
   persist(
@@ -577,6 +654,159 @@ export const usePlayerStore = create<PlayerState>()(
         return true;
       },
 
+      applyCarPaint: (carId, paint, requiredLevel, cost) => {
+        const { profile } = get();
+        if (!profile) return 'no_profile';
+
+        const car = profile.garage?.[carId];
+        if (!car) return 'car_not_owned';
+
+        if (!isValidHexColor(paint.primaryColor) || !isValidHexColor(paint.secondaryColor)) {
+          return 'invalid';
+        }
+
+        const safeRequiredLevel = Math.max(1, Math.floor(requiredLevel));
+        if (getPlayerLevel(profile.xp ?? 0) < safeRequiredLevel) {
+          return 'level_locked';
+        }
+
+        const safeCost = Math.max(0, Math.floor(cost));
+        const previous = normalizeCustomization(car).customization.paint;
+        const normalizedPaint: CarPaintConfiguration = {
+          primaryColor: paint.primaryColor.toUpperCase(),
+          secondaryColor: paint.secondaryColor.toUpperCase(),
+          finishId: paint.finishId,
+        };
+
+        if (
+          previous.primaryColor === normalizedPaint.primaryColor &&
+          previous.secondaryColor === normalizedPaint.secondaryColor &&
+          previous.finishId === normalizedPaint.finishId
+        ) {
+          return 'equipped';
+        }
+
+        if (profile.parts.spray < safeCost) return 'insufficient_spray';
+
+        set(state => {
+          if (!state.profile) return state;
+          const current = state.profile.garage?.[carId];
+          if (!current || state.profile.parts.spray < safeCost) return state;
+          const normalized = normalizeCustomization(current);
+
+          return {
+            profile: {
+              ...state.profile,
+              parts: {
+                ...state.profile.parts,
+                spray: state.profile.parts.spray - safeCost,
+              },
+              garage: {
+                ...state.profile.garage,
+                [carId]: {
+                  ...normalized,
+                  customization: {
+                    ...normalized.customization,
+                    paint: normalizedPaint,
+                  },
+                },
+              },
+              updatedAt: Date.now(),
+            },
+          };
+        });
+
+        return 'success';
+      },
+
+      purchaseAndEquipEquipment: (carId, slot, itemId, requiredLevel, cost) => {
+        const { profile } = get();
+        if (!profile) return 'no_profile';
+        const car = profile.garage?.[carId];
+        if (!car || !itemId.trim()) return car ? 'invalid' : 'car_not_owned';
+
+        const safeRequiredLevel = Math.max(1, Math.floor(requiredLevel));
+        if (getPlayerLevel(profile.xp ?? 0) < safeRequiredLevel) return 'level_locked';
+
+        const normalized = normalizeCustomization(car);
+        const alreadyOwned = normalized.customization.ownedEquipment.includes(itemId);
+        const safeCost = alreadyOwned ? 0 : Math.max(0, Math.floor(cost));
+        if (profile.parts.spray < safeCost) return 'insufficient_spray';
+
+        set(state => {
+          if (!state.profile) return state;
+          const current = state.profile.garage?.[carId];
+          if (!current || state.profile.parts.spray < safeCost) return state;
+          const nextCar = normalizeCustomization(current);
+          const owned = nextCar.customization.ownedEquipment.includes(itemId)
+            ? nextCar.customization.ownedEquipment
+            : [...nextCar.customization.ownedEquipment, itemId];
+
+          return {
+            profile: {
+              ...state.profile,
+              parts: {
+                ...state.profile.parts,
+                spray: state.profile.parts.spray - safeCost,
+              },
+              garage: {
+                ...state.profile.garage,
+                [carId]: {
+                  ...nextCar,
+                  customization: {
+                    ...nextCar.customization,
+                    ownedEquipment: owned,
+                    equipment: {
+                      ...nextCar.customization.equipment,
+                      [slot]: itemId,
+                    },
+                  },
+                },
+              },
+              updatedAt: Date.now(),
+            },
+          };
+        });
+
+        return alreadyOwned ? 'equipped' : 'success';
+      },
+
+      setEquippedEquipment: (carId, slot, itemId) => {
+        const { profile } = get();
+        if (!profile) return false;
+        const car = profile.garage?.[carId];
+        if (!car) return false;
+        const normalized = normalizeCustomization(car);
+        if (itemId && !normalized.customization.ownedEquipment.includes(itemId)) return false;
+
+        set(state => {
+          if (!state.profile) return state;
+          const current = state.profile.garage?.[carId];
+          if (!current) return state;
+          const nextCar = normalizeCustomization(current);
+          return {
+            profile: {
+              ...state.profile,
+              garage: {
+                ...state.profile.garage,
+                [carId]: {
+                  ...nextCar,
+                  customization: {
+                    ...nextCar.customization,
+                    equipment: {
+                      ...nextCar.customization.equipment,
+                      [slot]: itemId,
+                    },
+                  },
+                },
+              },
+              updatedAt: Date.now(),
+            },
+          };
+        });
+        return true;
+      },
+
       upgradeCar: (
         carId,
         partCategory,
@@ -730,7 +960,7 @@ export const usePlayerStore = create<PlayerState>()(
       /**
        * Começamos a versionar o save.
        */
-      version: 4,
+      version: 5,
 
       storage:
         createJSONStorage(
@@ -778,6 +1008,13 @@ export const usePlayerStore = create<PlayerState>()(
             xp: Math.max(
               0,
               Math.floor(profile.xp ?? 0),
+            ),
+
+            garage: Object.fromEntries(
+              Object.entries(profile.garage ?? {}).map(([carId, car]) => [
+                carId,
+                normalizeCustomization(car),
+              ]),
             ),
 
             unlocks: {
