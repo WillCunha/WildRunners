@@ -257,7 +257,7 @@ export default function CarSelectionScreen() {
             setSelectedEquipment(previewEquipment);
         }
 
-        router.push({ pathname: '/LoadingScreen', params: { next: '/CarStore' } });
+        router.push('/CarStore' as any);
     };
 
     const resetProfile =
@@ -275,7 +275,7 @@ export default function CarSelectionScreen() {
             setSelectedEquipment(previewEquipment);
         }
 
-        router.push({ pathname: '/LoadingScreen', params: { next: '/OficinaScreen' } });
+        router.push('/OficinaScreen' as any);
     };
 
     const handleContinue = () => {

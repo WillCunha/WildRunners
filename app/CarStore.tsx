@@ -1,4 +1,3 @@
-import CarEquipmentLayers from '@/components/Game/CarEquipmentLayers';
 import SkiaCarBody from '@/components/Game/SkiaCarBody';
 import WildBackButton from '@/components/ui/WildBackButton';
 import { useCarSelection } from '@/context/CarContext';
