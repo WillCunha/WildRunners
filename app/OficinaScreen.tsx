@@ -187,11 +187,21 @@ export default function OficinaScreen() {
     const [activeColorLayer, setActiveColorLayer] = React.useState<'primary' | 'secondary'>('primary');
     const [previewPaint, setPreviewPaint] = React.useState(savedPaint);
     const [previewEquipment, setPreviewEquipment] = React.useState<EquippedCarEquipment>(savedEquipment);
+    const upgradesScrollRef = React.useRef<ScrollView>(null);
 
     React.useEffect(() => {
         setPreviewPaint(savedPaint);
         setPreviewEquipment(savedEquipment);
     }, [selectedCar, ownedCar]);
+
+    React.useEffect(() => {
+        requestAnimationFrame(() => {
+            upgradesScrollRef.current?.scrollTo({
+                y: 0,
+                animated: false,
+            });
+        });
+    }, [workshopMode]);
 
     const availableEquipmentCategories = React.useMemo(
         () => getAvailableEquipmentCategories(String(carId)),
@@ -618,6 +628,7 @@ export default function OficinaScreen() {
                         </Text>
 
                         <ScrollView
+                            ref={upgradesScrollRef}
                             style={styles.upgradesScroll}
                             contentContainerStyle={styles.upgradesScrollContent}
                             showsVerticalScrollIndicator={false}

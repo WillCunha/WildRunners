@@ -1,5 +1,5 @@
-import { getEquipmentById } from '@/src/utils/carEquipments';
 import type { EquippedCarEquipment } from '@/src/types/playerTypes';
+import { getEquipmentById } from '@/src/utils/carEquipments';
 import React from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 
@@ -58,7 +58,7 @@ export default React.memo(function CarEquipmentLayers({
           <Image
             key={item.id}
             source={item.image}
-            resizeMode="stretch"
+            resizeMode="contain"
             fadeDuration={0}
             style={styles.equipmentLayer}
           />
@@ -72,7 +72,7 @@ const styles = StyleSheet.create({
   layerFrame: {
     position: 'absolute',
     left: 0,
-    bottom: 0,
+    top: 0,
     zIndex: 12,
     overflow: 'visible',
   },
@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     top: 0,
-    right: 0,
-    bottom: 0,
+    width: '100%',
+    height: '100%',
   },
 });
