@@ -960,7 +960,7 @@ export const usePlayerStore = create<PlayerState>()(
       /**
        * Começamos a versionar o save.
        */
-      version: 5,
+      version: 6,
 
       storage:
         createJSONStorage(
