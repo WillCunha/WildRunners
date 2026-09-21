@@ -759,9 +759,22 @@ export default function OficinaScreen() {
                                                         <TouchableOpacity
                                                             style={styles.stockItem}
                                                             onPress={() => {
+                                                                const success = setEquippedEquipment(
+                                                                    String(carId),
+                                                                    category.slot,
+                                                                    null,
+                                                                );
+
+                                                                if (!success) {
+                                                                    Alert.alert(
+                                                                        'Não foi possível equipar',
+                                                                        'Tente novamente.',
+                                                                    );
+                                                                    return;
+                                                                }
+
                                                                 const next = { ...previewEquipment, [category.slot]: null };
                                                                 setPreviewEquipment(next);
-                                                                setEquippedEquipment(String(carId), category.slot, null);
                                                                 setSelectedEquipment(next);
                                                             }}
                                                         >
