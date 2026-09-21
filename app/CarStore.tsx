@@ -1,3 +1,4 @@
+import CarEquipmentLayers from '@/components/Game/CarEquipmentLayers';
 import SkiaCarBody from '@/components/Game/SkiaCarBody';
 import WildBackButton from '@/components/ui/WildBackButton';
 import { useCarSelection } from '@/context/CarContext';
@@ -74,8 +75,16 @@ const CarCanvas = React.memo(
           width={width}
           primaryColor={colorFront}
           secondaryColor={colorBack}
+          finishId={finishId}
           opacity={opacity}
           style={styles.carLayer}
+        />
+
+        <CarEquipmentLayers
+          carId={carId}
+          width={width}
+          height={height}
+          equipped={equipment}
         />
 
         <Image
@@ -318,7 +327,7 @@ export default function SelectionCar() {
     setSelectedColorBack(previewColorBack);
     setSelectedFinishId(previewFinishId);
     setSelectedEquipment(previewEquipment);
-    router.navigate('/OficinaScreen' as any);
+    router.navigate('/deckselection' as any);
   };
 
   const handleMainAction = () => {
