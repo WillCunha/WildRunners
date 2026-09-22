@@ -15,6 +15,7 @@ export type EquipmentSlot =
 export type CarEquipment = {
   id: string;
   name: string;
+  icon: ImageSourcePropType;
   image: ImageSourcePropType;
   requiredLevel: number;
   price: number;
@@ -32,39 +33,84 @@ export const CAR_EQUIPMENTS: Partial<Record<string, CarEquipmentSet>> = {
       {
         id: 'buggy_front_sport_01',
         name: 'Sport I',
+        icon: require('@/assets/images/components/componentsIcons/buggy/frontBumpers/front_sport_01.png'),
         image: require('@/assets/images/cars/carroceria/buggy/frontBumper/front_sport_01.png'),
-        requiredLevel: 1,
-        price: 100,
+        requiredLevel: 3,
+        price: 150,
+      },
+      {
+        id: 'buggy_front_sport_02',
+        name: 'Sport II',
+        icon: require('@/assets/images/components/componentsIcons/buggy/frontBumpers/front_sport_02.png'),
+        image: require('@/assets/images/cars/carroceria/buggy/frontBumper/front_sport_02.png'),
+        requiredLevel: 5,
+        price: 350,
+      },
+      {
+        id: 'buggy_front_sport_03',
+        name: 'Sport III',
+        icon: require('@/assets/images/components/componentsIcons/buggy/frontBumpers/front_sport_03.png'),
+        image: require('@/assets/images/cars/carroceria/buggy/frontBumper/front_sport_03.png'),
+        requiredLevel: 8,
+        price: 1000,
       },
     ],
     rearBumpers: [
       {
         id: 'buggy_rear_sport_01',
         name: 'Sport I',
+        icon: require('@/assets/images/components/componentsIcons/buggy/rearBumpers/rear_sport_01.png'),
         image: require('@/assets/images/cars/carroceria/buggy/rearBumper/rear_sport_01.png'),
-        requiredLevel: 1,
-        price: 100,
+        requiredLevel: 3,
+        price: 150,
+      },
+      {
+        id: 'buggy_rear_sport_02',
+        name: 'Sport II',
+        icon: require('@/assets/images/components/componentsIcons/buggy/rearBumpers/rear_sport_02.png'),
+        image: require('@/assets/images/cars/carroceria/buggy/rearBumper/rear_sport_02.png'),
+        requiredLevel: 5,
+        price: 350,
+      },
+      {
+        id: 'buggy_rear_sport_03',
+        name: 'Sport III',
+        icon: require('@/assets/images/components/componentsIcons/buggy/rearBumpers/rear_sport_03.png'),
+        image: require('@/assets/images/cars/carroceria/buggy/rearBumper/rear_sport_03.png'),
+        requiredLevel: 8,
+        price: 1000,
       },
     ],
-    spoilers: [{
-      id: 'buggy_spoiler_sport_01',
-      name: 'Sport I',
-      image: require('@/assets/images/cars/carroceria/buggy/spoiler/buggy_spoiler_sport_01.png'),
-      requiredLevel: 1,
-      price: 100,
-    },],
+    spoilers: [
+      {
+        id: 'buggy_spoiler_sport_01',
+        name: 'Sport I',
+        icon: require('@/assets/images/components/componentsIcons/buggy/spoilers/buggy_spoiler_sport_01.png'),
+        image: require('@/assets/images/cars/carroceria/buggy/spoiler/buggy_spoiler_sport_01.png'),
+        requiredLevel: 3,
+        price: 150,
+      },
+      {
+        id: 'buggy_spoiler_sport_02',
+        name: 'Sport II',
+        icon: require('@/assets/images/components/componentsIcons/buggy/spoilers/buggy_spoiler_sport_02.png'),
+        image: require('@/assets/images/cars/carroceria/buggy/spoiler/buggy_spoiler_sport_02.png'),
+        requiredLevel: 5,
+        price: 350,
+      },
+      {
+        id: 'buggy_spoiler_sport_03',
+        name: 'Sport III',
+        icon: require('@/assets/images/components/componentsIcons/buggy/spoilers/buggy_spoiler_sport_03.png'),
+        image: require('@/assets/images/cars/carroceria/buggy/spoiler/buggy_spoiler_sport_03.png'),
+        requiredLevel: 8,
+        price: 1000,
+      },
+    ],
     sideSkirts: [],
   },
   fusca: {
-    frontBumpers: [
-      {
-        id: 'fusca_front_sport_01',
-        name: 'Sport I',
-        image: require('@/assets/images/cars/carroceria/fusca/frontBumpers/front_sport_01.png'),
-        requiredLevel: 3,
-        price: 180,
-      },
-    ],
+    frontBumpers: [],
     rearBumpers: [],
     spoilers: [],
     sideSkirts: [],

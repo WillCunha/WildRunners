@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     top: 0,
-    zIndex: 1,
+    zIndex: 1000,
     overflow: 'visible',
   },
 

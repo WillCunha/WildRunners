@@ -10,8 +10,8 @@ export type PaintFinishDefinition = {
 };
 
 export const DEFAULT_CAR_PAINT = {
-  primaryColor: '#FF3B30',
-  secondaryColor: '#FF3B30',
+  primaryColor: '#353232',
+  secondaryColor: '#080808',
   finishId: 'solid' as PaintFinishId,
 };
 

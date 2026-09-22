@@ -1,5 +1,5 @@
-import { carMaps } from '@/src/utils/carMaps';
 import type { EquippedCarEquipment, PaintFinishId } from '@/src/types/playerTypes';
+import { carMaps } from '@/src/utils/carMaps';
 import React, { createContext, useContext, useState } from 'react';
 
 type CarKey = keyof typeof carMaps;
@@ -28,8 +28,8 @@ const CarContext = createContext<CarContextType | undefined>(undefined);
 
 export const CarProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [selectedCar, setSelectedCar] = useState<CarKey>('fusca');
-  const [selectedColorFront, setSelectedColorFront] = useState('#FF3B30');
-  const [selectedColorBack, setSelectedColorBack] = useState('#FF3B30');
+  const [selectedColorFront, setSelectedColorFront] = useState('#2c2a2a');
+  const [selectedColorBack, setSelectedColorBack] = useState('#0c0c0c');
   const [selectedFinishId, setSelectedFinishId] = useState<PaintFinishId>('solid');
   const [selectedEquipment, setSelectedEquipment] = useState<EquippedCarEquipment>(EMPTY_EQUIPMENT);
 

@@ -857,11 +857,11 @@ export default function OficinaScreen() {
                                                                         style={styles.equipmentPreviewButton}
                                                                         onPress={() => setPreviewEquipment(current => ({ ...current, [category.slot]: item.id }))}
                                                                     >
-                                                                        <Image source={item.image} resizeMode="cover" style={styles.equipmentThumb} />
+                                                                        <Image source={item.icon} resizeMode="cover" style={styles.equipmentThumb} />
                                                                         <View style={{ flex: 1 }}>
                                                                             <Text style={styles.equipmentName}>{item.name.toUpperCase()}</Text>
                                                                             <Text style={styles.equipmentMeta}>
-                                                                                {locked ? `🔒  ${t('workshop.level')}  ${item.requiredLevel}` : owned ? (equipped ? ` ${t('workshop.equipped')}` : ` ${t('workshop.purchased')}`) : `🎨 ${item.price}`}
+                                                                                {locked ? `🔒  ${t('workshop.level')}  ${item.requiredLevel}` : owned ? (equipped ? ` ${t('workshop.equipped')}` : ` ${t('workshop.owned')}`) : `🎨 ${item.price}`}
                                                                             </Text>
                                                                         </View>
                                                                     </TouchableOpacity>
