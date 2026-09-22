@@ -132,6 +132,7 @@ function Carro({
         width={RENDER_WIDTH}
         height={RENDER_HEIGHT}
         equipped={equipment}
+        style={styles.carComponents}
       />
 
       <Animated.Image
@@ -209,6 +210,9 @@ const styles = StyleSheet.create({
     left: 0,
     bottom: 0,
     zIndex: 10,
+  },
+  carComponents: {
+    zIndex: 1,
   },
   wheel: {
     position: 'absolute',

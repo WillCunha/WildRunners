@@ -126,6 +126,13 @@ const es = {
 
     emptyGarageAlertMessage:
       'Compra un vehículo en la tienda antes de continuar a la carrera.',
+
+    carNotPurchasedAlertTitle: "Coche no comprado",
+    carNotPurchasedAlertMessage:
+      'Compra el vehículo antes de abrir el taller.',
+
+    equippedPaint: "PINTURA EQUIPADA",
+    personalizePaint: "Personaliza en el taller",
   },
 
   carStore: {
@@ -495,6 +502,44 @@ const es = {
       message:
         'Selecciona un vehículo de tu garaje antes de abrir el taller.',
     },
+    paint: 'PINTURA',
+
+    visualStudio: 'ESTUDIO VISUAL',
+    customization: 'PERSONALIZACIÓN',
+    back: 'VOLVER',
+
+    customizationDescription:
+      'Elige pintura, acabado y componentes. El coche de la izquierda muestra una vista previa en tiempo real.',
+
+    customize: 'PERSONALIZAR',
+    customizeDescription: 'Pintura, acabado y componentes visuales',
+
+    primaryColor: 'COLOR PRIMARIO',
+    secondaryColor: 'COLOR SECUNDARIO',
+    finish: 'ACABADO',
+
+    apply: 'APLICAR',
+
+    original: 'ORIGINAL',
+    equipFree: 'EQUIPAR GRATIS',
+    equipped: 'EQUIPADO',
+    owned: 'COMPRADO',
+    equip: 'EQUIPAR',
+    buy: 'COMPRAR',
+
+    availableFromLevel: 'Disponible a partir del nivel %{level}.',
+
+    paintLockedTitle: 'PINTURA BLOQUEADA',
+    partLockedTitle: 'PIEZA BLOQUEADA',
+
+    insufficientSprayTitle: 'SPRAY INSUFICIENTE',
+    insufficientSprayMessage: 'Necesitas 🎨 %{price}.',
+
+    applyPaintErrorTitle: 'NO SE PUDO APLICAR',
+    applyPaintErrorMessage: 'Comprueba el vehículo e inténtalo de nuevo.',
+
+    equipErrorTitle: 'NO SE PUDO EQUIPAR',
+    equipErrorMessage: 'Inténtalo de nuevo.',
   },
 
   raceResult: {

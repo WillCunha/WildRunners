@@ -468,9 +468,9 @@ export default function CarSelectionScreen() {
                                     <View style={[styles.paintSummarySwatch, { backgroundColor: previewColorBack }]} />
                                 </View>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={styles.paintSummaryTitle}>PINTURA EQUIPADA</Text>
+                                        <Text style={styles.paintSummaryTitle}>{t('carSelection.equippedPaint')}</Text>
                                     <Text style={styles.paintSummaryText}>
-                                        {CAR_PAINT_FINISHES[previewFinishId].name} • personalize na Oficina
+                                        {CAR_PAINT_FINISHES[previewFinishId].name} • {t('carSelection.personalizePaint')}
                                     </Text>
                                 </View>
                             </View>

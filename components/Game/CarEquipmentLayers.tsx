@@ -1,13 +1,14 @@
 import type { EquippedCarEquipment } from '@/src/types/playerTypes';
 import { getEquipmentById } from '@/src/utils/carEquipments';
 import React from 'react';
-import { Image, StyleSheet, View } from 'react-native';
+import { Image, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 
 type Props = {
   carId: string;
   width: number;
   height: number;
   equipped?: EquippedCarEquipment;
+  style?: StyleProp<ViewStyle>
 };
 
 /**
@@ -27,6 +28,7 @@ export default React.memo(function CarEquipmentLayers({
   width,
   height,
   equipped,
+  style,
 }: Props) {
   if (!equipped || width <= 0 || height <= 0) return null;
 
@@ -73,7 +75,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     top: 0,
-    zIndex: 12,
+    zIndex: 1,
     overflow: 'visible',
   },
 

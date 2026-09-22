@@ -385,6 +385,7 @@ export default function OficinaScreen() {
 
     const handleApplyPaint = () => {
         const finish = CAR_PAINT_FINISHES[previewPaint.finishId];
+
         const result = applyCarPaint(
             String(carId),
             previewPaint,
@@ -393,15 +394,34 @@ export default function OficinaScreen() {
         );
 
         if (result === 'level_locked') {
-            Alert.alert('Pintura bloqueada', `Disponível a partir do nível ${finish.requiredLevel}.`);
+            Alert.alert(
+                t('workshop.paintLockedTitle'),
+                t('workshop.availableFromLevel', {
+                    level: finish.requiredLevel,
+                }),
+            );
             return;
         }
+
         if (result === 'insufficient_spray') {
-            Alert.alert('Spray insuficiente', `Você precisa de 🎨 ${finish.price}.`);
+            Alert.alert(
+                t('workshop.insufficientSprayTitle'),
+                t('workshop.insufficientSprayMessage', {
+                    price: finish.price,
+                }),
+            );
             return;
         }
-        if (result === 'invalid' || result === 'car_not_owned' || result === 'no_profile') {
-            Alert.alert('Não foi possível aplicar', 'Confira o veículo e tente novamente.');
+
+        if (
+            result === 'invalid' ||
+            result === 'car_not_owned' ||
+            result === 'no_profile'
+        ) {
+            Alert.alert(
+                t('workshop.applyPaintErrorTitle'),
+                t('workshop.applyPaintErrorMessage'),
+            );
             return;
         }
 
@@ -423,15 +443,34 @@ export default function OficinaScreen() {
             );
 
         if (result === 'level_locked') {
-            Alert.alert('Peça bloqueada', `Disponível a partir do nível ${item.requiredLevel}.`);
+            Alert.alert(
+                t('workshop.partLockedTitle'),
+                t('workshop.availableFromLevel', {
+                    level: item.requiredLevel,
+                }),
+            );
             return;
         }
+
         if (result === 'insufficient_spray') {
-            Alert.alert('Spray insuficiente', `Você precisa de 🎨 ${item.price}.`);
+            Alert.alert(
+                t('workshop.insufficientSprayTitle'),
+                t('workshop.insufficientSprayMessage', {
+                    price: item.price,
+                }),
+            );
             return;
         }
-        if (result === 'invalid' || result === 'car_not_owned' || result === 'no_profile') {
-            Alert.alert('Não foi possível equipar', 'Tente novamente.');
+
+        if (
+            result === 'invalid' ||
+            result === 'car_not_owned' ||
+            result === 'no_profile'
+        ) {
+            Alert.alert(
+                t('workshop.equipErrorTitle'),
+                t('workshop.equipErrorMessage'),
+            );
             return;
         }
 
@@ -535,7 +574,7 @@ export default function OficinaScreen() {
                                         </Text>
                                     </View>
                                     <View style={styles.vehicleBadge}>
-                                        <Text style={styles.vehicleBadgeLabel}>PINTURA</Text>
+                                        <Text style={styles.vehicleBadgeLabel}> {t('workshop.paint')}</Text>
                                         <Text style={styles.vehicleBadgeValue}>{CAR_PAINT_FINISHES[previewPaint.finishId].name.toUpperCase()}</Text>
                                     </View>
                                 </View>
@@ -602,16 +641,21 @@ export default function OficinaScreen() {
                         <View style={styles.upgradesHeader}>
                             <View>
                                 <Text style={styles.upgradesEyebrow}>
-                                    {workshopMode === 'upgrades' ? t('workshop.technicalBench') : 'ESTÚDIO VISUAL'}
+                                    {workshopMode === 'upgrades'
+                                        ? t('workshop.technicalBench')
+                                        : t('workshop.visualStudio')}
                                 </Text>
+
                                 <Text style={styles.upgradesTitle}>
-                                    {workshopMode === 'upgrades' ? t('workshop.upgrades') : 'CUSTOMIZAÇÃO'}
+                                    {workshopMode === 'upgrades'
+                                        ? t('workshop.upgrades')
+                                        : t('workshop.customization')}
                                 </Text>
                             </View>
 
                             {workshopMode === 'customization' ? (
                                 <TouchableOpacity style={styles.backModeButton} onPress={closeCustomization}>
-                                    <Text style={styles.backModeButtonText}>‹ VOLTAR</Text>
+                                    <Text style={styles.backModeButtonText}>‹ {t('workshop.back')}</Text>
                                 </TouchableOpacity>
                             ) : (
                                 <View style={styles.workshopStatusBadge}>
@@ -624,7 +668,7 @@ export default function OficinaScreen() {
                         <Text style={styles.upgradesDescription}>
                             {workshopMode === 'upgrades'
                                 ? t('workshop.upgradesDescription')
-                                : 'Escolha pintura, acabamento e componentes. O carro à esquerda mostra o preview em tempo real.'}
+                                : t('workshop.customizationDescription')}
                         </Text>
 
                         <ScrollView
@@ -677,8 +721,13 @@ export default function OficinaScreen() {
                                             <Text style={styles.upgradeIcon}>🎨</Text>
                                         </View>
                                         <View style={styles.upgradeIdentity}>
-                                            <Text style={styles.upgradeTitle}>CUSTOMIZAR</Text>
-                                            <Text style={styles.upgradeSubtitle}>Pintura, acabamento e componentes visuais</Text>
+                                            <Text style={styles.upgradeTitle}>
+                                                {t('workshop.customize')}
+                                            </Text>
+
+                                            <Text style={styles.upgradeSubtitle}>
+                                                {t('workshop.customizeDescription')}
+                                            </Text>
                                         </View>
                                         <Text style={styles.customizationArrow}>›</Text>
                                     </TouchableOpacity>
@@ -690,7 +739,7 @@ export default function OficinaScreen() {
                                             style={[styles.categoryTab, customCategory === 'paint' && styles.categoryTabSelected]}
                                             onPress={() => setCustomCategory('paint')}
                                         >
-                                            <Text style={[styles.categoryTabText, customCategory === 'paint' && styles.categoryTabTextSelected]}>PINTURA</Text>
+                                            <Text style={[styles.categoryTabText, customCategory === 'paint' && styles.categoryTabTextSelected]}>{t('workshop.paint')}</Text>
                                         </TouchableOpacity>
 
                                         {availableEquipmentCategories.map(category => (
@@ -714,14 +763,14 @@ export default function OficinaScreen() {
                                                     onPress={() => setActiveColorLayer('primary')}
                                                 >
                                                     <View style={[styles.paintSwatch, { backgroundColor: previewPaint.primaryColor }]} />
-                                                    <Text style={styles.paintLayerText}>COR PRIMÁRIA</Text>
+                                                    <Text style={styles.paintLayerText}>{t('workshop.primaryColor')}</Text>
                                                 </TouchableOpacity>
                                                 <TouchableOpacity
                                                     style={[styles.paintLayerButton, activeColorLayer === 'secondary' && styles.paintLayerButtonSelected]}
                                                     onPress={() => setActiveColorLayer('secondary')}
                                                 >
                                                     <View style={[styles.paintSwatch, { backgroundColor: previewPaint.secondaryColor }]} />
-                                                    <Text style={styles.paintLayerText}>COR SECUNDÁRIA</Text>
+                                                    <Text style={styles.paintLayerText}> {t('workshop.secondaryColor')}</Text>
                                                 </TouchableOpacity>
                                             </View>
 
@@ -734,7 +783,7 @@ export default function OficinaScreen() {
                                                 }))}
                                             />
 
-                                            <Text style={styles.customSectionTitle}>ACABAMENTO</Text>
+                                            <Text style={styles.customSectionTitle}>{t('workshop.finish')}</Text>
                                             <View style={styles.finishGrid}>
                                                 {Object.values(CAR_PAINT_FINISHES).map(finish => {
                                                     const locked = playerLevel < finish.requiredLevel;
@@ -748,7 +797,7 @@ export default function OficinaScreen() {
                                                         >
                                                             <Text style={styles.finishName}>{finish.name.toUpperCase()}</Text>
                                                             <Text style={[styles.finishMeta, locked && styles.finishMetaLocked]}>
-                                                                {locked ? `🔒 Nível ${finish.requiredLevel}` : `🎨 ${finish.price}`}
+                                                                {locked ? `🔒 ${t('workshop.level')} ${finish.requiredLevel}` : `🎨 ${finish.price}`}
                                                             </Text>
                                                         </TouchableOpacity>
                                                     );
@@ -757,7 +806,7 @@ export default function OficinaScreen() {
 
                                             <TouchableOpacity style={styles.applyCustomizationButton} onPress={handleApplyPaint}>
                                                 <Text style={styles.applyCustomizationButtonText}>
-                                                    APLICAR • 🎨 {CAR_PAINT_FINISHES[previewPaint.finishId].price}
+                                                    {t('workshop.apply')} • 🎨 {CAR_PAINT_FINISHES[previewPaint.finishId].price}
                                                 </Text>
                                             </TouchableOpacity>
                                         </View>
@@ -778,8 +827,8 @@ export default function OficinaScreen() {
 
                                                                 if (!success) {
                                                                     Alert.alert(
-                                                                        'Não foi possível equipar',
-                                                                        'Tente novamente.',
+                                                                        t('workshop.equipErrorTitle'),
+                                                                        t('workshop.equipErrorMessage'),
                                                                     );
                                                                     return;
                                                                 }
@@ -789,8 +838,13 @@ export default function OficinaScreen() {
                                                                 setSelectedEquipment(next);
                                                             }}
                                                         >
-                                                            <Text style={styles.equipmentName}>ORIGINAL</Text>
-                                                            <Text style={styles.equipmentMeta}>EQUIPAR GRÁTIS</Text>
+                                                            <Text style={styles.equipmentName}>
+                                                                {t('workshop.original')}
+                                                            </Text>
+
+                                                            <Text style={styles.equipmentMeta}>
+                                                                {t('workshop.equipFree')}
+                                                            </Text>
                                                         </TouchableOpacity>
 
                                                         {category.items.map(item => {
@@ -803,11 +857,11 @@ export default function OficinaScreen() {
                                                                         style={styles.equipmentPreviewButton}
                                                                         onPress={() => setPreviewEquipment(current => ({ ...current, [category.slot]: item.id }))}
                                                                     >
-                                                                        <Image source={item.image} resizeMode="contain" style={styles.equipmentThumb} />
+                                                                        <Image source={item.image} resizeMode="cover" style={styles.equipmentThumb} />
                                                                         <View style={{ flex: 1 }}>
                                                                             <Text style={styles.equipmentName}>{item.name.toUpperCase()}</Text>
                                                                             <Text style={styles.equipmentMeta}>
-                                                                                {locked ? `🔒 Nível ${item.requiredLevel}` : owned ? (equipped ? 'EQUIPADO' : 'COMPRADO') : `🎨 ${item.price}`}
+                                                                                {locked ? `🔒  ${t('workshop.level')}  ${item.requiredLevel}` : owned ? (equipped ? ` ${t('workshop.equipped')}` : ` ${t('workshop.purchased')}`) : `🎨 ${item.price}`}
                                                                             </Text>
                                                                         </View>
                                                                     </TouchableOpacity>
@@ -816,7 +870,7 @@ export default function OficinaScreen() {
                                                                         style={[styles.equipmentAction, (locked || equipped) && styles.equipmentActionDisabled]}
                                                                         onPress={() => handleEquipmentAction(category, item)}
                                                                     >
-                                                                        <Text style={styles.equipmentActionText}>{equipped ? 'OK' : owned ? 'EQUIPAR' : 'COMPRAR'}</Text>
+                                                                        <Text style={styles.equipmentActionText}>{equipped ? 'OK' : owned ? ` ${t('workshop.equip')}` : ` ${t('workshop.buy')}`}</Text>
                                                                     </TouchableOpacity>
                                                                 </View>
                                                             );

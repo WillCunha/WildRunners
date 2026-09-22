@@ -1,4 +1,5 @@
 import Carro from '@/components/Carro';
+import { useCarSelection } from '@/context/CarContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { useRaceResultSfx } from '@/src/audio/raceSfx';
 import { useRaceResultStore } from '@/src/store/raceResultStore';
@@ -780,6 +781,10 @@ const XpProgressPanel = ({
 export default function RaceResultScreen() {
     const { t, language, } = useLanguage();
 
+    const {
+        selectedFinishId,
+        selectedEquipment,
+    } = useCarSelection();
 
     const { playCarArrival, playRewardTick, playRewardComplete, playRareUnlock, playVictory } = useRaceResultSfx();
 
@@ -1323,6 +1328,8 @@ export default function RaceResultScreen() {
                                 carType={result.carId as keyof typeof carMaps}
                                 carColorFront={result.carVisual.colorFront}
                                 carColorBack={result.carVisual.colorBack}
+                                paintFinishId={selectedFinishId}
+                                equipment={selectedEquipment}
                                 renderWidth={330}
                             />
                         </Animated.View>

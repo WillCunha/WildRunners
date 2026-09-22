@@ -26,7 +26,7 @@ export default function TutorialRaceEntry() {
     // ainda não passou pela CarSelectionScreen nesta primeira corrida.
     setSelectedCar('buggy');
     setSelectedColorFront('#FF3B30');
-    setSelectedColorBack('#FF3B30');
+    setSelectedColorBack('#0f0f0f');
 
     const frameId = requestAnimationFrame(() => {
       router.replace({
