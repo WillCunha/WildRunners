@@ -86,7 +86,7 @@ const PLAYER_SIZE = 50;
 // nunca ficarem escondidos atrás dos controles.
 const BOTTOM_HUD_HEIGHT = 118;
 const BOTTOM_HUD_BOTTOM = 0;
-const TRACK_TO_HUD_GAP = 0;
+const TRACK_TO_HUD_GAP = 5;
 
 // ================= VELOCIDADE / PILOTAGEM =================
 // O carMaps guarda os valores que o jogador entende como km/h.
