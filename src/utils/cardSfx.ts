@@ -16,6 +16,8 @@ export type CardSfx =
   | 'tntFuse'
   | 'nitro'
   | 'slow_slow'
+  | 'magnet'
+  | 'emp_pulse'
   | 'tornado'
   | 'chainsLaunch'
   | 'chainsHit';
@@ -50,6 +52,8 @@ const DEFAULT_VOLUMES: Record<CardSfx, number> = {
 
   nitro: 0.85,
   slow_slow: 0.75,
+  emp_pulse: 0.85,
+  magnet: 0.72,
 
   tornado: 0.8,
 
@@ -89,6 +93,14 @@ export function useCardSfx() {
     require('@/assets/audio/cards/slow.mp3')
   );
 
+  const empPulsePlayer = useAudioPlayer(
+    require('@/assets/audio/cards/emp_pulse.mp3')
+  );
+
+  const magnetPlayer = useAudioPlayer(
+    require('@/assets/audio/cards/magnet.wav')
+  );
+
   const tornadoPlayer = useAudioPlayer(
     require('@/assets/audio/cards/tornado.mp3')
   );
@@ -116,6 +128,8 @@ export function useCardSfx() {
 
       nitro: nitroPlayer,
       slow_slow: slowPlayer,
+      emp_pulse: empPulsePlayer,
+      magnet: magnetPlayer,
 
       tornado: tornadoPlayer,
 
@@ -128,6 +142,8 @@ export function useCardSfx() {
     //   tntFusePlayer,
       nitroPlayer,
       slowPlayer,
+      empPulsePlayer,
+      magnetPlayer,
       tornadoPlayer,
       chainsLaunchPlayer,
     //   chainsHitPlayer,

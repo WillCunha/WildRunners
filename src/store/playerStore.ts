@@ -10,6 +10,7 @@ import {
   PlayerUnlocks,
 } from '@/src/types/playerTypes';
 
+import { MAX_DECK_SIZE, STARTER_CARD_IDS, getCardDefinition } from '@/src/utils/cardMap';
 import { getPlayerLevel } from '@/src/utils/progression';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -27,10 +28,31 @@ type RaceRewardStatus =
 
 
 
+export type CardPurchaseResult =
+  | 'purchased'
+  | 'no_profile'
+  | 'invalid_card'
+  | 'already_owned'
+  | 'level_locked'
+  | 'insufficient_chips';
+
+// Os CHIPS pertencem à carteira do perfil, sem mudar os tipos de peças/
+// upgrades já utilizados no restante do jogo. A próxima revisão de playerTypes
+// pode incorporar `chips: number` diretamente em PlayerParts.
+type PlayerProfileWithChips = PlayerProfile & {
+  parts: PlayerProfile['parts'] & { chips: number };
+};
+
+const STARTER_CHIPS = 100;
+const normalizeChips = (value: unknown, fallback = 0): number =>
+  typeof value === 'number' && Number.isFinite(value)
+    ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.floor(value)))
+    : fallback;
+
 type UnlockCategory = keyof PlayerUnlocks;
 
 type PlayerState = {
-  profile: PlayerProfile | null;
+  profile: PlayerProfileWithChips | null;
 
   /**
    * Controle LOCAL para impedir que a mesma corrida
@@ -39,6 +61,14 @@ type PlayerState = {
    * Futuramente isso será responsabilidade do servidor.
    */
   processedRaceIds: string[];
+
+  // Inventário de cartas: profile.unlocks.cards. Este campo guarda só os IDs equipados.
+  equippedDeck: string[];
+
+  unlockCard: (cardId: string) => boolean;
+  purchaseCard: (cardId: string) => CardPurchaseResult;
+  addChips: (amount: number) => void;
+  setEquippedDeck: (cardIds: string[]) => boolean;
 
   resetProfile: () => void;
 
@@ -142,9 +172,29 @@ const createBaseGarageCar = (): CarUpgrades => ({
 
 const createBaseUnlocks = (): PlayerUnlocks => ({
   maps: [],
-  cards: [],
+  cards: [...STARTER_CARD_IDS],
   achievements: [],
 });
+
+/** Consolida cartas iniciais e desbloqueios legados, sem duplicar IDs. */
+const normalizeOwnedCards = (value: unknown): string[] => {
+  const saved = Array.isArray(value) ? value : [];
+  return [...new Set([
+    ...STARTER_CARD_IDS,
+    ...saved.filter((id): id is string => typeof id === 'string' && !!getCardDefinition(id)),
+  ])];
+};
+
+/** Um deck equipado nunca pode incluir IDs inválidos ou cartas não possuídas. */
+const normalizeEquippedDeck = (value: unknown, ownedCards: readonly string[]): string[] => {
+  const proposed = Array.isArray(value) ? value : [];
+  const unique = [...new Set(proposed)];
+  if (
+    unique.length !== MAX_DECK_SIZE ||
+    unique.some(id => typeof id !== 'string' || !ownedCards.includes(id) || !getCardDefinition(id))
+  ) return [...STARTER_CARD_IDS];
+  return unique;
+};
 
 const sanitizeReward = (value: number) =>
   Math.max(0, Math.floor(value));
@@ -193,6 +243,7 @@ export const usePlayerStore = create<PlayerState>()(
       profile: null,
 
       processedRaceIds: [],
+      equippedDeck: [],
 
       createProfile: (username, email) => {
         const now = Date.now();
@@ -216,6 +267,7 @@ export const usePlayerStore = create<PlayerState>()(
               motor: 100,
               spray: 100,
               engrenagem: 100,
+              chips: STARTER_CHIPS,
             },
 
             garage: {
@@ -230,6 +282,7 @@ export const usePlayerStore = create<PlayerState>()(
           },
 
           processedRaceIds: [],
+          equippedDeck: [...STARTER_CARD_IDS],
         });
       },
 
@@ -262,6 +315,7 @@ export const usePlayerStore = create<PlayerState>()(
               motor: 100,
               spray: 100,
               engrenagem: 100,
+              chips: STARTER_CHIPS,
             },
 
             garage: {
@@ -277,6 +331,7 @@ export const usePlayerStore = create<PlayerState>()(
           },
 
           processedRaceIds: [],
+          equippedDeck: [...STARTER_CARD_IDS],
         });
       },
 
@@ -312,6 +367,7 @@ export const usePlayerStore = create<PlayerState>()(
               ...state.profile,
 
               parts: {
+                ...state.profile.parts, // preserva CHIPS nas operações legadas
                 motor: Math.max(
                   0,
                   state.profile.parts.motor +
@@ -374,6 +430,7 @@ export const usePlayerStore = create<PlayerState>()(
                 safeXp,
 
               parts: {
+                ...state.profile.parts, // preserva CHIPS nas operações legadas
                 motor:
                   state.profile.parts.motor +
                   safeMotor,
@@ -474,6 +531,7 @@ export const usePlayerStore = create<PlayerState>()(
                 safeXp,
 
               parts: {
+                ...state.profile.parts, // preserva CHIPS nas operações legadas
                 motor:
                   state.profile.parts.motor +
                   safeMotor,
@@ -501,6 +559,98 @@ export const usePlayerStore = create<PlayerState>()(
         return 'applied';
       },
 
+      // Crédito de CHIPS (ex.: recompensa de corrida, missão, evento).
+      // A fonte que concede a recompensa deve validá-la; em online, servidor.
+      addChips: amount => {
+        if (!Number.isFinite(amount)) return;
+        const credit = Math.floor(amount);
+        if (credit <= 0) return;
+        set(state => {
+          if (!state.profile) return state;
+          return {
+            profile: {
+              ...state.profile,
+              parts: {
+                ...state.profile.parts,
+                chips: Math.min(Number.MAX_SAFE_INTEGER, normalizeChips(state.profile.parts.chips) + credit),
+              },
+              updatedAt: Date.now(),
+            },
+          };
+        });
+      },
+
+      // Transação local síncrona: saldo + desbloqueio mudam no mesmo set().
+      // Não recebe preço/nível da interface: consulta valores oficiais do cardMap.
+      purchaseCard: cardId => {
+        let result: CardPurchaseResult = 'invalid_card';
+        const definition = getCardDefinition(cardId);
+        if (!definition) return result;
+
+        set(state => {
+          const profile = state.profile;
+          if (!profile) {
+            result = 'no_profile';
+            return state;
+          }
+          const owned = profile.unlocks?.cards ?? [];
+          if (owned.includes(cardId)) {
+            result = 'already_owned';
+            return state;
+          }
+          if (getPlayerLevel(profile.xp ?? 0) < definition.requiredLevel) {
+            result = 'level_locked';
+            return state;
+          }
+          const balance = normalizeChips(profile.parts?.chips);
+          if (balance < definition.purchasePrice) {
+            result = 'insufficient_chips';
+            return state;
+          }
+          result = 'purchased';
+          return {
+            profile: {
+              ...profile,
+              parts: {
+                ...profile.parts,
+                chips: balance - definition.purchasePrice,
+              },
+              unlocks: {
+                ...profile.unlocks,
+                cards: [...owned, cardId],
+              },
+              updatedAt: Date.now(),
+            },
+          };
+        });
+        return result;
+      },
+
+      unlockCard: (cardId) => {
+        if (!getCardDefinition(cardId)) return false;
+        return get().unlockItem('cards', cardId);
+      },
+
+      setEquippedDeck: (cardIds) => {
+        const profile = get().profile;
+        if (!profile || !Array.isArray(cardIds)) return false;
+        const owned = new Set(profile.unlocks?.cards ?? []);
+        if (
+          cardIds.length !== MAX_DECK_SIZE ||
+          new Set(cardIds).size !== MAX_DECK_SIZE ||
+          cardIds.some(id => typeof id !== 'string' || !getCardDefinition(id) || !owned.has(id))
+        ) return false;
+        set(state => {
+          const currentOwned = new Set(state.profile?.unlocks?.cards ?? []);
+          if (
+            !state.profile ||
+            cardIds.some(id => !currentOwned.has(id))
+          ) return state;
+          return { equippedDeck: [...cardIds] };
+        });
+        return true;
+      },
+
       unlockItem: (
         category,
         itemId,
@@ -508,6 +658,7 @@ export const usePlayerStore = create<PlayerState>()(
         const safeId = itemId.trim();
 
         if (!safeId) return false;
+        if (category === 'cards' && !getCardDefinition(safeId)) return false;
 
         const { profile } = get();
 
@@ -960,7 +1111,7 @@ export const usePlayerStore = create<PlayerState>()(
       /**
        * Começamos a versionar o save.
        */
-      version: 6,
+      version: 8,
 
       storage:
         createJSONStorage(
@@ -984,18 +1135,18 @@ export const usePlayerStore = create<PlayerState>()(
         if (!profile) {
           return {
             ...persistedState,
-
-            processedRaceIds:
-              persistedState
-                .processedRaceIds ??
-              [],
+            equippedDeck: [],
+            processedRaceIds: persistedState.processedRaceIds ?? [],
           };
         }
 
+        const ownedCards = normalizeOwnedCards(profile.unlocks?.cards);
         const now = Date.now();
 
         return {
           ...persistedState,
+
+          equippedDeck: normalizeEquippedDeck(persistedState.equippedDeck, ownedCards),
 
           profile: {
             ...profile,
@@ -1010,6 +1161,13 @@ export const usePlayerStore = create<PlayerState>()(
               Math.floor(profile.xp ?? 0),
             ),
 
+            // Perfil anterior à v8: recebe 100 CHIPS iniciais uma única vez.
+            // Saldo de engrenagens é preservado, sem conversão ou desconto.
+            parts: {
+              ...profile.parts,
+              chips: normalizeChips(profile.parts?.chips, STARTER_CHIPS),
+            },
+
             garage: Object.fromEntries(
               Object.entries(profile.garage ?? {}).map(([carId, car]) => [
                 carId,
@@ -1022,9 +1180,7 @@ export const usePlayerStore = create<PlayerState>()(
                 profile.unlocks
                   ?.maps ?? [],
 
-              cards:
-                profile.unlocks
-                  ?.cards ?? [],
+              cards: ownedCards,
 
               achievements:
                 profile.unlocks

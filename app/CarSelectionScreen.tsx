@@ -538,17 +538,22 @@ export default function CarSelectionScreen() {
                                     <View style={styles.partBadge}>
                                         <Text style={styles.partIcon}>⚙️</Text>
                                         <Text style={styles.partValue}>{profile?.parts?.engrenagem ?? 0}</Text>
-                                        <Text style={styles.partLabel}>{t('carSelection.engine')}</Text>
+                                        <Text style={styles.partLabel} numberOfLines={1}>{t('carSelection.engine')}</Text>
                                     </View>
-                                    <View style={styles.partBadge}>
-                                        <Text style={styles.partIcon}>🎨</Text>
-                                        <Text style={styles.partValue}>{profile?.parts?.spray ?? 0}</Text>
-                                        <Text style={styles.partLabel}>{t('carSelection.spray')}</Text>
+                                    <View style={[styles.partBadge, styles.chipsBadge]}>
+                                        <Text style={styles.partIcon}>🔳</Text>
+                                        <Text style={styles.partValue}>{profile?.parts?.chips ?? 0}</Text>
+                                        <Text style={styles.partLabel} numberOfLines={1}>CHIPS</Text>
                                     </View>
                                     <View style={styles.partBadge}>
                                         <Text style={styles.partIcon}>🔧</Text>
                                         <Text style={styles.partValue}>{profile?.parts?.motor ?? 0}</Text>
-                                        <Text style={styles.partLabel}>{t('carSelection.parts')}</Text>
+                                        <Text style={styles.partLabel} numberOfLines={1}>{t('carSelection.parts')}</Text>
+                                    </View>
+                                    <View style={styles.partBadge}>
+                                        <Text style={styles.partIcon}>🎨</Text>
+                                        <Text style={styles.partValue}>{profile?.parts?.spray ?? 0}</Text>
+                                        <Text style={styles.partLabel} numberOfLines={1}>{t('carSelection.spray')}</Text>
                                     </View>
                                 </View>
                             </View>
@@ -882,9 +887,11 @@ const styles = StyleSheet.create({
     statMarkerTwo: { position: 'absolute', left: '66%', top: 0, bottom: 0, width: 1, backgroundColor: 'rgba(15,15,16,0.7)' },
     partsPanel: { marginTop: 3 },
     partsTitle: { color: '#FFFFFF', fontSize: 10, fontWeight: '900', letterSpacing: 0.8, marginBottom: 6 },
-    partsRow: { flexDirection: 'row', gap: 6 },
+    // O painel ocupa só 25% da tela: duas colunas evitam badges apertados em landscape.
+    partsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
     partBadge: {
-        flex: 1,
+        flexBasis: '44%',
+        flexGrow: 1,
         minWidth: 0,
         paddingVertical: 7,
         borderRadius: 9,
@@ -893,6 +900,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#242428',
         alignItems: 'center',
     },
+    chipsBadge: { borderColor: 'rgba(181,116,255,0.40)', backgroundColor: '#2C2438' },
     partIcon: { fontSize: 12 },
     partValue: { color: '#FFFFFF', fontSize: 12, fontWeight: '900', marginTop: 1 },
     partLabel: { color: '#85858C', fontSize: 7, fontWeight: '900', marginTop: 1 },

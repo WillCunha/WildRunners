@@ -239,6 +239,8 @@ const en = {
     availableCards: 'AVAILABLE CARDS',
     availableHint: 'Tap a card to add it.',
 
+    noOwnedCards: 'You have not unlocked any cards in this category yet.',
+
     categories: {
       attack: 'ATTACK',
       defense: 'DEFENSE',
@@ -285,6 +287,7 @@ const en = {
         'Grants temporary immunity against attacks.',
       second_chance:
         'Prevents elimination and restores one life.',
+      oil_spit: 'Spill oil on the track to make rivals skid and lose speed temporarily.',
     },
   },
 

@@ -240,6 +240,8 @@ const ptBR = {
     availableCards: 'CARTAS DISPONÍVEIS',
     availableHint: 'Toque em uma carta para adicioná-la.',
 
+    noOwnedCards: 'Você ainda não desbloqueou cartas dessa categoria.',
+
     categories: {
       attack: 'ATAQUE',
       defense: 'DEFESA',
@@ -286,6 +288,8 @@ const ptBR = {
         'Concede imunidade temporária contra ataques.',
       second_chance:
         'Evita uma eliminação e devolve uma vida.',
+
+      oil_spit: 'Derrame óleo na pista para fazer adversários derraparem e perderem velocidade temporariamente.',
     },
   },
 

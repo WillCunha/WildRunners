@@ -1,11 +1,13 @@
 import WildBackButton from '@/components/ui/WildBackButton';
+import { ALL_CARDS, MAX_DECK_SIZE, getCardDefinition, type CardCategory, type CardDefinition } from '@/src/utils/cardMap';
 import { useLanguage } from '@/context/LanguageContext';
+import { getDeckStoreCopy } from '@/src/utils/deckStoreText';
+import { usePlayerStore } from '@/src/store/playerStore';
 import { router } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Image,
-  ImageSourcePropType,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -15,159 +17,33 @@ import {
   useWindowDimensions,
 } from 'react-native';
 
-type CardCategory = 'attack' | 'defense';
-
-type CardDefinition = {
-  id: string;
-  name: string;
-  cost: number;
-  color: string;
-  category: CardCategory;
-  image: ImageSourcePropType;
-};
-
-const MAX_DECK_SIZE = 4;
-
-const ALL_CARDS: CardDefinition[] = [
-  // ATAQUE
-  {
-    id: 'chains',
-    name: 'CHAINS',
-    cost: 3,
-    color: '#AF52DE',
-    category: 'attack',
-    image: require('@/assets/images/cards/chains.png'),
-  },
-  {
-    id: 'tnt',
-    name: 'TNT',
-    cost: 4,
-    color: '#FF4500',
-    category: 'attack',
-    image: require('@/assets/images/cards/tnt.png'),
-
-  },
-  {
-    id: 'swap',
-    name: 'SWAP',
-    cost: 4,
-    color: '#FF004D',
-    category: 'attack',
-    image: require('@/assets/images/cards/swap.png'),
-
-  },
-  {
-    id: 'slow_slow',
-    name: 'SLOW SLOW',
-    cost: 5,
-    color: '#FF9500',
-    category: 'attack',
-    image: require('@/assets/images/cards/slow_slow.png'),
-
-  },
-  {
-    id: 'blind',
-    name: 'BLIND',
-    cost: 5,
-    color: '#FFCC80',
-    category: 'attack',
-    image: require('@/assets/images/cards/blind.png'),
-
-  },
-  {
-    id: 'bullet',
-    name: 'BULLET',
-    cost: 3,
-    color: '#007AFF',
-    category: 'attack',
-    image: require('@/assets/images/cards/bullet.png'),
-
-  },
-  {
-    id: 'tornado',
-    name: 'TORNADO',
-    cost: 4,
-    color: '#03009e',
-    category: 'attack',
-    image: require('@/assets/images/cards/tornado.png'),
-
-  },
-  {
-    id: 'bubble_lift',
-    name: 'BUBBLE LIFT',
-    cost: 4,
-    color: '#32CD32',
-    category: 'attack',
-    image: require('@/assets/images/cards/bubble_lift.png'),
-
-  },
-
-  // DEFESA E SOBREVIVÊNCIA
-  {
-    id: 'nitro_power',
-    name: 'NITRO POWER',
-    cost: 2,
-    color: '#00FFFF',
-    category: 'defense',
-    image: require('@/assets/images/cards/nitro_power.png'),
-
-  },
-  {
-    id: 'shield',
-    name: 'SHIELD',
-    cost: 3,
-    color: '#4DA3FF',
-    category: 'defense',
-    image: require('@/assets/images/cards/shield.png'),
-
-  },
-  {
-    id: 'armor',
-    name: 'ARMOR',
-    cost: 4,
-    color: '#9AA0A6',
-    category: 'defense',
-    image: require('@/assets/images/cards/armor.png'),
-
-  },
-  {
-    id: 'quick_repair',
-    name: 'QUICK REPAIR',
-    cost: 4,
-    color: '#FFD60A',
-    category: 'defense',
-    image: require('@/assets/images/cards/repair_quick.png'),
-
-  },
-  {
-    id: 'ghost',
-    name: 'GHOST',
-    cost: 5,
-    color: '#B388FF',
-    category: 'defense',
-    image: require('@/assets/images/cards/ghost.png'),
-
-  },
-  {
-    id: 'second_chance',
-    name: 'SECOND CHANCE',
-    cost: 5,
-    color: '#FF6B9A',
-    category: 'defense',
-    image: require('@/assets/images/cards/second_chance.png'),
-  },
-];
-
-
+const EMPTY_CARD_IDS: string[] = [];
 
 export default function DeckSelection() {
   const { width, height } = useWindowDimensions();
 
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const shopText = getDeckStoreCopy(String(language));
+  const profile = usePlayerStore(state => state.profile);
+  const equippedDeck = usePlayerStore(state => state.equippedDeck);
+  const setEquippedDeck = usePlayerStore(state => state.setEquippedDeck);
+  const [hydrated, setHydrated] = useState(() => usePlayerStore.persist.hasHydrated());
+
+  useEffect(() => usePlayerStore.persist.onFinishHydration(() => setHydrated(true)), []);
+
+  const ownedCardIds = profile?.unlocks?.cards ?? EMPTY_CARD_IDS;
+  const ownedSet = useMemo(() => new Set(ownedCardIds), [ownedCardIds]);
+  const ownedCards = useMemo(() => ALL_CARDS.filter(card => ownedSet.has(card.id)), [ownedSet]);
 
   const [activeCategory, setActiveCategory] = useState<CardCategory>('attack');
   const [selectedDeck, setSelectedDeck] = useState<string[]>([]);
   const [openDescriptionId, setOpenDescriptionId] = useState<string | null>(null);
+
+  // Após o AsyncStorage hidratar, mostra o deck salvo. Nunca sobrescreve o save vazio na partida.
+  useEffect(() => {
+    if (!hydrated) return;
+    setSelectedDeck(equippedDeck.filter(id => ownedSet.has(id) && !!getCardDefinition(id)));
+  }, [hydrated, profile?.id, equippedDeck, ownedSet]);
 
   const isCompactLandscape = height < 420;
   const columns = width >= 1180 ? 4 : width >= 760 ? 3 : 2;
@@ -181,19 +57,20 @@ export default function DeckSelection() {
   );
 
   const visibleCards = useMemo(
-    () => ALL_CARDS.filter(card => card.category === activeCategory),
-    [activeCategory],
+    () => ownedCards.filter(card => card.category === activeCategory),
+    [activeCategory, ownedCards],
   );
 
   const selectedCards = useMemo(
     () =>
       selectedDeck
-        .map(cardId => ALL_CARDS.find(card => card.id === cardId))
-        .filter((card): card is CardDefinition => Boolean(card)),
-    [selectedDeck],
+        .map(cardId => getCardDefinition(cardId))
+        .filter((card): card is CardDefinition => !!card && ownedSet.has(card.id)),
+    [selectedDeck, ownedSet],
   );
 
   const toggleCard = (cardId: string) => {
+    if (!hydrated || !profile || !ownedSet.has(cardId)) return;
     setOpenDescriptionId(null);
 
     if (selectedDeck.includes(cardId)) {
@@ -215,7 +92,8 @@ export default function DeckSelection() {
   };
 
   const handleConfirm = () => {
-    if (selectedDeck.length !== MAX_DECK_SIZE) {
+    if (!hydrated || !profile) return;
+    if (!isDeckComplete) {
       Alert.alert(
         t('deckSelection.incompleteDeckTitle'),
         t('deckSelection.incompleteDeckMessage', {
@@ -225,15 +103,23 @@ export default function DeckSelection() {
       return;
     }
 
+    // Persistir apenas no confirmar; mudanças locais incompletas não alteram o deck salvo.
+    if (!setEquippedDeck(selectedDeck)) {
+      Alert.alert(t('deckSelection.incompleteDeckTitle'), t('deckSelection.incompleteDeckMessage', { count: MAX_DECK_SIZE }));
+      return;
+    }
+
     router.navigate({
       pathname: '/MapSelectionScreen',
       params: { deck: JSON.stringify(selectedDeck) },
     });
   };
 
-  const attackCount = ALL_CARDS.filter(card => card.category === 'attack').length;
-  const defenseCount = ALL_CARDS.filter(card => card.category === 'defense').length;
-  const isDeckComplete = selectedDeck.length === MAX_DECK_SIZE;
+  const attackCount = ownedCards.filter(card => card.category === 'attack').length;
+  const defenseCount = ownedCards.filter(card => card.category === 'defense').length;
+  const isDeckComplete = selectedDeck.length === MAX_DECK_SIZE &&
+    new Set(selectedDeck).size === MAX_DECK_SIZE &&
+    selectedDeck.every(id => ownedSet.has(id) && !!getCardDefinition(id));
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -249,11 +135,22 @@ export default function DeckSelection() {
             </Text>
           </View>
 
-          <View style={styles.headerCounter}>
+          <View style={styles.headerRight}>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={shopText.open}
+              activeOpacity={0.8}
+              style={styles.storeButton}
+              onPress={() => router.push('/DeckStore' as any)}
+            >
+              <Text style={styles.storeButtonText}>🛒 {shopText.open}</Text>
+            </TouchableOpacity>
+            <View style={styles.headerCounter}>
             <Text style={styles.headerCounterValue}>
               {selectedDeck.length}/{MAX_DECK_SIZE}
             </Text>
             <Text style={styles.headerCounterLabel}>{t('deckSelection.cards')}</Text>
+            </View>
           </View>
         </View>
 
@@ -315,6 +212,11 @@ export default function DeckSelection() {
                 isCompactLandscape && styles.cardsGridCompact,
               ]}
             >
+              {hydrated && profile && visibleCards.length === 0 && (
+                <Text style={styles.emptyOwnedText}>
+                  {t('deckSelection.noOwnedCards')}
+                </Text>
+              )}
               {visibleCards.map(card => {
                 const isSelected = selectedDeck.includes(card.id);
 
@@ -480,6 +382,7 @@ export default function DeckSelection() {
             <TouchableOpacity
               activeOpacity={0.85}
               onPress={handleConfirm}
+              disabled={!hydrated || !profile}
               style={[
                 styles.playButton,
                 !isDeckComplete && styles.playButtonIncomplete,
@@ -498,6 +401,10 @@ export default function DeckSelection() {
 }
 
 const styles = StyleSheet.create({
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  storeButton: { backgroundColor: '#252129', borderWidth: 1.5, borderColor: '#FFD60A', paddingHorizontal: 12, paddingVertical: 9, borderRadius: 11 },
+  storeButtonText: { fontWeight: '900', color: '#FFD60A', fontSize: 11, letterSpacing: 0.4 },
+  emptyOwnedText: { color: '#A3A3AA', fontSize: 12, padding: 16, textAlign: 'center' },
   safeArea: {
     flex: 1,
     backgroundColor: '#151518',

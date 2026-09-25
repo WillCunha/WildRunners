@@ -270,6 +270,8 @@ const es = {
     availableHint:
       'Toca una carta para añadirla.',
 
+    noOwnedCards: 'Aún no has desbloqueado cartas en esta categoría.',
+
     categories: {
       attack: 'ATAQUE',
       defense: 'DEFENSA',
@@ -341,6 +343,9 @@ const es = {
 
       second_chance:
         'Evita la eliminación y recupera una vida.',
+
+      oil_spit:
+        'Derrama aceite en la pista para hacer que los rivales derrapen y pierdan velocidad temporalmente.',
     },
   },
 
