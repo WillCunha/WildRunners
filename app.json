@@ -54,7 +54,9 @@
       "expo-font",
       "expo-asset",
       "expo-web-browser",
-      "expo-localization"
+      "expo-localization",
+      "@react-native-google-signin/google-signin",
+      "react-native-fbsdk-next"
     ],
     "experiments": {
       "typedRoutes": true,

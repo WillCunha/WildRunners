@@ -1,8 +1,9 @@
 import { useLanguage } from '@/context/LanguageContext';
+import { queueCloudProfile, trySyncPendingProfile } from '@/src/services/firebase/profileSync';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { useTutorialStore } from '@/src/store/tutorialStore';
 import { useRouter } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   Image,
   ImageBackground,
@@ -38,7 +39,8 @@ const isValidEmail = (value: string) => {
 export default function RegistrationScreen() {
   const router = useRouter();
   const { height } = useWindowDimensions();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const registeringRef = useRef(false);
 
   const createProfile = usePlayerStore(
     state => state.createProfile,
@@ -84,27 +86,42 @@ export default function RegistrationScreen() {
   const formIsValid =
     usernameIsValid && emailIsValid;
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
+    if (registeringRef.current) return;
+
     setUsernameTouched(true);
     setEmailTouched(true);
 
-    if (!formIsValid) {
-      return;
+    if (!formIsValid) return;
+
+    registeringRef.current = true;
+
+    try {
+      // Perfil local permanece sendo a fonte do jogo nesta fase.
+      createProfile(safeUsername, safeEmail);
+      resetTutorial();
+
+      // Registra a intenção localmente ANTES da tentativa de rede.
+      // O email informado NÃO é uma credencial do Firebase Auth.
+      try {
+        await queueCloudProfile(safeUsername, safeEmail, language);
+        void trySyncPendingProfile()
+          .then(uid => {
+            if (uid) console.info('[Wild Firebase] Perfil sincronizado:', uid);
+          })
+          .catch(error => {
+            console.warn('[Wild Firebase] Sincronização adiada:', error);
+          });
+      } catch (error) {
+        // Um problema na fila não pode apagar/impedir o perfil local.
+        console.warn('[Wild Firebase] Fila indisponível:', error);
+      }
+
+      // Preserva o preload e o tutorial existentes.
+      router.replace('/LoadingScreen');
+    } finally {
+      registeringRef.current = false;
     }
-
-    createProfile(
-      safeUsername,
-      safeEmail,
-    );
-
-    // Todo novo perfil começa com o onboarding pendente.
-    resetTutorial();
-
-    // Mantém o fluxo de preload centralizado.
-    // A LoadingScreen decide entre tutorial e raiz normal.
-    router.replace(
-      '/LoadingScreen',
-    );
   };
 
   return (

@@ -1,4 +1,6 @@
 import { useLanguage } from '@/context/LanguageContext';
+import { ensureSignedIn } from '@/src/services/firebase/auth';
+import { trySyncPendingProfile } from '@/src/services/firebase/profileSync';
 import { useLoadingStore } from '@/src/store/LoadingStore';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { useAssets } from 'expo-asset';
@@ -103,6 +105,16 @@ export default function StartScreen() {
     if (isLanguageLoading) return;
 
     player.pause();
+
+    // Não bloqueia a navegação se o Firebase estiver indisponível.
+    // Para jogadores antigos: cria/recupera o UID, sem migrar economia.
+    if (profile) {
+      void ensureSignedIn()
+        .then(() => trySyncPendingProfile())
+        .catch(error => {
+          console.warn('[Wild Firebase] Sincronização pendente:', error);
+        });
+    }
 
     if (!hasSelectedLanguage) {
       router.push({
