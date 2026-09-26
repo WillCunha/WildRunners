@@ -1,10 +1,13 @@
 import { useLanguage } from '@/context/LanguageContext';
 import { queueCloudProfile, trySyncPendingProfile } from '@/src/services/firebase/profileSync';
+import { connectGoogleForRegistration, GoogleRegistrationError, readPendingGoogleRegistration, type GoogleRegistrationIdentity } from '@/src/services/firebase/registrationGoogleAuth';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { useTutorialStore } from '@/src/store/tutorialStore';
 import { useRouter } from 'expo-router';
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   Image,
   ImageBackground,
   KeyboardAvoidingView,
@@ -18,6 +21,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import Svg, { Path as SvgPath } from 'react-native-svg';
 
 const ACCENT = '#61E7FF';
 
@@ -41,6 +45,9 @@ export default function RegistrationScreen() {
   const { height } = useWindowDimensions();
   const { t, language } = useLanguage();
   const registeringRef = useRef(false);
+  const googleBusyRef = useRef(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const [googleIdentity, setGoogleIdentity] = useState<GoogleRegistrationIdentity | null>(null);
 
   const createProfile = usePlayerStore(
     state => state.createProfile,
@@ -86,8 +93,58 @@ export default function RegistrationScreen() {
   const formIsValid =
     usernameIsValid && emailIsValid;
 
+  const googleCopy = language === 'en'
+    ? { button: 'Continue with Google', connected: 'Google account connected', or: 'CONFIRM YOUR DRIVER', hint: 'Pilot name suggested by Google — you can change it.', error: 'Google sign-in' }
+    : language === 'es'
+      ? { button: 'Continuar con Google', connected: 'Cuenta de Google vinculada', or: 'CONFIRMA TU PILOTO', hint: 'Nombre sugerido por Google; puedes cambiarlo.', error: 'Inicio de sesión con Google' }
+      : { button: 'Continuar com Google', connected: 'Conta Google vinculada', or: 'CONFIRME SEU PILOTO', hint: 'Nome sugerido pelo Google; você pode alterar.', error: 'Login com Google' };
+
+  useEffect(() => {
+    let mounted = true;
+    void readPendingGoogleRegistration().then(identity => {
+      if (!mounted || !identity) return;
+      setGoogleIdentity(identity);
+      setUsername(current => current.trim() ? current : identity.suggestedUsername);
+      if (identity.email) setEmail(identity.email);
+    }).catch(error => {
+      console.warn('[Wild Google] Não foi possível restaurar sugestão:', error);
+    });
+    return () => { mounted = false; };
+  }, []);
+
+  const handleGooglePress = async () => {
+    if (googleBusyRef.current || registeringRef.current) return;
+    googleBusyRef.current = true;
+    setGoogleBusy(true);
+    try {
+      // Nunca reescreve um save local que já existe.
+      if (!usePlayerStore.persist.hasHydrated()) {
+        await usePlayerStore.persist.rehydrate();
+      }
+      if (usePlayerStore.getState().profile) {
+        Alert.alert(googleCopy.error, 'Já existe um piloto neste aparelho. Vincule Google na tela de conta, sem criar outro perfil.');
+        return;
+      }
+      const identity = await connectGoogleForRegistration();
+      setGoogleIdentity(identity);
+      setUsername(identity.suggestedUsername);
+      setUsernameTouched(false);
+      if (identity.email) {
+        setEmail(identity.email);
+        setEmailTouched(false);
+      }
+    } catch (error) {
+      if (!(error instanceof GoogleRegistrationError && error.kind === 'cancelled')) {
+        Alert.alert(googleCopy.error, error instanceof Error ? error.message : 'Não foi possível conectar ao Google.');
+      }
+    } finally {
+      googleBusyRef.current = false;
+      setGoogleBusy(false);
+    }
+  };
+
   const handleRegister = async () => {
-    if (registeringRef.current) return;
+    if (registeringRef.current || googleBusyRef.current) return;
 
     setUsernameTouched(true);
     setEmailTouched(true);
@@ -97,12 +154,20 @@ export default function RegistrationScreen() {
     registeringRef.current = true;
 
     try {
+      if (!usePlayerStore.persist.hasHydrated()) {
+        await usePlayerStore.persist.rehydrate();
+      }
+      if (usePlayerStore.getState().profile) {
+        Alert.alert('Wild Runners', 'Já existe um piloto salvo neste aparelho. O cadastro não vai substituí-lo.');
+        return;
+      }
       // Perfil local permanece sendo a fonte do jogo nesta fase.
       createProfile(safeUsername, safeEmail);
       resetTutorial();
 
       // Registra a intenção localmente ANTES da tentativa de rede.
-      // O email informado NÃO é uma credencial do Firebase Auth.
+      // Quando Google está conectado, o email vem da identidade vinculada;
+      // no cadastro manual, o email continua autodeclarado.
       try {
         await queueCloudProfile(safeUsername, safeEmail, language);
         void trySyncPendingProfile()
@@ -230,6 +295,40 @@ export default function RegistrationScreen() {
 
               <View style={styles.divider} />
 
+              <View style={styles.googleSection}>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel={googleCopy.button}
+                  activeOpacity={0.85}
+                  disabled={googleBusy || Boolean(googleIdentity)}
+                  onPress={handleGooglePress}
+                  style={[styles.googleButton, (googleBusy || Boolean(googleIdentity)) && styles.googleButtonDisabled]}
+                >
+                  {googleBusy ? (
+                    <ActivityIndicator color="#4285F4" />
+                  ) : (
+                    <Svg width={20} height={20} viewBox="0 0 48 48" accessibilityLabel="Google">
+                      <SvgPath fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+                      <SvgPath fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.25 5.48-4.76 7.18l7.73 6C44.42 38.03 46.98 31.88 46.98 24.55z" />
+                      <SvgPath fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24s.92 7.54 2.56 10.78l7.97-6.19z" />
+                      <SvgPath fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.91-5.8l-7.73-6c-2.15 1.45-4.92 2.3-8.18 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+                    </Svg>
+                  )}
+                  <Text style={styles.googleButtonText}>
+                    {googleIdentity ? googleCopy.connected : googleCopy.button}
+                  </Text>
+                  {googleIdentity ? <Text style={styles.googleCheck}>✓</Text> : null}
+                </TouchableOpacity>
+                {googleIdentity ? (
+                  <Text style={styles.googleHint}>{googleCopy.hint}</Text>
+                ) : null}
+                <View style={styles.googleDivider}>
+                  <View style={styles.googleLine} />
+                  <Text style={styles.googleOr}>{googleIdentity ? googleCopy.or : (language === 'en' ? 'OR CREATE YOUR DRIVER' : language === 'es' ? 'O CREA TU PILOTO' : 'OU CRIE SEU PILOTO')}</Text>
+                  <View style={styles.googleLine} />
+                </View>
+              </View>
+
               <View style={styles.fieldBlock}>
                 <View style={styles.fieldHeader}>
                   <Text style={styles.fieldLabel}>
@@ -329,6 +428,7 @@ export default function RegistrationScreen() {
 
                   <TextInput
                     value={email}
+                    editable={!googleBusy && !(googleIdentity && Boolean(googleIdentity.email))}
                     onChangeText={setEmail}
                     onFocus={() =>
                       setEmailFocused(true)
@@ -368,9 +468,10 @@ export default function RegistrationScreen() {
               <TouchableOpacity
                 activeOpacity={0.88}
                 onPress={handleRegister}
+                disabled={googleBusy}
                 style={[
                   styles.submitButton,
-                  !formIsValid &&
+                  (!formIsValid || googleBusy) &&
                     styles.submitButtonInactive,
                 ]}
               >
@@ -600,6 +701,59 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '900',
     marginTop: -1,
+  },
+
+  googleSection: {
+    marginBottom: 15,
+  },
+  googleButton: {
+    minHeight: 50,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#DADCE0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingHorizontal: 12,
+  },
+  googleButtonDisabled: {
+    opacity: 0.85,
+  },
+  googleButtonText: {
+    color: '#202124',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  googleCheck: {
+    color: '#188038',
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  googleHint: {
+    color: '#AAD4B5',
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 7,
+    textAlign: 'center',
+  },
+  googleDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    marginTop: 14,
+  },
+  googleLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+  },
+  googleOr: {
+    color: 'rgba(255,255,255,0.48)',
+    fontWeight: '800',
+    fontSize: 8,
+    letterSpacing: 1.1,
   },
 
   divider: {

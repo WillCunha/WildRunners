@@ -260,11 +260,13 @@ export default function CarSelectionScreen() {
         router.push('/CarStore' as any);
     };
 
-    const resetProfile =
-        usePlayerStore(
-            state =>
-                state.resetProfile,
-        );
+    const resetProfile = () => {
+        router.push('/AccountScreen' as any);
+    }
+    // usePlayerStore(
+    //     state =>
+    //         state.resetProfile,
+    // );
 
     const handleOpenOficina = () => {
         if (previewCar) {
@@ -468,7 +470,7 @@ export default function CarSelectionScreen() {
                                     <View style={[styles.paintSummarySwatch, { backgroundColor: previewColorBack }]} />
                                 </View>
                                 <View style={{ flex: 1 }}>
-                                        <Text style={styles.paintSummaryTitle}>{t('carSelection.equippedPaint')}</Text>
+                                    <Text style={styles.paintSummaryTitle}>{t('carSelection.equippedPaint')}</Text>
                                     <Text style={styles.paintSummaryText}>
                                         {CAR_PAINT_FINISHES[previewFinishId].name} • {t('carSelection.personalizePaint')}
                                     </Text>
@@ -560,13 +562,13 @@ export default function CarSelectionScreen() {
                         </ScrollView>
 
                         <View style={styles.actionsRow}>
-                            {/* <TouchableOpacity
+                            <TouchableOpacity
                                 activeOpacity={0.84}
                                 onPress={resetProfile}
                                 style={styles.secondaryButton}
                             >
-                                <Text style={styles.secondaryButtonText}>RESET</Text>
-                            </TouchableOpacity> */}
+                                <Text style={styles.secondaryButtonText}>ACCOUNT</Text>
+                            </TouchableOpacity>
 
                             <TouchableOpacity
                                 activeOpacity={0.84}

@@ -13,6 +13,7 @@
     },
     "android": {
       "package": "com.wfsoft.wildrunners",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/icon512px.png",
@@ -55,8 +56,7 @@
       "expo-asset",
       "expo-web-browser",
       "expo-localization",
-      "@react-native-google-signin/google-signin",
-      "react-native-fbsdk-next"
+      "@react-native-google-signin/google-signin"
     ],
     "experiments": {
       "typedRoutes": true,
