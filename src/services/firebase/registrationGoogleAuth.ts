@@ -1,8 +1,3 @@
-/**
- * Google no PRIMEIRO CADASTRO do Wild.
- * Não é o fluxo de recuperação de saves em outro aparelho.
- * Vincula o provedor ao UID já existente e não toca no playerStore.
- */
 import {
   GoogleAuthProvider,
   linkWithCredential,
@@ -33,7 +28,6 @@ export class GoogleRegistrationError extends Error {
 
 const validUsername = (value: string) => /^[A-Za-zÀ-ÖØ-öø-ÿ0-9_-]{3,12}$/.test(value);
 
-/** Sugere o primeiro nome; nunca define o nick sem aprovação do jogador. */
 export function suggestPilotName(displayName: string | null, email: string | null): string {
   const first = (displayName ?? '').trim().split(/\s+/)[0] ?? '';
   const fromEmail = (email ?? '').split('@')[0] ?? '';
@@ -88,11 +82,6 @@ function readableError(error: unknown): GoogleRegistrationError {
 
 let inFlight: Promise<GoogleRegistrationIdentity> | null = null;
 
-/**
- * Exige que o UID atual ainda não tenha um perfil Firestore.
- * Um UID com perfil remoto pertence ao fluxo de conta existente, não cadastro novo.
- * A leitura remota exige internet antes de vincular.
- */
 export function connectGoogleForRegistration(): Promise<GoogleRegistrationIdentity> {
   if (inFlight) return inFlight;
   inFlight = (async () => {

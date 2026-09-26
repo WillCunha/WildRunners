@@ -1,8 +1,3 @@
-/**
- * Native-only Google Sign-In is loaded on demand. Importing routes in Expo Go
- * must not load RNGoogleSignin before the native binary is available.
- * This does NOT enable Google login in Expo Go; an EAS native rebuild is needed.
- */
 type GoogleModule = typeof import('@react-native-google-signin/google-signin');
 
 let moduleCache: GoogleModule | null = null;

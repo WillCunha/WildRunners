@@ -7,20 +7,12 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:576818209504:android:dd48e9526470bf8cd6e685",
+        "mobilesdk_app_id": "1:576818209504:android:b6b459ff8a8c0978d6e685",
         "android_client_info": {
-          "package_name": "com.wfsoft.com"
+          "package_name": "com.wfsoft.wildrunners"
         }
       },
       "oauth_client": [
-        {
-          "client_id": "576818209504-34l2jgdfqi0df2cbh4letr1fvesd721q.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.wfsoft.com",
-            "certificate_hash": "cd11853dae6848414f2554276494cdb479a822e8"
-          }
-        },
         {
           "client_id": "576818209504-b2oham9i0u8q3h1abfu1nlgldjplqc55.apps.googleusercontent.com",
           "client_type": 3
