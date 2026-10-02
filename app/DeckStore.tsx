@@ -1,6 +1,7 @@
 import WildBackButton from '@/components/ui/WildBackButton';
 import { useLanguage } from '@/context/LanguageContext';
 import { usePlayerStore, type CardPurchaseResult } from '@/src/store/playerStore';
+import { saveCurrentPlayerCloudSnapshot } from '@/src/services/firebase/playerCloud';
 import { ALL_CARDS, getCardDefinition, type CardDefinition } from '@/src/utils/cardMap';
 import { getDeckStoreCopy } from '@/src/utils/deckStoreText';
 import { getPlayerLevel } from '@/src/utils/progression';
@@ -68,18 +69,31 @@ export default function DeckStore() {
       {
         text: copy.confirm,
         onPress: () => {
-          // O store revalida saldo, posse e nível: o estado pode ter mudado
-          // enquanto o modal de confirmação estava aberto.
-          const result: CardPurchaseResult = purchaseCard(cardId);
-          if (result === 'purchased') {
-            Alert.alert(copy.successTitle, copy.success(cardName));
-            return;
-          }
-          const message = result === 'already_owned' ? copy.already
-            : result === 'level_locked' ? copy.locked
-            : result === 'insufficient_chips' ? copy.insufficient
-            : result === 'no_profile' ? copy.noProfile : copy.failed;
-          Alert.alert(copy.title, message);
+          void (async () => {
+            // O store revalida saldo, posse e nível: o estado pode ter mudado
+            // enquanto o modal de confirmação estava aberto.
+            const result: CardPurchaseResult = purchaseCard(cardId);
+
+            if (result === 'purchased') {
+              try {
+                await saveCurrentPlayerCloudSnapshot();
+                Alert.alert(copy.successTitle, copy.success(cardName));
+              } catch (error) {
+                console.warn('[WILD FIREBASE] Card purchase sync failed:', error);
+                Alert.alert(
+                  'WILD NETWORK',
+                  'A carta foi comprada neste dispositivo, mas a compra ainda não foi confirmada no servidor. Tente novamente com uma conexão estável.',
+                );
+              }
+              return;
+            }
+
+            const message = result === 'already_owned' ? copy.already
+              : result === 'level_locked' ? copy.locked
+              : result === 'insufficient_chips' ? copy.insufficient
+              : result === 'no_profile' ? copy.noProfile : copy.failed;
+            Alert.alert(copy.title, message);
+          })();
         },
       },
     ]);

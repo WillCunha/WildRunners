@@ -3,6 +3,7 @@ import { ALL_CARDS, MAX_DECK_SIZE, getCardDefinition, type CardCategory, type Ca
 import { useLanguage } from '@/context/LanguageContext';
 import { getDeckStoreCopy } from '@/src/utils/deckStoreText';
 import { usePlayerStore } from '@/src/store/playerStore';
+import { saveCurrentPlayerCloudSnapshot } from '@/src/services/firebase/playerCloud';
 import { router } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -91,7 +92,7 @@ export default function DeckSelection() {
     setSelectedDeck(current => [...current, cardId]);
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!hydrated || !profile) return;
     if (!isDeckComplete) {
       Alert.alert(
@@ -106,6 +107,17 @@ export default function DeckSelection() {
     // Persistir apenas no confirmar; mudanças locais incompletas não alteram o deck salvo.
     if (!setEquippedDeck(selectedDeck)) {
       Alert.alert(t('deckSelection.incompleteDeckTitle'), t('deckSelection.incompleteDeckMessage', { count: MAX_DECK_SIZE }));
+      return;
+    }
+
+    try {
+      await saveCurrentPlayerCloudSnapshot();
+    } catch (error) {
+      console.warn('[WILD FIREBASE] Deck sync failed:', error);
+      Alert.alert(
+        'WILD NETWORK',
+        'O deck foi salvo neste dispositivo, mas ainda não foi confirmado no servidor. Tente novamente antes de iniciar a corrida.',
+      );
       return;
     }
 

@@ -39,8 +39,16 @@ export type CardPurchaseResult =
 // Os CHIPS pertencem à carteira do perfil, sem mudar os tipos de peças/
 // upgrades já utilizados no restante do jogo. A próxima revisão de playerTypes
 // pode incorporar `chips: number` diretamente em PlayerParts.
-type PlayerProfileWithChips = PlayerProfile & {
+export type PlayerProfileWithChips = PlayerProfile & {
   parts: PlayerProfile['parts'] & { chips: number };
+};
+
+
+
+export type PlayerSaveSnapshot = {
+  profile: PlayerProfileWithChips;
+  processedRaceIds: string[];
+  equippedDeck: string[];
 };
 
 const STARTER_CHIPS = 100;
@@ -237,6 +245,104 @@ const normalizeCustomization = (car: any): CarUpgrades => ({
   },
 });
 
+
+
+const normalizeNonNegativeInt = (value: unknown, fallback = 0) =>
+  typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.floor(value))
+    : fallback;
+
+const nextProfileUpdatedAt = (value: unknown) =>
+  Math.max(Date.now(), normalizeNonNegativeInt(value) + 1);
+
+export const createInitialPlayerSnapshot = (
+  username: string,
+  email: string,
+  playerId = Math.random().toString(36).substring(2, 15),
+): PlayerSaveSnapshot => {
+  const now = Date.now();
+  const safeUsername = username.trim();
+  const safeEmail = email.trim().toLowerCase();
+
+  return {
+    profile: {
+      id: playerId,
+      username: safeUsername,
+      email: safeEmail,
+      trophies: 0,
+      xp: 0,
+      parts: {
+        motor: 100,
+        spray: 100,
+        engrenagem: 100,
+        chips: STARTER_CHIPS,
+      },
+      garage: {
+        buggy: createBaseGarageCar(),
+      },
+      unlocks: createBaseUnlocks(),
+      createdAt: now,
+      updatedAt: now,
+    },
+    processedRaceIds: [],
+    equippedDeck: [...STARTER_CARD_IDS],
+  };
+};
+
+export const normalizePlayerSaveSnapshot = (value: unknown): PlayerSaveSnapshot | null => {
+  if (!value || typeof value !== 'object') return null;
+
+  const raw = value as any;
+  const profile = raw.profile;
+  if (!profile || typeof profile !== 'object') return null;
+  if (typeof profile.id !== 'string' || !profile.id.trim()) return null;
+  if (typeof profile.username !== 'string' || !profile.username.trim()) return null;
+
+  const ownedCards = normalizeOwnedCards(profile.unlocks?.cards);
+  const garageEntries = Object.entries(profile.garage ?? {}).map(([carId, car]) => [
+    carId,
+    normalizeCustomization(car),
+  ]);
+
+  const garage = garageEntries.length > 0
+    ? Object.fromEntries(garageEntries)
+    : { buggy: createBaseGarageCar() };
+
+  const normalized: PlayerSaveSnapshot = {
+    profile: {
+      ...profile,
+      id: profile.id.trim(),
+      username: profile.username.trim(),
+      email: typeof profile.email === 'string' ? profile.email.trim().toLowerCase() : '',
+      trophies: normalizeNonNegativeInt(profile.trophies),
+      xp: normalizeNonNegativeInt(profile.xp),
+      parts: {
+        motor: normalizeNonNegativeInt(profile.parts?.motor),
+        spray: normalizeNonNegativeInt(profile.parts?.spray),
+        engrenagem: normalizeNonNegativeInt(profile.parts?.engrenagem),
+        chips: normalizeChips(profile.parts?.chips, STARTER_CHIPS),
+      },
+      garage,
+      unlocks: {
+        maps: Array.isArray(profile.unlocks?.maps) ? profile.unlocks.maps : [],
+        cards: ownedCards,
+        achievements: Array.isArray(profile.unlocks?.achievements)
+          ? profile.unlocks.achievements
+          : [],
+      },
+      createdAt: normalizeNonNegativeInt(profile.createdAt, Date.now()),
+      updatedAt: normalizeNonNegativeInt(profile.updatedAt, Date.now()),
+    },
+    equippedDeck: normalizeEquippedDeck(raw.equippedDeck, ownedCards),
+    processedRaceIds: Array.isArray(raw.processedRaceIds)
+      ? raw.processedRaceIds.filter((id: unknown): id is string => typeof id === 'string' && !!id.trim()).slice(-500)
+      : [],
+  };
+
+  return normalized;
+};
+
+
 export const usePlayerStore = create<PlayerState>()(
   persist(
     (set, get) => ({
@@ -246,44 +352,7 @@ export const usePlayerStore = create<PlayerState>()(
       equippedDeck: [],
 
       createProfile: (username, email) => {
-        const now = Date.now();
-
-        const safeUsername = username.trim();
-        const safeEmail = email.trim().toLowerCase();
-
-        set({
-          profile: {
-            id: Math.random()
-              .toString(36)
-              .substring(2, 15),
-
-            username: safeUsername,
-            email: safeEmail,
-
-            trophies: 0,
-            xp: 0,
-
-            parts: {
-              motor: 100,
-              spray: 100,
-              engrenagem: 100,
-              chips: STARTER_CHIPS,
-            },
-
-            garage: {
-              // Continua sendo o veículo inicial.
-              buggy: createBaseGarageCar(),
-            },
-
-            unlocks: createBaseUnlocks(),
-
-            createdAt: now,
-            updatedAt: now,
-          },
-
-          processedRaceIds: [],
-          equippedDeck: [...STARTER_CARD_IDS],
-        });
+        set(createInitialPlayerSnapshot(username, email));
       },
 
       resetProfile: () => {
@@ -619,7 +688,7 @@ export const usePlayerStore = create<PlayerState>()(
                 ...profile.unlocks,
                 cards: [...owned, cardId],
               },
-              updatedAt: Date.now(),
+              updatedAt: nextProfileUpdatedAt(profile.updatedAt),
             },
           };
         });
@@ -646,7 +715,13 @@ export const usePlayerStore = create<PlayerState>()(
             !state.profile ||
             cardIds.some(id => !currentOwned.has(id))
           ) return state;
-          return { equippedDeck: [...cardIds] };
+          return {
+            equippedDeck: [...cardIds],
+            profile: {
+              ...state.profile,
+              updatedAt: nextProfileUpdatedAt(state.profile.updatedAt),
+            },
+          };
         });
         return true;
       },
@@ -862,7 +937,7 @@ export const usePlayerStore = create<PlayerState>()(
                   },
                 },
               },
-              updatedAt: Date.now(),
+              updatedAt: nextProfileUpdatedAt(state.profile.updatedAt),
             },
           };
         });
@@ -914,7 +989,7 @@ export const usePlayerStore = create<PlayerState>()(
                   },
                 },
               },
-              updatedAt: Date.now(),
+              updatedAt: nextProfileUpdatedAt(state.profile.updatedAt),
             },
           };
         });
@@ -951,7 +1026,7 @@ export const usePlayerStore = create<PlayerState>()(
                   },
                 },
               },
-              updatedAt: Date.now(),
+              updatedAt: nextProfileUpdatedAt(state.profile.updatedAt),
             },
           };
         });
@@ -1095,7 +1170,7 @@ export const usePlayerStore = create<PlayerState>()(
                   updatedCar,
               },
 
-              updatedAt: Date.now(),
+              updatedAt: nextProfileUpdatedAt(state.profile.updatedAt),
             },
           };
         });
@@ -1206,3 +1281,17 @@ export const usePlayerStore = create<PlayerState>()(
     },
   ),
 );
+
+/** Installs a validated cloud snapshot into the same Zustand state used by the game. */
+export const installPlayerSnapshot = (value: unknown): boolean => {
+  const normalized = normalizePlayerSaveSnapshot(value);
+  if (!normalized) return false;
+
+  usePlayerStore.setState({
+    profile: normalized.profile,
+    processedRaceIds: [...normalized.processedRaceIds],
+    equippedDeck: [...normalized.equippedDeck],
+  });
+
+  return true;
+};

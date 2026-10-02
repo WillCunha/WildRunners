@@ -5,6 +5,7 @@ import WildBackButton from '@/components/ui/WildBackButton';
 import { useCarSelection } from '@/context/CarContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { usePlayerStore } from '@/src/store/playerStore';
+import { saveCurrentPlayerCloudSnapshot } from '@/src/services/firebase/playerCloud';
 import type { EquippedCarEquipment, PaintFinishId } from '@/src/types/playerTypes';
 import { getAvailableEquipmentCategories, type EquipmentCategory } from '@/src/utils/carEquipments';
 import { carMaps } from '@/src/utils/carMaps';
@@ -189,6 +190,20 @@ export default function OficinaScreen() {
     const [previewEquipment, setPreviewEquipment] = React.useState<EquippedCarEquipment>(savedEquipment);
     const upgradesScrollRef = React.useRef<ScrollView>(null);
 
+    const syncCloudAfterLocalChange = React.useCallback(async () => {
+        try {
+            await saveCurrentPlayerCloudSnapshot();
+            return true;
+        } catch (error) {
+            console.warn('[WILD FIREBASE] Workshop sync failed:', error);
+            Alert.alert(
+                'WILD NETWORK',
+                'A alteração foi salva neste dispositivo, mas ainda não foi confirmada no servidor. Tente novamente com uma conexão estável.',
+            );
+            return false;
+        }
+    }, []);
+
     React.useEffect(() => {
         setPreviewPaint(savedPaint);
         setPreviewEquipment(savedEquipment);
@@ -276,7 +291,7 @@ export default function OficinaScreen() {
         const canAfford = balance >= upgradeCost;
         const progress = calculateProgress(currentLevel);
 
-        const handleUpgrade = () => {
+        const handleUpgrade = async () => {
             if (isMaxed) {
                 return;
             }
@@ -296,7 +311,10 @@ export default function OficinaScreen() {
                         resource: getResourceName(partCategory),
                     }),
                 );
+                return;
             }
+
+            await syncCloudAfterLocalChange();
         };
 
         return (
@@ -383,7 +401,7 @@ export default function OficinaScreen() {
         );
     };
 
-    const handleApplyPaint = () => {
+    const handleApplyPaint = async () => {
         const finish = CAR_PAINT_FINISHES[previewPaint.finishId];
 
         const result = applyCarPaint(
@@ -428,9 +446,10 @@ export default function OficinaScreen() {
         setSelectedColorFront(previewPaint.primaryColor);
         setSelectedColorBack(previewPaint.secondaryColor);
         setSelectedFinishId(previewPaint.finishId);
+        await syncCloudAfterLocalChange();
     };
 
-    const handleEquipmentAction = (category: ReturnType<typeof getAvailableEquipmentCategories>[number], item: any) => {
+    const handleEquipmentAction = async (category: ReturnType<typeof getAvailableEquipmentCategories>[number], item: any) => {
         const owned = ownedCar.customization?.ownedEquipment?.includes(item.id) ?? false;
         const result = owned
             ? (setEquippedEquipment(String(carId), category.slot, item.id) ? 'equipped' : 'invalid')
@@ -477,6 +496,7 @@ export default function OficinaScreen() {
         const nextEquipment = { ...previewEquipment, [category.slot]: item.id };
         setPreviewEquipment(nextEquipment);
         setSelectedEquipment(nextEquipment);
+        await syncCloudAfterLocalChange();
     };
 
     const openCustomization = () => {
@@ -818,7 +838,7 @@ export default function OficinaScreen() {
                                                     <View key={category.key}>
                                                         <TouchableOpacity
                                                             style={styles.stockItem}
-                                                            onPress={() => {
+                                                            onPress={async () => {
                                                                 const success = setEquippedEquipment(
                                                                     String(carId),
                                                                     category.slot,
@@ -836,6 +856,7 @@ export default function OficinaScreen() {
                                                                 const next = { ...previewEquipment, [category.slot]: null };
                                                                 setPreviewEquipment(next);
                                                                 setSelectedEquipment(next);
+                                                                await syncCloudAfterLocalChange();
                                                             }}
                                                         >
                                                             <Text style={styles.equipmentName}>
