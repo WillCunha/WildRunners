@@ -3,7 +3,7 @@ import { ALL_CARDS, MAX_DECK_SIZE, getCardDefinition, type CardCategory, type Ca
 import { useLanguage } from '@/context/LanguageContext';
 import { getDeckStoreCopy } from '@/src/utils/deckStoreText';
 import { usePlayerStore } from '@/src/store/playerStore';
-import { saveCurrentPlayerCloudSnapshot } from '@/src/services/firebase/playerCloud';
+import { beginOnlinePlayerMutation, confirmOnlinePlayerMutation } from '@/src/services/sync/onlinePlayerMutation';
 import { router } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -104,19 +104,25 @@ export default function DeckSelection() {
       return;
     }
 
+    const start = await beginOnlinePlayerMutation();
+    if (!start.online) {
+      Alert.alert(
+        'WILD NETWORK',
+        'Para trocar o deck é necessário estar online. Você ainda pode correr offline com o último deck sincronizado.',
+      );
+      return;
+    }
+
     // Persistir apenas no confirmar; mudanças locais incompletas não alteram o deck salvo.
     if (!setEquippedDeck(selectedDeck)) {
       Alert.alert(t('deckSelection.incompleteDeckTitle'), t('deckSelection.incompleteDeckMessage', { count: MAX_DECK_SIZE }));
       return;
     }
 
-    try {
-      await saveCurrentPlayerCloudSnapshot();
-    } catch (error) {
-      console.warn('[WILD FIREBASE] Deck sync failed:', error);
+    if (!(await confirmOnlinePlayerMutation(start.before))) {
       Alert.alert(
         'WILD NETWORK',
-        'O deck foi salvo neste dispositivo, mas ainda não foi confirmado no servidor. Tente novamente antes de iniciar a corrida.',
+        'O deck não foi confirmado no servidor e foi restaurado para a última configuração salva.',
       );
       return;
     }

@@ -81,7 +81,7 @@ export async function currentPlayerCloudSaveExists(): Promise<boolean> {
 }
 
 
-function getCurrentLocalPlayerSnapshot(): PlayerSaveSnapshot {
+export function getCurrentLocalPlayerSnapshot(): PlayerSaveSnapshot {
   const state = usePlayerStore.getState();
   const snapshot = normalizePlayerSaveSnapshot({
     profile: state.profile,

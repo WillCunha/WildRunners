@@ -1334,7 +1334,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
         sessionPartsRef.current.engrenagem,
       ),
 
-      // Campo adicional no objeto: o serviço legado pode ignorá-lo; o crédito abaixo é explícito.
+      // CHIPs agora fazem parte da mesma claim idempotente de XP/peças/troféus.
       chips: Math.max(0, sessionPartsRef.current.chips),
 
       trophies:
@@ -1348,95 +1348,75 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
        3. REGISTRA RESULTADO
     ================================ */
 
-    const chipsBeforeCompletion = usePlayerStore.getState().profile?.parts?.chips ?? 0;
-    const completion =
-      raceRewardsService.completeRace({
-        raceId:
-          raceIdRef.current,
+    void (async () => {
+      const completion =
+        await raceRewardsService.completeRace({
+          raceId:
+            raceIdRef.current,
 
-        position:
-          playerPosition,
+          position:
+            playerPosition,
 
-        totalRacers:
-          TOTAL_RACERS,
+          totalRacers:
+            TOTAL_RACERS,
 
-        carId:
-          carKey,
+          carId:
+            carKey,
 
-        carVisual: {
-          colorFront:
-            selectedColorFront ||
-            '#cc0000',
+          carVisual: {
+            colorFront:
+              selectedColorFront ||
+              '#cc0000',
 
-          colorBack:
-            selectedColorBack ||
-            '#000000',
-        },
-
-        rewards,
-
-        performance,
-
-        unlocks: [],
-
-        finishedAt:
-          Date.now(),
-
-        isNewRecord:
-          false,
-      });
-
-    /* ================================
-       4. FALLBACK DE SEGURANÇA
-    ================================ */
-
-    if (!completion.result) {
-      console.warn(
-        '[RaceResult] Não foi possível concluir a corrida:',
-        completion.status,
-      );
-
-      router.replace(
-        '/SelectionCar' as any,
-      );
-
-      return;
-    }
-
-    // O serviço de recompensas existente aplica XP/peças/troféus uma única vez.
-    // A carteira de CHIPs é atualizada SOMENTE na primeira aplicação da corrida.
-    // Zustand persist salva essa alteração juntamente com o restante do perfil.
-    if (completion.status === 'applied' && rewards.chips > 0) {
-      usePlayerStore.setState(state => {
-        if (!state.profile) return state;
-        const currentChips = Math.max(0, Math.floor(state.profile.parts.chips ?? 0));
-        // Compatível também caso o serviço passe a creditar CHIPs futuramente.
-        const alreadyCredited = Math.max(0, currentChips - chipsBeforeCompletion);
-        const pendingChips = Math.max(0, rewards.chips - alreadyCredited);
-        if (pendingChips === 0) return state;
-        return {
-          profile: {
-            ...state.profile,
-            parts: { ...state.profile.parts, chips: currentChips + pendingChips },
-            updatedAt: Date.now(),
+            colorBack:
+              selectedColorBack ||
+              '#000000',
           },
-        };
-      });
-    }
 
-    /* ================================
-       5. FINALIZA O ONBOARDING
-    ================================ */
+          rewards,
 
-    if (isTutorial) {
-      finishTutorial();
-    }
+          performance,
 
-    /* ================================
-       6. TRANSIÇÃO VISUAL
-    ================================ */
+          unlocks: [],
 
-    setShowFinishTransition(true);
+          finishedAt:
+            Date.now(),
+
+          isNewRecord:
+            false,
+        });
+
+      /* ================================
+         4. FALLBACK DE SEGURANÇA
+      ================================ */
+
+      if (!completion.result) {
+        console.warn(
+          '[RaceResult] Não foi possível concluir a corrida:',
+          completion.status,
+        );
+
+        router.replace(
+          '/SelectionCar' as any,
+        );
+
+        return;
+      }
+
+      /* ================================
+         5. FINALIZA O ONBOARDING
+      ================================ */
+
+      if (isTutorial) {
+        finishTutorial();
+      }
+
+      /* ================================
+         6. TRANSIÇÃO VISUAL
+      ================================ */
+
+      setShowFinishTransition(true);
+    })();
 
   }, [
     gameOver,
@@ -3988,7 +3968,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
               <Text style={styles.lootValue} numberOfLines={1}>{sessionPartsHud.engrenagem}</Text>
             </View>
             <View style={[styles.lootChip, styles.lootChipsWallet]} accessibilityLabel={`Saldo de CHIPS: ${profile?.parts?.chips ?? 0}; coletados nesta corrida: ${sessionPartsHud.chips}`}>
-              <Text style={styles.lootIcon}>🔳</Text>
+              <Text style={styles.lootIcon}>🟣</Text>
               <Text style={styles.lootValue} numberOfLines={1}>{profile?.parts?.chips ?? 0}</Text>
               {sessionPartsHud.chips > 0 && <Text style={styles.lootChipsEarned}>+{sessionPartsHud.chips}</Text>}
             </View>
@@ -4514,7 +4494,7 @@ export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt']
               return '🎨';
             }
 
-            return type === 'chips' ? '🔳' : '⚙️';
+            return type === 'chips' ? '🟣' : '⚙️';
           };
 
           return (

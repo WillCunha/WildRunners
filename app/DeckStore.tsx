@@ -1,7 +1,7 @@
 import WildBackButton from '@/components/ui/WildBackButton';
 import { useLanguage } from '@/context/LanguageContext';
 import { usePlayerStore, type CardPurchaseResult } from '@/src/store/playerStore';
-import { saveCurrentPlayerCloudSnapshot } from '@/src/services/firebase/playerCloud';
+import { beginOnlinePlayerMutation, confirmOnlinePlayerMutation } from '@/src/services/sync/onlinePlayerMutation';
 import { ALL_CARDS, getCardDefinition, type CardDefinition } from '@/src/utils/cardMap';
 import { getDeckStoreCopy } from '@/src/utils/deckStoreText';
 import { getPlayerLevel } from '@/src/utils/progression';
@@ -70,19 +70,26 @@ export default function DeckStore() {
         text: copy.confirm,
         onPress: () => {
           void (async () => {
+            const start = await beginOnlinePlayerMutation();
+            if (!start.online) {
+              Alert.alert(
+                'WILD NETWORK',
+                'Compras precisam de internet. Você pode continuar correndo offline com as cartas que já possui.',
+              );
+              return;
+            }
+
             // O store revalida saldo, posse e nível: o estado pode ter mudado
             // enquanto o modal de confirmação estava aberto.
             const result: CardPurchaseResult = purchaseCard(cardId);
 
             if (result === 'purchased') {
-              try {
-                await saveCurrentPlayerCloudSnapshot();
+              if (await confirmOnlinePlayerMutation(start.before)) {
                 Alert.alert(copy.successTitle, copy.success(cardName));
-              } catch (error) {
-                console.warn('[WILD FIREBASE] Card purchase sync failed:', error);
+              } else {
                 Alert.alert(
                   'WILD NETWORK',
-                  'A carta foi comprada neste dispositivo, mas a compra ainda não foi confirmada no servidor. Tente novamente com uma conexão estável.',
+                  'A compra não foi confirmada no servidor e foi revertida neste dispositivo.',
                 );
               }
               return;

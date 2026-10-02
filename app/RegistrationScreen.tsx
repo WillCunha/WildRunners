@@ -64,7 +64,7 @@ export default function RegistrationScreen() {
   const [loginVisible, setLoginVisible] = useState(false);
   const [loginNotice, setLoginNotice] = useState<string | null>(null);
   const labels = AUTH_COPY[String(language).startsWith('en') ? 'en' : String(language).startsWith('es') ? 'es' : 'pt'];
-  
+
 
   const resetTutorial = useTutorialStore(
     state => state.resetTutorial,
@@ -153,20 +153,24 @@ export default function RegistrationScreen() {
     }
     Alert.alert(labels.resetTitle, labels.resetConfirm, [
       { text: labels.cancel, style: 'cancel' },
-      { text: labels.send, onPress: () => { void (async () => {
-        loginBusyRef.current = true;
-        setLoginBusy(true);
-        setLoginNotice(null);
-        try {
-          await requestPasswordReset(loginEmail);
-          setLoginNotice(labels.resetSent);
-        } catch (error) {
-          setLoginNotice(error instanceof Error ? error.message : String(error));
-        } finally {
-          loginBusyRef.current = false;
-          setLoginBusy(false);
+      {
+        text: labels.send, onPress: () => {
+          void (async () => {
+            loginBusyRef.current = true;
+            setLoginBusy(true);
+            setLoginNotice(null);
+            try {
+              await requestPasswordReset(loginEmail);
+              setLoginNotice(labels.resetSent);
+            } catch (error) {
+              setLoginNotice(error instanceof Error ? error.message : String(error));
+            } finally {
+              loginBusyRef.current = false;
+              setLoginBusy(false);
+            }
+          })();
         }
-      })(); } },
+      },
     ]);
   };
 
@@ -209,10 +213,10 @@ export default function RegistrationScreen() {
     if (!formIsValid) return;
     Alert.alert('NOVO PILOTO — WILD',
       'Vamos criar uma conta Firebase e um save novo para este piloto. ' +
-      'Se você já possui uma conta Wild, use ENTRAR para carregar o save existente.',[
-      {text:'CANCELAR',style:'cancel'},
-      {text:'JÁ TENHO CONTA',onPress:()=>switchMode('login')},
-      {text:'CRIAR NOVO PILOTO',onPress:()=>void createConfirmedProfile()},
+      'Se você já possui uma conta Wild, use ENTRAR para carregar o save existente.', [
+      { text: 'CANCELAR', style: 'cancel' },
+      { text: 'JÁ TENHO CONTA', onPress: () => switchMode('login') },
+      { text: 'CRIAR NOVO PILOTO', onPress: () => void createConfirmedProfile() },
     ]);
   };
 
@@ -236,14 +240,12 @@ export default function RegistrationScreen() {
               : undefined
           }
         >
-          <ScrollView
-              contentContainerStyle={[
-              styles.scrollContent,
-              isCompactLandscape && styles.scrollContentCompact,
-              isNarrow && styles.scrollContentNarrow,
+          <View
+            style={[
+              styles.pageContent,
+              isCompactLandscape && styles.pageContentCompact,
+              isNarrow && styles.pageContentNarrow,
             ]}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
           >
             <View
               style={[
@@ -272,7 +274,7 @@ export default function RegistrationScreen() {
                 style={[
                   styles.heroTitle,
                   isCompactLandscape &&
-                    styles.heroTitleCompact,
+                  styles.heroTitleCompact,
                 ]}
               >
                 {mode === 'login' ? labels.loginTitle : t('registration.heroTitle')}
@@ -290,6 +292,18 @@ export default function RegistrationScreen() {
               </View>
             </View>
 
+            <ScrollView
+              style={[
+                styles.formScroll,
+                isNarrow && styles.formScrollNarrow,
+              ]}
+              contentContainerStyle={[
+                styles.formScrollContent,
+                isCompactLandscape && styles.formScrollContentCompact,
+              ]}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
             <View
               style={[
                 styles.formPanel,
@@ -316,7 +330,7 @@ export default function RegistrationScreen() {
               </View>
 
               <View style={styles.panelHeader}>
-                <View>
+                <View style={styles.panelHeaderText}>
                   <Text style={styles.panelEyebrow}>
                     {mode === 'login' ? labels.loginEyebrow : t('registration.newDriver')}
                   </Text>
@@ -326,13 +340,21 @@ export default function RegistrationScreen() {
                   </Text>
                 </View>
 
-                <View style={styles.driverBadge}>
-                  <Text style={styles.driverBadgeTop}>
-                    WR
-                  </Text>
-                  <Text style={styles.driverBadgeBottom}>
-                    {mode === 'login' ? 'ID' : '01'}
-                  </Text>
+                <View style={styles.panelBranding}>
+                  <View style={styles.driverBadge}>
+                    <Text style={styles.driverBadgeTop}>
+                      WF
+                    </Text>
+                    <Text style={styles.driverBadgeBottom}>
+                      ID
+                    </Text>
+                  </View>
+
+                  <Image
+                    source={require('@/assets/images/logo1024v1.png')}
+                    resizeMode="contain"
+                    style={styles.wfLogo}
+                  />
                 </View>
               </View>
 
@@ -380,201 +402,202 @@ export default function RegistrationScreen() {
                   </TouchableOpacity>
                 </View>
               ) : (
-              <>
-              <View style={styles.fieldBlock}>
-                <View style={styles.fieldHeader}>
-                  <Text style={styles.fieldLabel}>
-                    {t('registration.usernameLabel')}
-                  </Text>
+                <>
+                  <View style={styles.fieldBlock}>
+                    <View style={styles.fieldHeader}>
+                      <Text style={styles.fieldLabel}>
+                        {t('registration.usernameLabel')}
+                      </Text>
 
-                  <Text style={styles.fieldCounter}>
-                    {username.length}/12
-                  </Text>
-                </View>
+                      <Text style={styles.fieldCounter}>
+                        {username.length}/12
+                      </Text>
+                    </View>
 
-                <View
-                  style={[
-                    styles.inputShell,
-                    usernameFocused &&
-                      styles.inputShellFocused,
-                    usernameTouched &&
-                      !usernameIsValid &&
-                      styles.inputShellError,
-                  ]}
-                >
-                  <Text style={styles.inputPrefix}>
-                    @
-                  </Text>
+                    <View
+                      style={[
+                        styles.inputShell,
+                        usernameFocused &&
+                        styles.inputShellFocused,
+                        usernameTouched &&
+                        !usernameIsValid &&
+                        styles.inputShellError,
+                      ]}
+                    >
+                      <Text style={styles.inputPrefix}>
+                        @
+                      </Text>
 
-                  <TextInput
-                    value={username}
-                    onChangeText={value => {
-                      setUsername(
-                        value.replace(/\s/g, ''),
-                      );
-                    }}
-                    onFocus={() =>
-                      setUsernameFocused(true)
-                    }
-                    onBlur={() => {
-                      setUsernameFocused(false);
-                      setUsernameTouched(true);
-                    }}
-                    placeholder={t('registration.usernamePlaceholder')}
-                    placeholderTextColor="rgba(255,255,255,0.28)"
-                    style={styles.input}
-                    maxLength={12}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    returnKeyType="next"
-                  />
-                </View>
+                      <TextInput
+                        value={username}
+                        onChangeText={value => {
+                          setUsername(
+                            value.replace(/\s/g, ''),
+                          );
+                        }}
+                        onFocus={() =>
+                          setUsernameFocused(true)
+                        }
+                        onBlur={() => {
+                          setUsernameFocused(false);
+                          setUsernameTouched(true);
+                        }}
+                        placeholder={t('registration.usernamePlaceholder')}
+                        placeholderTextColor="rgba(255,255,255,0.28)"
+                        style={styles.input}
+                        maxLength={12}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        returnKeyType="next"
+                      />
+                    </View>
 
-                {usernameTouched &&
-                !usernameIsValid ? (
-                  <Text style={styles.errorText}>
-                    {t('registration.usernameError')}
-                  </Text>
-                ) : (
-                  <Text style={styles.hintText}>
-                    {t('registration.usernameHint')}
-                  </Text>
-                )}
-              </View>
+                    {usernameTouched &&
+                      !usernameIsValid ? (
+                      <Text style={styles.errorText}>
+                        {t('registration.usernameError')}
+                      </Text>
+                    ) : (
+                      <Text style={styles.hintText}>
+                        {t('registration.usernameHint')}
+                      </Text>
+                    )}
+                  </View>
 
-              <View style={styles.fieldBlock}>
-                <View style={styles.fieldHeader}>
-                  <Text style={styles.fieldLabel}>
-                    {t('registration.emailLabel')}
-                  </Text>
+                  <View style={styles.fieldBlock}>
+                    <View style={styles.fieldHeader}>
+                      <Text style={styles.fieldLabel}>
+                        {t('registration.emailLabel')}
+                      </Text>
 
-                  <Text
+                      <Text
+                        style={[
+                          styles.validationState,
+                          emailTouched &&
+                            emailIsValid
+                            ? styles.validationStateOk
+                            : undefined,
+                        ]}
+                      >
+                        {emailTouched &&
+                          emailIsValid
+                          ? t('registration.validated')
+                          : t('registration.account')}
+                      </Text>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.inputShell,
+                        emailFocused &&
+                        styles.inputShellFocused,
+                        emailTouched &&
+                        !emailIsValid &&
+                        styles.inputShellError,
+                      ]}
+                    >
+                      <Text style={styles.mailIcon}>
+                        ✉
+                      </Text>
+
+                      <TextInput
+                        value={email}
+                        onChangeText={setEmail}
+                        onFocus={() =>
+                          setEmailFocused(true)
+                        }
+                        onBlur={() => {
+                          setEmailFocused(false);
+                          setEmailTouched(true);
+                        }}
+                        placeholder={t('registration.emailPlaceholder')}
+                        placeholderTextColor="rgba(255,255,255,0.28)"
+                        style={styles.input}
+                        maxLength={254}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        keyboardType="email-address"
+                        textContentType="emailAddress"
+                        autoComplete="email"
+                        returnKeyType="done"
+                        onSubmitEditing={() => { }}
+                      />
+                    </View>
+
+                    {emailTouched &&
+                      !emailIsValid ? (
+                      <Text style={styles.errorText}>
+                        {t('registration.emailError')}
+                      </Text>
+                    ) : (
+                      <Text style={styles.hintText}>
+                        {t('registration.emailHint')}
+                      </Text>
+                    )}
+                  </View>
+
+                  <View style={styles.fieldBlock}>
+                    <Text style={styles.fieldLabel}>SENHA · MÍNIMO 8 CARACTERES</Text>
+                    <TextInput value={password} onChangeText={setPassword}
+                      style={[styles.inputShell, styles.authPasswordInput]} placeholder="Crie sua senha"
+                      placeholderTextColor="rgba(255,255,255,0.35)" secureTextEntry={!passwordVisible}
+                      textContentType="newPassword" autoComplete="new-password" autoCapitalize="none"
+                      autoCorrect={false} maxLength={128} />
+                    <TouchableOpacity onPress={() => setPasswordVisible(x => !x)} accessibilityRole="button">
+                      <Text style={styles.hintText}>{passwordVisible ? 'OCULTAR SENHA' : 'MOSTRAR SENHA'}</Text>
+                    </TouchableOpacity>
+                    <TextInput value={confirmPassword} onChangeText={setConfirmPassword}
+                      style={[styles.inputShell, styles.authPasswordInput]} placeholder="Confirme a senha"
+                      placeholderTextColor="rgba(255,255,255,0.35)" secureTextEntry={!passwordVisible}
+                      textContentType="newPassword" autoComplete="new-password" autoCapitalize="none"
+                      autoCorrect={false} maxLength={128} />
+                    {confirmPassword.length > 0 && !passwordIsValid &&
+                      <Text style={styles.errorText}>Senha mínima de 8 caracteres e confirmação idêntica.</Text>}
+                    <Text style={styles.hintText}>A senha fica no Firebase Authentication; não é salva no Wild.</Text>
+                  </View>
+
+                  <TouchableOpacity
+                    activeOpacity={0.88}
+                    onPress={handleRegister}
+                    disabled={!formIsValid || registering}
                     style={[
-                      styles.validationState,
-                      emailTouched &&
-                      emailIsValid
-                        ? styles.validationStateOk
-                        : undefined,
+                      styles.submitButton,
+                      (!formIsValid || registering) &&
+                      styles.submitButtonInactive,
                     ]}
                   >
-                    {emailTouched &&
-                    emailIsValid
-                      ? t('registration.validated')
-                      : t('registration.account')}
+                    <View style={styles.submitCornerLeft} />
+                    <View style={styles.submitCornerRight} />
+
+                    <Text style={styles.submitKicker}>
+                      {t('registration.driverReady')}
+                    </Text>
+                    <Text style={styles.submitText}>
+                      {registering
+                        ? (String(language).startsWith('en') ? 'SAVING...' : String(language).startsWith('es') ? 'GUARDANDO...' : 'SALVANDO...')
+                        : t('registration.startAdventure')}
+                    </Text>
+
+                    <Text style={styles.submitArrow}>
+                      ››
+                    </Text>
+                  </TouchableOpacity>
+
+                  <Text style={{ color: '#FFD60A', fontSize: 11, lineHeight: 17, marginTop: 12, textAlign: 'center' }}>
+                    Digite uma senha nova somente para NOVO piloto. O e-mail de um save anônimo antigo não transfere aquele UID.
                   </Text>
-                </View>
-
-                <View
-                  style={[
-                    styles.inputShell,
-                    emailFocused &&
-                      styles.inputShellFocused,
-                    emailTouched &&
-                      !emailIsValid &&
-                      styles.inputShellError,
-                  ]}
-                >
-                  <Text style={styles.mailIcon}>
-                    ✉
+                  <Text style={styles.localNote}>
+                    {String(language).startsWith('en')
+                      ? 'Your profile is saved in the cloud before the race starts.'
+                      : String(language).startsWith('es')
+                        ? 'Tu perfil se guarda en la nube antes de empezar la carrera.'
+                        : 'Seu perfil é salvo na nuvem antes de iniciar a corrida.'}
                   </Text>
-
-                  <TextInput
-                    value={email}
-                    onChangeText={setEmail}
-                    onFocus={() =>
-                      setEmailFocused(true)
-                    }
-                    onBlur={() => {
-                      setEmailFocused(false);
-                      setEmailTouched(true);
-                    }}
-                    placeholder={t('registration.emailPlaceholder')}
-                    placeholderTextColor="rgba(255,255,255,0.28)"
-                    style={styles.input}
-                    maxLength={254}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    keyboardType="email-address"
-                    textContentType="emailAddress"
-                    autoComplete="email"
-                    returnKeyType="done"
-                    onSubmitEditing={() => {}}
-                  />
-                </View>
-
-                {emailTouched &&
-                !emailIsValid ? (
-                  <Text style={styles.errorText}>
-                    {t('registration.emailError')}
-                  </Text>
-                ) : (
-                  <Text style={styles.hintText}>
-                    {t('registration.emailHint')}
-                  </Text>
-                )}
-              </View>
-
-              <View style={styles.fieldBlock}>
-                <Text style={styles.fieldLabel}>SENHA · MÍNIMO 8 CARACTERES</Text>
-                <TextInput value={password} onChangeText={setPassword}
-                  style={[styles.inputShell, styles.authPasswordInput]} placeholder="Crie sua senha"
-                  placeholderTextColor="rgba(255,255,255,0.35)" secureTextEntry={!passwordVisible}
-                  textContentType="newPassword" autoComplete="new-password" autoCapitalize="none"
-                  autoCorrect={false} maxLength={128} />
-                <TouchableOpacity onPress={()=>setPasswordVisible(x=>!x)} accessibilityRole="button">
-                  <Text style={styles.hintText}>{passwordVisible ? 'OCULTAR SENHA' : 'MOSTRAR SENHA'}</Text>
-                </TouchableOpacity>
-                <TextInput value={confirmPassword} onChangeText={setConfirmPassword}
-                  style={[styles.inputShell, styles.authPasswordInput]} placeholder="Confirme a senha"
-                  placeholderTextColor="rgba(255,255,255,0.35)" secureTextEntry={!passwordVisible}
-                  textContentType="newPassword" autoComplete="new-password" autoCapitalize="none"
-                  autoCorrect={false} maxLength={128} />
-                {confirmPassword.length > 0 && !passwordIsValid &&
-                  <Text style={styles.errorText}>Senha mínima de 8 caracteres e confirmação idêntica.</Text>}
-                <Text style={styles.hintText}>A senha fica no Firebase Authentication; não é salva no Wild.</Text>
-              </View>
-
-              <TouchableOpacity
-                activeOpacity={0.88}
-                onPress={handleRegister}
-                disabled={!formIsValid || registering}
-                style={[
-                  styles.submitButton,
-                  (!formIsValid || registering) &&
-                    styles.submitButtonInactive,
-                ]}
-              >
-                <View style={styles.submitCornerLeft} />
-                <View style={styles.submitCornerRight} />
-
-                <Text style={styles.submitKicker}>
-                  {t('registration.driverReady')}
-                </Text>
-                <Text style={styles.submitText}>
-                  {registering
-                    ? (String(language).startsWith('en') ? 'SAVING...' : String(language).startsWith('es') ? 'GUARDANDO...' : 'SALVANDO...')
-                    : t('registration.startAdventure')}
-                </Text>
-
-                <Text style={styles.submitArrow}>
-                  ››
-                </Text>
-              </TouchableOpacity>
-
-              <Text style={{color:'#FFD60A',fontSize:11,lineHeight:17,marginTop:12,textAlign:'center'}}>
-                Digite uma senha nova somente para NOVO piloto. O e-mail de um save anônimo antigo não transfere aquele UID.
-              </Text>
-              <Text style={styles.localNote}>
-                {String(language).startsWith('en')
-                  ? 'Your profile is saved in the cloud before the race starts.'
-                  : String(language).startsWith('es')
-                    ? 'Tu perfil se guarda en la nube antes de empezar la carrera.'
-                    : 'Seu perfil é salvo na nuvem antes de iniciar a corrida.'}
-              </Text>
-              </>
+                </>
               )}
             </View>
-          </ScrollView>
+            </ScrollView>
+          </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </ImageBackground>
@@ -582,23 +605,24 @@ export default function RegistrationScreen() {
 }
 
 const styles = StyleSheet.create({
-  authPasswordInput: { color:'#FFFFFF', fontSize:15, paddingHorizontal:15, paddingVertical:12, marginTop:9 },
-  authInput: { width:'100%', minHeight:48 },
-  authTabs: { flexDirection:'row', padding:4, borderRadius:12, borderWidth:1, borderColor:'rgba(97,231,255,0.24)', backgroundColor:'rgba(0,0,0,0.23)', gap:4, marginBottom:20 },
-  authTab: { flex:1, alignItems:'center', justifyContent:'center', minHeight:43, paddingHorizontal:10, borderRadius:9 },
-  authTabSelected: { backgroundColor:ACCENT },
-  authTabText: { color:'rgba(255,255,255,0.66)', fontSize:12, letterSpacing:0.8, fontWeight:'900' },
-  authTabTextSelected: { color:'#07121B' },
-  loginIntro: { color:'rgba(255,255,255,0.7)',fontSize:12,lineHeight:18,marginBottom:20 },
-  loginInlineAction: { alignItems:'center',paddingVertical:8 },
-  loginLink: { color:ACCENT,fontSize:11,fontWeight:'900',letterSpacing:0.4 },
-  loginSpinner: { marginTop:12 },
-  loginNotice: { color:'#FFD60A',fontSize:12,lineHeight:18,marginVertical:10,textAlign:'center' },
-  loginSmallNote: { color:'rgba(255,255,255,0.56)',fontSize:11,lineHeight:16,textAlign:'center',marginVertical:10 },
-  scrollContentNarrow: { flexDirection:'column',paddingHorizontal:18,gap:16 },
-  heroNarrow: { flex:0,width:'100%',minWidth:0,alignItems:'center' },
-  logoNarrow: { alignSelf:'center',marginLeft:0,width:250,height:90 },
-  formPanelNarrow: { flex:0,width:'100%',minWidth:0 },
+  authPasswordInput: { color: '#FFFFFF', fontSize: 15, paddingHorizontal: 15, paddingVertical: 12, marginTop: 9 },
+  authInput: { width: '100%', minHeight: 48 },
+  authTabs: { flexDirection: 'row', padding: 4, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(97,231,255,0.24)', backgroundColor: 'rgba(0,0,0,0.23)', gap: 4, marginBottom: 20 },
+  authTab: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 43, paddingHorizontal: 10, borderRadius: 9 },
+  authTabSelected: { backgroundColor: ACCENT },
+  authTabText: { color: 'rgba(255,255,255,0.66)', fontSize: 12, letterSpacing: 0.8, fontWeight: '900' },
+  authTabTextSelected: { color: '#07121B' },
+  loginIntro: { color: 'rgba(255,255,255,0.7)', fontSize: 12, lineHeight: 18, marginBottom: 20 },
+  loginInlineAction: { alignItems: 'center', paddingVertical: 8 },
+  loginLink: { color: ACCENT, fontSize: 11, fontWeight: '900', letterSpacing: 0.4 },
+  loginSpinner: { marginTop: 12 },
+  loginNotice: { color: '#FFD60A', fontSize: 12, lineHeight: 18, marginVertical: 10, textAlign: 'center' },
+  loginSmallNote: { color: 'rgba(255,255,255,0.56)', fontSize: 11, lineHeight: 16, textAlign: 'center', marginVertical: 10 },
+  pageContentNarrow: { flexDirection: 'column', paddingHorizontal: 18, gap: 16 },
+  heroNarrow: { flex: 0, width: '100%', minWidth: 0, alignItems: 'center' },
+  logoNarrow: { alignSelf: 'center', marginLeft: 0, width: 250, height: 90 },
+  formScrollNarrow: { width: '100%', minWidth: 0, maxWidth: undefined },
+  formPanelNarrow: { width: '100%', minWidth: 0, maxWidth: undefined },
   background: {
     flex: 1,
   },
@@ -626,8 +650,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  scrollContent: {
-    flexGrow: 1,
+  pageContent: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -636,14 +660,30 @@ const styles = StyleSheet.create({
     gap: 38,
   },
 
-  scrollContentCompact: {
+  pageContentCompact: {
     paddingHorizontal: 26,
     paddingVertical: 14,
     gap: 24,
   },
 
+  formScroll: {
+    flex: 1,
+    maxWidth: 510,
+    minWidth: 350,
+  },
+
+  formScrollContent: {
+    flexGrow: 1,
+    paddingBottom: 24,
+  },
+
+  formScrollContentCompact: {
+    paddingBottom: 14,
+  },
+
   hero: {
-    flex: 0.9,
+    flex: 0,
+    width: '42%',
     maxWidth: 460,
     minWidth: 280,
     alignItems: 'flex-start',
@@ -723,7 +763,8 @@ const styles = StyleSheet.create({
   },
 
   formPanel: {
-    flex: 1,
+    width: '100%',
+    flex: 0,
     maxWidth: 510,
     minWidth: 350,
     paddingHorizontal: 24,
@@ -757,6 +798,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 14,
+  },
+
+  panelHeaderText: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  panelBranding: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexShrink: 0,
+    gap: 10,
   },
 
   panelEyebrow: {
@@ -966,4 +1021,5 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 10,
   },
+  wfLogo: { width: 58, height: 58, flexShrink: 0, opacity: 1 },
 });

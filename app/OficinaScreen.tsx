@@ -5,7 +5,7 @@ import WildBackButton from '@/components/ui/WildBackButton';
 import { useCarSelection } from '@/context/CarContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { usePlayerStore } from '@/src/store/playerStore';
-import { saveCurrentPlayerCloudSnapshot } from '@/src/services/firebase/playerCloud';
+import { beginOnlinePlayerMutation, confirmOnlinePlayerMutation } from '@/src/services/sync/onlinePlayerMutation';
 import type { EquippedCarEquipment, PaintFinishId } from '@/src/types/playerTypes';
 import { getAvailableEquipmentCategories, type EquipmentCategory } from '@/src/utils/carEquipments';
 import { carMaps } from '@/src/utils/carMaps';
@@ -190,18 +190,27 @@ export default function OficinaScreen() {
     const [previewEquipment, setPreviewEquipment] = React.useState<EquippedCarEquipment>(savedEquipment);
     const upgradesScrollRef = React.useRef<ScrollView>(null);
 
-    const syncCloudAfterLocalChange = React.useCallback(async () => {
-        try {
-            await saveCurrentPlayerCloudSnapshot();
-            return true;
-        } catch (error) {
-            console.warn('[WILD FIREBASE] Workshop sync failed:', error);
+    const beginWorkshopMutation = React.useCallback(async () => {
+        const start = await beginOnlinePlayerMutation();
+        if (!start.online) {
             Alert.alert(
                 'WILD NETWORK',
-                'A alteração foi salva neste dispositivo, mas ainda não foi confirmada no servidor. Tente novamente com uma conexão estável.',
+                'Oficina e compras precisam de internet. As corridas continuam disponíveis offline.',
             );
-            return false;
+            return null;
         }
+        return start.before;
+    }, []);
+
+    const confirmWorkshopMutation = React.useCallback(async (before: any) => {
+        const confirmed = await confirmOnlinePlayerMutation(before);
+        if (!confirmed) {
+            Alert.alert(
+                'WILD NETWORK',
+                'A alteração não foi confirmada no servidor e foi revertida neste dispositivo. Tente novamente com conexão estável.',
+            );
+        }
+        return confirmed;
     }, []);
 
     React.useEffect(() => {
@@ -296,6 +305,9 @@ export default function OficinaScreen() {
                 return;
             }
 
+            const before = await beginWorkshopMutation();
+            if (!before) return;
+
             const success = upgradeCar(
                 selectedCar,
                 partCategory,
@@ -314,7 +326,7 @@ export default function OficinaScreen() {
                 return;
             }
 
-            await syncCloudAfterLocalChange();
+            await confirmWorkshopMutation(before);
         };
 
         return (
@@ -403,6 +415,8 @@ export default function OficinaScreen() {
 
     const handleApplyPaint = async () => {
         const finish = CAR_PAINT_FINISHES[previewPaint.finishId];
+        const before = await beginWorkshopMutation();
+        if (!before) return;
 
         const result = applyCarPaint(
             String(carId),
@@ -443,13 +457,17 @@ export default function OficinaScreen() {
             return;
         }
 
+        if (!(await confirmWorkshopMutation(before))) return;
+
         setSelectedColorFront(previewPaint.primaryColor);
         setSelectedColorBack(previewPaint.secondaryColor);
         setSelectedFinishId(previewPaint.finishId);
-        await syncCloudAfterLocalChange();
     };
 
     const handleEquipmentAction = async (category: ReturnType<typeof getAvailableEquipmentCategories>[number], item: any) => {
+        const before = await beginWorkshopMutation();
+        if (!before) return;
+
         const owned = ownedCar.customization?.ownedEquipment?.includes(item.id) ?? false;
         const result = owned
             ? (setEquippedEquipment(String(carId), category.slot, item.id) ? 'equipped' : 'invalid')
@@ -493,10 +511,11 @@ export default function OficinaScreen() {
             return;
         }
 
+        if (!(await confirmWorkshopMutation(before))) return;
+
         const nextEquipment = { ...previewEquipment, [category.slot]: item.id };
         setPreviewEquipment(nextEquipment);
         setSelectedEquipment(nextEquipment);
-        await syncCloudAfterLocalChange();
     };
 
     const openCustomization = () => {
@@ -839,6 +858,9 @@ export default function OficinaScreen() {
                                                         <TouchableOpacity
                                                             style={styles.stockItem}
                                                             onPress={async () => {
+                                                                const before = await beginWorkshopMutation();
+                                                                if (!before) return;
+
                                                                 const success = setEquippedEquipment(
                                                                     String(carId),
                                                                     category.slot,
@@ -853,10 +875,11 @@ export default function OficinaScreen() {
                                                                     return;
                                                                 }
 
+                                                                if (!(await confirmWorkshopMutation(before))) return;
+
                                                                 const next = { ...previewEquipment, [category.slot]: null };
                                                                 setPreviewEquipment(next);
                                                                 setSelectedEquipment(next);
-                                                                await syncCloudAfterLocalChange();
                                                             }}
                                                         >
                                                             <Text style={styles.equipmentName}>
