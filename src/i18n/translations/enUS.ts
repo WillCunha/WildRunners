@@ -522,6 +522,40 @@ const en = {
     localNote:
       'Your data and progress remain on this device during the MVP.',
   },
+  auth: {
+    errorTitle: 'COULD NOT CONTINUE',
+
+    errors: {
+      emailAlreadyInUse:
+        'This email is already linked to a WF ID. Try logging in instead of creating a new account.',
+      invalidEmail:
+        'Please enter a valid email address.',
+      weakPassword:
+        'Your password is too weak. Use at least 6 characters.',
+      invalidCredential:
+        'Incorrect email or password. Please check your details and try again.',
+      wrongPassword:
+        'Incorrect password. Please check your password and try again.',
+      userNotFound:
+        'We couldn\'t find a WF ID account with this email.',
+      userDisabled:
+        'This account has been disabled. Please contact support.',
+      tooManyRequests:
+        'Too many attempts have been made in a short time. Please wait a moment and try again.',
+      networkRequestFailed:
+        'Could not connect to the WF server. Please check your internet connection and try again.',
+      operationNotAllowed:
+        'This login method is not available at the moment.',
+      accountExistsWithDifferentCredential:
+        'An WF ID account already exists with this email using a different login method.',
+      credentialAlreadyInUse:
+        'This credential is already linked to another account.',
+      requiresRecentLogin:
+        'For security reasons, please log in to your account again to continue.',
+      generic:
+        'Could not complete authentication. Please try again.',
+    },
+  },
   mapa: {
     finishRace: "RACE IS OVER",
     computingResults: "COMPUTING RESULTS...",

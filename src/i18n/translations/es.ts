@@ -639,6 +639,40 @@ const es = {
     localNote:
       'Tus datos y tu progreso permanecen en este dispositivo durante el MVP.',
   },
+  auth: {
+    errorTitle: 'NO FUE POSSIBLE CONTINUAR',
+
+    errors: {
+      emailAlreadyInUse:
+        'Este correo electrónico ya está vinculado a un WF ID. Intenta iniciar sesión en lugar de crear una nueva cuenta.',
+      invalidEmail:
+        'Ingresa una dirección de correo electrónico válida.',
+      weakPassword:
+        'Tu contraseña es muy débil. Usa al menos 6 caracteres.',
+      invalidCredential:
+        'Correo electrónico o contraseña incorrectos. Verifica tus datos e intenta de nuevo.',
+      wrongPassword:
+        'Contraseña incorrecta. Verifica tu contraseña e intenta de nuevo.',
+      userNotFound:
+        'No encontramos una cuenta WF ID con este correo electrónico.',
+      userDisabled:
+        'Esta cuenta ha sido deshabilitada. Ponte en contacto con el soporte técnico.',
+      tooManyRequests:
+        'Se han realizado demasiados intentos en poco tiempo. Espera un momento e intenta de nuevo.',
+      networkRequestFailed:
+        'No fue posible conectarse al servidor de WF. Verifica tu conexión a internet e intenta de nuevo.',
+      operationNotAllowed:
+        'Este método de inicio de sesión no está disponible en este momento.',
+      accountExistsWithDifferentCredential:
+        'Ya existe una cuenta WF ID con este correo electrónico usando otro método de inicio de sesión.',
+      credentialAlreadyInUse:
+        'Esta credencial ya está vinculada a otra cuenta.',
+      requiresRecentLogin:
+        'Por seguridad, vuelve a iniciar sesión en tu cuenta para continuar.',
+      generic:
+        'No se pudo completar la autenticación. Intenta de nuevo.',
+    },
+  },
   mapa: {
     finishRace: "FIN DE LA CARRERA",
     computingResults: "CALCULANDO RESULTADO...",

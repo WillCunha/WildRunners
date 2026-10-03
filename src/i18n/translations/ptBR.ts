@@ -522,6 +522,70 @@ const ptBR = {
     localNote:
       'Seus dados e progresso permanecem neste dispositivo durante o MVP.',
   },
+  errors: {
+    emailAlreadyInUse:
+      'Este e-mail já está vinculado a um WF ID. Tente entrar em vez de criar uma nova conta.',
+    invalidEmail:
+      'Digite um endereço de e-mail válido.',
+    weakPassword:
+      'Sua senha é muito fraca. Use pelo menos 6 caracteres.',
+    invalidCredential:
+      'E-mail ou senha incorretos. Confira seus dados e tente novamente.',
+    wrongPassword:
+      'Senha incorreta. Confira sua senha e tente novamente.',
+    userNotFound:
+      'Não encontramos uma conta com este e-mail.',
+    userDisabled:
+      'Esta conta foi desativada. Entre em contato com o suporte.',
+    tooManyRequests:
+      'Muitas tentativas foram feitas em pouco tempo. Aguarde um momento e tente novamente.',
+    networkRequestFailed:
+      'Não foi possível conectar ao servidor da WF. Verifique sua conexão com a internet e tente novamente.',
+    operationNotAllowed:
+      'Este método de login não está disponível no momento.',
+    accountExistsWithDifferentCredential:
+      'Já existe uma conta com este e-mail usando outro método de login.',
+    credentialAlreadyInUse:
+      'Esta credencial já está vinculada a outra conta.',
+    requiresRecentLogin:
+      'Por segurança, entre novamente na sua conta para continuar.',
+    generic:
+      'Não foi possível concluir a autenticação. Tente novamente.',
+  },
+  auth: {
+    errorTitle: 'NÃO FOI POSSÍVEL CONTINUAR',
+
+    errors: {
+      emailAlreadyInUse:
+        'Este e-mail já está vinculado a um WF ID. Tente entrar em vez de criar uma nova conta.',
+      invalidEmail:
+        'Digite um endereço de e-mail válido.',
+      weakPassword:
+        'Sua senha é muito fraca. Use pelo menos 6 caracteres.',
+      invalidCredential:
+        'E-mail ou senha incorretos. Confira seus dados e tente novamente.',
+      wrongPassword:
+        'Senha incorreta. Confira sua senha e tente novamente.',
+      userNotFound:
+        'Não encontramos uma conta WF ID com este e-mail.',
+      userDisabled:
+        'Esta conta foi desativada. Entre em contato com o suporte.',
+      tooManyRequests:
+        'Muitas tentativas foram feitas em pouco tempo. Aguarde um momento e tente novamente.',
+      networkRequestFailed:
+        'Não foi possível conectar ao servidor da WF. Verifique sua conexão com a internet e tente novamente.',
+      operationNotAllowed:
+        'Este método de login não está disponível no momento.',
+      accountExistsWithDifferentCredential:
+        'Já existe uma WF ID com este e-mail usando outro método de login.',
+      credentialAlreadyInUse:
+        'Esta credencial já está vinculada a outra conta.',
+      requiresRecentLogin:
+        'Por segurança, entre novamente na sua conta para continuar.',
+      generic:
+        'Não foi possível concluir a autenticação. Tente novamente.',
+    },
+  },
   mapa: {
     finishRace: "FIM DE CORRIDA",
     computingResults: "CALCULANDO RESULTADO...",
