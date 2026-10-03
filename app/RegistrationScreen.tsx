@@ -30,6 +30,117 @@ import {
 const ACCENT = '#61E7FF';
 type AuthMode = 'login' | 'register';
 
+type FirebaseAuthErrorKey =
+  | 'auth.errors.emailAlreadyInUse'
+  | 'auth.errors.invalidEmail'
+  | 'auth.errors.weakPassword'
+  | 'auth.errors.invalidCredential'
+  | 'auth.errors.wrongPassword'
+  | 'auth.errors.userNotFound'
+  | 'auth.errors.userDisabled'
+  | 'auth.errors.tooManyRequests'
+  | 'auth.errors.networkRequestFailed'
+  | 'auth.errors.operationNotAllowed'
+  | 'auth.errors.accountExistsWithDifferentCredential'
+  | 'auth.errors.credentialAlreadyInUse'
+  | 'auth.errors.requiresRecentLogin'
+  | 'auth.errors.generic';
+
+const getFirebaseAuthErrorKey = (error: unknown): FirebaseAuthErrorKey => {
+  const firebaseError = error as { code?: unknown; message?: unknown };
+
+  const code = String(firebaseError?.code ?? '').trim();
+  const message = String(firebaseError?.message ?? '').trim();
+
+  const raw = `${code} ${message}`.toLowerCase();
+
+  if (
+    raw.includes('auth/email-already-in-use') ||
+    raw.includes('firebase-auth/email-exists') ||
+    raw.includes('email_exists')
+  ) {
+    return 'auth.errors.emailAlreadyInUse';
+  }
+
+  if (
+    raw.includes('auth/invalid-email') ||
+    raw.includes('invalid_email')
+  ) {
+    return 'auth.errors.invalidEmail';
+  }
+
+  if (
+    raw.includes('auth/weak-password') ||
+    raw.includes('weak_password')
+  ) {
+    return 'auth.errors.weakPassword';
+  }
+
+  if (
+    raw.includes('auth/invalid-credential') ||
+    raw.includes('invalid_login_credentials')
+  ) {
+    return 'auth.errors.invalidCredential';
+  }
+
+  if (
+    raw.includes('auth/wrong-password') ||
+    raw.includes('invalid_password')
+  ) {
+    return 'auth.errors.wrongPassword';
+  }
+
+  if (
+    raw.includes('auth/user-not-found') ||
+    raw.includes('email_not_found')
+  ) {
+    return 'auth.errors.userNotFound';
+  }
+
+  if (
+    raw.includes('auth/user-disabled') ||
+    raw.includes('user_disabled')
+  ) {
+    return 'auth.errors.userDisabled';
+  }
+
+  if (
+    raw.includes('auth/too-many-requests') ||
+    raw.includes('too_many_attempts_try_later')
+  ) {
+    return 'auth.errors.tooManyRequests';
+  }
+
+  if (
+    raw.includes('auth/network-request-failed') ||
+    raw.includes('network-request-failed')
+  ) {
+    return 'auth.errors.networkRequestFailed';
+  }
+
+  if (
+    raw.includes('auth/operation-not-allowed') ||
+    raw.includes('operation_not_allowed')
+  ) {
+    return 'auth.errors.operationNotAllowed';
+  }
+
+  if (raw.includes('auth/account-exists-with-different-credential')) {
+    return 'auth.errors.accountExistsWithDifferentCredential';
+  }
+
+  if (raw.includes('auth/credential-already-in-use')) {
+    return 'auth.errors.credentialAlreadyInUse';
+  }
+
+  if (raw.includes('auth/requires-recent-login')) {
+    return 'auth.errors.requiresRecentLogin';
+  }
+
+  return 'auth.errors.generic';
+};
+
+
 const AUTH_COPY = {
   pt: { login: 'ENTRAR', register: 'CRIAR CONTA', loginTitle: 'BEM-VINDO DE VOLTA', loginSubtitle: 'Acesse seu piloto com e-mail e senha.', loginEyebrow: 'PILOTO EXISTENTE', email: 'E-MAIL', password: 'SENHA', enter: 'ENTRAR NO WILD', entering: 'AUTENTICANDO...', reveal: 'MOSTRAR SENHA', hide: 'OCULTAR SENHA', forgot: 'ESQUECI MINHA SENHA', protect: 'PROTEGER A CONTA ATUAL', return: 'VOLTAR À LOADING', noSave: 'Login confirmado, mas este UID não possui playerSaves. Nenhum save foi criado ou transferido. Preserve a sessão e conclua a recuperação adequada.', invalid: 'Informe seu e-mail e senha.', resetTitle: 'REDEFINIR SENHA', resetConfirm: 'Enviaremos instruções ao endereço informado, caso tenha uma conta com senha.', cancel: 'CANCELAR', send: 'ENVIAR', resetSent: 'Se existir uma conta com senha para este e-mail, as instruções foram solicitadas.', mailHint: 'Use o mesmo e-mail da sua conta Wild para recuperar seu piloto em outro aparelho.' },
   en: { login: 'SIGN IN', register: 'CREATE ACCOUNT', loginTitle: 'WELCOME BACK', loginSubtitle: 'Access your driver with email and password.', loginEyebrow: 'RETURNING DRIVER', email: 'EMAIL', password: 'PASSWORD', enter: 'SIGN IN TO WILD', entering: 'SIGNING IN...', reveal: 'SHOW PASSWORD', hide: 'HIDE PASSWORD', forgot: 'FORGOT PASSWORD', protect: 'SECURE CURRENT ACCOUNT', return: 'BACK TO LOADING', noSave: 'Sign-in succeeded, but this UID has no playerSaves. No save was created or transferred. Keep this session and complete the appropriate recovery.', invalid: 'Enter a valid email and password.', resetTitle: 'RESET PASSWORD', resetConfirm: 'We will request reset instructions for this address if it has a password account.', cancel: 'CANCEL', send: 'SEND', resetSent: 'If this address has a password account, reset instructions have been requested.', mailHint: 'Use the same Wild account email to restore your driver on another device.' },
@@ -63,6 +174,7 @@ export default function RegistrationScreen() {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginVisible, setLoginVisible] = useState(false);
   const [loginNotice, setLoginNotice] = useState<string | null>(null);
+  const [loginError, setLoginError] = useState<string | null>(null);
   const labels = AUTH_COPY[String(language).startsWith('en') ? 'en' : String(language).startsWith('es') ? 'es' : 'pt'];
 
 
@@ -80,6 +192,7 @@ export default function RegistrationScreen() {
   const [registering, setRegistering] = useState(false);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [registerError, setRegisterError] = useState<string | null>(null);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const passwordIsValid = validAccountPassword(password) && password === confirmPassword;
 
@@ -121,24 +234,32 @@ export default function RegistrationScreen() {
     setPassword('');
     setConfirmPassword('');
     setLoginNotice(null);
+    setLoginError(null);
+    setRegisterError(null);
     setMode(next);
   };
 
   const handleLogin = async () => {
     if (loginBusyRef.current || registeringRef.current) return;
+
+    setLoginError(null);
+    setLoginNotice(null);
+
     if (!validAccountEmail(loginEmail.trim().toLowerCase()) || !loginPassword) {
-      setLoginNotice(labels.invalid);
+      setLoginError(labels.invalid);
       return;
     }
+
     loginBusyRef.current = true;
     setLoginBusy(true);
-    setLoginNotice(null);
+
     try {
       await signInWithEmailPassword(loginEmail, loginPassword);
       setLoginPassword('');
       router.replace('/LoadingScreen');
     } catch (error) {
-      setLoginNotice(error instanceof Error ? error.message : String(error));
+      console.warn('[Wild Firebase] Login não concluído:', error);
+      setLoginError(t(getFirebaseAuthErrorKey(error)));
     } finally {
       loginBusyRef.current = false;
       setLoginBusy(false);
@@ -148,9 +269,11 @@ export default function RegistrationScreen() {
   const handlePasswordReset = () => {
     if (loginBusyRef.current || registeringRef.current) return;
     if (!validAccountEmail(loginEmail.trim().toLowerCase())) {
-      setLoginNotice(labels.invalid);
+      setLoginError(labels.invalid);
+      setLoginNotice(null);
       return;
     }
+    setLoginError(null);
     Alert.alert(labels.resetTitle, labels.resetConfirm, [
       { text: labels.cancel, style: 'cancel' },
       {
@@ -163,7 +286,9 @@ export default function RegistrationScreen() {
               await requestPasswordReset(loginEmail);
               setLoginNotice(labels.resetSent);
             } catch (error) {
-              setLoginNotice(error instanceof Error ? error.message : String(error));
+              console.warn('[Wild Firebase] Redefinição de senha não concluída:', error);
+              setLoginNotice(null);
+              setLoginError(t(getFirebaseAuthErrorKey(error)));
             } finally {
               loginBusyRef.current = false;
               setLoginBusy(false);
@@ -181,6 +306,7 @@ export default function RegistrationScreen() {
     setEmailTouched(true);
     if (!formIsValid) return;
 
+    setRegisterError(null);
     registeringRef.current = true;
     setRegistering(true);
 
@@ -196,10 +322,7 @@ export default function RegistrationScreen() {
       router.replace('/LoadingScreen');
     } catch (error) {
       console.warn('[Wild Firebase] Cadastro não concluído:', error);
-      Alert.alert(
-        'Wild Network',
-        error instanceof Error ? error.message : 'Não foi possível concluir o cadastro.',
-      );
+      setRegisterError(t(getFirebaseAuthErrorKey(error)));
     } finally {
       registeringRef.current = false;
       setRegistering(false);
@@ -208,6 +331,7 @@ export default function RegistrationScreen() {
 
   const handleRegister = () => {
     if (registeringRef.current) return;
+    setRegisterError(null);
     setUsernameTouched(true);
     setEmailTouched(true);
     if (!formIsValid) return;
@@ -365,7 +489,7 @@ export default function RegistrationScreen() {
                   <Text style={styles.loginIntro}>{labels.loginSubtitle}</Text>
                   <View style={styles.fieldBlock}>
                     <Text style={styles.fieldLabel}>{labels.email}</Text>
-                    <TextInput value={loginEmail} onChangeText={setLoginEmail}
+                    <TextInput value={loginEmail} onChangeText={value => { setLoginEmail(value); setLoginError(null); }}
                       style={[styles.inputShell, styles.authPasswordInput, styles.authInput]}
                       placeholder="email@exemplo.com" placeholderTextColor="rgba(255,255,255,0.35)"
                       keyboardType="email-address" autoCapitalize="none" autoCorrect={false}
@@ -374,7 +498,7 @@ export default function RegistrationScreen() {
                   </View>
                   <View style={styles.fieldBlock}>
                     <Text style={styles.fieldLabel}>{labels.password}</Text>
-                    <TextInput value={loginPassword} onChangeText={setLoginPassword}
+                    <TextInput value={loginPassword} onChangeText={value => { setLoginPassword(value); setLoginError(null); }}
                       style={[styles.inputShell, styles.authPasswordInput, styles.authInput]}
                       placeholder={labels.password} placeholderTextColor="rgba(255,255,255,0.35)"
                       secureTextEntry={!loginVisible} textContentType="password"
@@ -392,6 +516,11 @@ export default function RegistrationScreen() {
                     <Text style={styles.submitText}>{loginBusy ? labels.entering : labels.enter}</Text>
                   </TouchableOpacity>
                   {loginBusy && <ActivityIndicator color={ACCENT} style={styles.loginSpinner} />}
+                  {loginError && (
+                    <Text selectable style={styles.authErrorText}>
+                      {loginError}
+                    </Text>
+                  )}
                   <TouchableOpacity disabled={loginBusy} onPress={handlePasswordReset} style={styles.loginInlineAction}>
                     <Text style={styles.loginLink}>{labels.forgot}</Text>
                   </TouchableOpacity>
@@ -502,7 +631,7 @@ export default function RegistrationScreen() {
 
                       <TextInput
                         value={email}
-                        onChangeText={setEmail}
+                        onChangeText={value => { setEmail(value); setRegisterError(null); }}
                         onFocus={() =>
                           setEmailFocused(true)
                         }
@@ -538,7 +667,7 @@ export default function RegistrationScreen() {
 
                   <View style={styles.fieldBlock}>
                     <Text style={styles.fieldLabel}>SENHA · MÍNIMO 8 CARACTERES</Text>
-                    <TextInput value={password} onChangeText={setPassword}
+                    <TextInput value={password} onChangeText={value => { setPassword(value); setRegisterError(null); }}
                       style={[styles.inputShell, styles.authPasswordInput]} placeholder="Crie sua senha"
                       placeholderTextColor="rgba(255,255,255,0.35)" secureTextEntry={!passwordVisible}
                       textContentType="newPassword" autoComplete="new-password" autoCapitalize="none"
@@ -546,7 +675,7 @@ export default function RegistrationScreen() {
                     <TouchableOpacity onPress={() => setPasswordVisible(x => !x)} accessibilityRole="button">
                       <Text style={styles.hintText}>{passwordVisible ? 'OCULTAR SENHA' : 'MOSTRAR SENHA'}</Text>
                     </TouchableOpacity>
-                    <TextInput value={confirmPassword} onChangeText={setConfirmPassword}
+                    <TextInput value={confirmPassword} onChangeText={value => { setConfirmPassword(value); setRegisterError(null); }}
                       style={[styles.inputShell, styles.authPasswordInput]} placeholder="Confirme a senha"
                       placeholderTextColor="rgba(255,255,255,0.35)" secureTextEntry={!passwordVisible}
                       textContentType="newPassword" autoComplete="new-password" autoCapitalize="none"
@@ -583,6 +712,12 @@ export default function RegistrationScreen() {
                     </Text>
                   </TouchableOpacity>
 
+                  {registerError && (
+                    <Text selectable style={styles.authErrorText}>
+                      {registerError}
+                    </Text>
+                  )}
+
                   <Text style={{ color: '#FFD60A', fontSize: 11, lineHeight: 17, marginTop: 12, textAlign: 'center' }}>
                     Digite uma senha nova somente para NOVO piloto. O e-mail de um save anônimo antigo não transfere aquele UID.
                   </Text>
@@ -617,6 +752,7 @@ const styles = StyleSheet.create({
   loginLink: { color: ACCENT, fontSize: 11, fontWeight: '900', letterSpacing: 0.4 },
   loginSpinner: { marginTop: 12 },
   loginNotice: { color: '#FFD60A', fontSize: 12, lineHeight: 18, marginVertical: 10, textAlign: 'center' },
+  authErrorText: { color: '#FF6B63', fontSize: 11, lineHeight: 16, fontWeight: '800', marginTop: 10, marginBottom: 4, textAlign: 'center' },
   loginSmallNote: { color: 'rgba(255,255,255,0.56)', fontSize: 11, lineHeight: 16, textAlign: 'center', marginVertical: 10 },
   pageContentNarrow: { flexDirection: 'column', paddingHorizontal: 18, gap: 16 },
   heroNarrow: { flex: 0, width: '100%', minWidth: 0, alignItems: 'center' },

@@ -3,6 +3,7 @@ import SkiaCarBody from '@/components/Game/SkiaCarBody';
 import { AudioContext } from '@/context/AudioContext';
 import { useCarSelection } from '@/context/CarContext';
 import { useLanguage } from '@/context/LanguageContext';
+import { signOutWildAccount } from '@/src/services/firebase/firebaseAuth';
 import { raceRewardsService } from '@/src/services/raceRewardsService';
 import { usePlayerStore } from '@/src/store/playerStore';
 import type { EquippedCarEquipment, PaintFinishId } from '@/src/types/playerTypes';
@@ -260,11 +261,36 @@ export default function CarSelectionScreen() {
         router.push('/CarStore' as any);
     };
 
-    const resetProfile =
-        usePlayerStore(
-            state =>
-                state.resetProfile,
-        );
+    const [loggingOut, setLoggingOut] = useState(false);
+
+    const handleLogout = async () => {
+        if (loggingOut) return;
+
+        setLoggingOut(true);
+
+        try {
+            await signOutWildAccount();
+
+            // Remove only the local snapshot from the previous account.
+            // The Firestore playerSaves/{uid} document is not deleted.
+            usePlayerStore.setState({
+                profile: null,
+                processedRaceIds: [],
+                equippedDeck: [],
+            });
+
+            router.replace('/RegistrationScreen' as any);
+        } catch (error) {
+            console.warn('[Wild Firebase] Logout não concluído:', error);
+
+            Alert.alert(
+                'WILD NETWORK',
+                'Não foi possível sair da conta. Tente novamente.',
+            );
+        } finally {
+            setLoggingOut(false);
+        }
+    };
 
     const handleOpenOficina = () => {
         if (previewCar) {
@@ -361,6 +387,20 @@ export default function CarSelectionScreen() {
                             <Text style={styles.accountLabel}>{t('carSelection.trophies')}</Text>
                             <Text style={styles.accountValue}>🏆 {profile?.trophies ?? 0}</Text>
                         </View>
+
+                        <TouchableOpacity
+                            activeOpacity={0.82}
+                            disabled={loggingOut}
+                            onPress={() => { void handleLogout(); }}
+                            style={[
+                                styles.logoutButton,
+                                loggingOut && styles.logoutButtonDisabled,
+                            ]}
+                        >
+                            <Text style={styles.logoutButtonLabel}>
+                                {loggingOut ? 'SAINDO...' : 'LOG OUT'}
+                            </Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
 
@@ -638,6 +678,25 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     trophyBadge: { minWidth: 96 },
+    logoutButton: {
+        minHeight: 39,
+        paddingHorizontal: 13,
+        borderRadius: 11,
+        borderWidth: 1,
+        borderColor: 'rgba(255,69,58,0.68)',
+        backgroundColor: 'rgba(255,69,58,0.10)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    logoutButtonDisabled: {
+        opacity: 0.5,
+    },
+    logoutButtonLabel: {
+        color: '#FF6B63',
+        fontSize: 9,
+        fontWeight: '900',
+        letterSpacing: 0.8,
+    },
     accountLabel: {
         color: '#85858C',
         fontSize: 8,
