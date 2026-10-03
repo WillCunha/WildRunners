@@ -5,6 +5,7 @@ import { useCarSelection } from '@/context/CarContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { signOutWildAccount } from '@/src/services/firebase/firebaseAuth';
 import { raceRewardsService } from '@/src/services/raceRewardsService';
+import { joinWildRace } from '@/src/services/wildserver/multiplayerClient';
 import { usePlayerStore } from '@/src/store/playerStore';
 import type { EquippedCarEquipment, PaintFinishId } from '@/src/types/playerTypes';
 import { carMaps } from '@/src/utils/carMaps';
@@ -249,6 +250,22 @@ export default function CarSelectionScreen() {
     const jumpLevel = ownedCarData?.motor?.jumpPowerLevel ?? 1;
     const defenseLevel = ownedCarData?.engrenagem?.defenseLevel ?? 1;
 
+    const handleTestOnline = async () => {
+        try {
+            const room = await joinWildRace();
+
+            console.log(
+                '[WILD ONLINE TEST] Connected:',
+                room.roomId
+            );
+        } catch (error) {
+            console.error(
+                '[WILD ONLINE TEST] Connection failed:',
+                error
+            );
+        }
+    };
+
     const handleOpenStore = () => {
         if (previewCar) {
             setSelectedCar(previewCar);
@@ -388,6 +405,10 @@ export default function CarSelectionScreen() {
                             <Text style={styles.accountValue}>🏆 {profile?.trophies ?? 0}</Text>
                         </View>
 
+                        <TouchableOpacity onPress={handleTestOnline}>
+                            <Text>TEST ONLINE</Text>
+                        </TouchableOpacity>
+
                         <TouchableOpacity
                             activeOpacity={0.82}
                             disabled={loggingOut}
@@ -508,7 +529,7 @@ export default function CarSelectionScreen() {
                                     <View style={[styles.paintSummarySwatch, { backgroundColor: previewColorBack }]} />
                                 </View>
                                 <View style={{ flex: 1 }}>
-                                        <Text style={styles.paintSummaryTitle}>{t('carSelection.equippedPaint')}</Text>
+                                    <Text style={styles.paintSummaryTitle}>{t('carSelection.equippedPaint')}</Text>
                                     <Text style={styles.paintSummaryText}>
                                         {CAR_PAINT_FINISHES[previewFinishId].name} • {t('carSelection.personalizePaint')}
                                     </Text>
