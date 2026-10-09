@@ -22,7 +22,7 @@ function getWildClient() {
 
         client = new Client(WILD_SERVER_URL);
     }
-
+ 
     return client;
 }
 
