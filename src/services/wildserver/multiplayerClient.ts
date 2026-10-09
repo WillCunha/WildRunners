@@ -1,60 +1,127 @@
-import { Client, Room } from '@colyseus/sdk';
+import {
+  Client,
+} from '@/src/services/wildserver/colyseusNative';
 
-const WILD_SERVER_URL = 'http://10.19.175.11';
+import type {
+  ClientInstance,
+  Room,
+} from '@/src/services/wildserver/colyseusNative';
 
+const WILD_SERVER_URL = 'https://online.wfsoft.com.br';
+const WILD_RACE_ROOM = 'wild_race';
 
-const client = new Client(WILD_SERVER_URL);
-
+let client: ClientInstance | null = null;
 let currentRoom: Room | null = null;
 
+function getWildClient() {
+    if (!client) {
+        console.log(
+            '[WILD ONLINE] Criando cliente:',
+            WILD_SERVER_URL,
+        );
+
+        client = new Client(WILD_SERVER_URL);
+    }
+
+    return client;
+}
+
 export async function joinWildRace() {
-  try {
-    console.log('[WILD ONLINE] Conectando ao servidor...');
+    if (currentRoom) {
+        console.log(
+            '[WILD ONLINE] 🟡 Já conectado:',
+            currentRoom.roomId,
+        );
 
-    const room = await client.joinOrCreate('wild_race');
+        return currentRoom;
+    }
 
-    currentRoom = room;
+    try {
+        console.log(
+            '[WILD ONLINE] 🔄 Entrando em:',
+            WILD_RACE_ROOM,
+        );
 
-    console.log('[WILD ONLINE] ✅ Entrou na WildRaceRoom');
-    console.log('[WILD ONLINE] Room ID:', room.roomId);
-    console.log('[WILD ONLINE] Session ID:', room.sessionId);
+        const wildClient = getWildClient();
 
-    room.onLeave((code) => {
-      console.log('[WILD ONLINE] 🔴 Saiu da sala. Code:', code);
+        const room = await wildClient.joinOrCreate(
+            WILD_RACE_ROOM,
+        );
 
-      if (currentRoom === room) {
-        currentRoom = null;
-      }
-    });
+        currentRoom = room;
 
-    room.onError((code, message) => {
-      console.log(
-        '[WILD ONLINE] ❌ Room error:',
-        code,
-        message
-      );
-    });
+        console.log(
+            '[WILD ONLINE] 🟢 CONECTADO AO WILD ONLINE',
+        );
+        console.log(
+            '[WILD ONLINE] Room ID:',
+            room.roomId,
+        );
+        console.log(
+            '[WILD ONLINE] Session ID:',
+            room.sessionId,
+        );
 
-    return room;
-  } catch (error) {
-    console.error(
-      '[WILD ONLINE] ❌ Falha ao entrar na sala:',
-      error
-    );
+        room.onLeave((code) => {
+            console.log(
+                '[WILD ONLINE] 🔴 Saiu da sala. Code:',
+                code,
+            );
 
-    throw error;
-  }
+            if (currentRoom === room) {
+                currentRoom = null;
+            }
+        });
+
+        room.onError((code, message) => {
+            console.error(
+                '[WILD ONLINE] ❌ Room error:',
+                code,
+                message,
+            );
+        });
+
+        return room;
+    } catch (error) {
+        console.error(
+            '[WILD ONLINE] ❌ Falha ao entrar na WildRaceRoom:',
+            error,
+        );
+
+        throw error;
+    }
 }
 
 export async function leaveWildRace() {
-  if (!currentRoom) {
-    return;
-  }
+    const room = currentRoom;
 
-  await currentRoom.leave();
-  currentRoom = null;
+    if (!room) {
+        console.log(
+            '[WILD ONLINE] Nenhuma sala ativa.',
+        );
+        return;
+    }
+
+    currentRoom = null;
+
+    try {
+        await room.leave();
+
+        console.log(
+            '[WILD ONLINE] 🟡 Desconectado da WildRaceRoom.',
+        );
+    } catch (error) {
+        console.warn(
+            '[WILD ONLINE] Erro ao sair da sala:',
+            error,
+        );
+    }
 }
 
 export function getCurrentWildRoom() {
-  return currentRoom;
+    return currentRoom;
+}
+
+export function isWildOnlineConnected() {
+    return currentRoom !== null;
 }

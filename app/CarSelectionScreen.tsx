@@ -5,7 +5,6 @@ import { useCarSelection } from '@/context/CarContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { signOutWildAccount } from '@/src/services/firebase/firebaseAuth';
 import { raceRewardsService } from '@/src/services/raceRewardsService';
-import { joinWildRace } from '@/src/services/wildserver/multiplayerClient';
 import { usePlayerStore } from '@/src/store/playerStore';
 import type { EquippedCarEquipment, PaintFinishId } from '@/src/types/playerTypes';
 import { carMaps } from '@/src/utils/carMaps';
@@ -204,7 +203,7 @@ export default function CarSelectionScreen() {
             };
         }, [])
     );
-
+   
     useEffect(() => {
         playMusic(DASHBOARD_MUSIC, { volume: 0.15, loop: true });
     }, [playMusic]);
@@ -250,21 +249,7 @@ export default function CarSelectionScreen() {
     const jumpLevel = ownedCarData?.motor?.jumpPowerLevel ?? 1;
     const defenseLevel = ownedCarData?.engrenagem?.defenseLevel ?? 1;
 
-    const handleTestOnline = async () => {
-        try {
-            const room = await joinWildRace();
-
-            console.log(
-                '[WILD ONLINE TEST] Connected:',
-                room.roomId
-            );
-        } catch (error) {
-            console.error(
-                '[WILD ONLINE TEST] Connection failed:',
-                error
-            );
-        }
-    };
+   
 
     const handleOpenStore = () => {
         if (previewCar) {
@@ -275,7 +260,7 @@ export default function CarSelectionScreen() {
             setSelectedEquipment(previewEquipment);
         }
 
-        router.push('/CarStore' as any);
+        router.push('/OnlineTest' as any);
     };
 
     const [loggingOut, setLoggingOut] = useState(false);
@@ -405,10 +390,7 @@ export default function CarSelectionScreen() {
                             <Text style={styles.accountValue}>🏆 {profile?.trophies ?? 0}</Text>
                         </View>
 
-                        <TouchableOpacity onPress={handleTestOnline}>
-                            <Text>TEST ONLINE</Text>
-                        </TouchableOpacity>
-
+  
                         <TouchableOpacity
                             activeOpacity={0.82}
                             disabled={loggingOut}
