@@ -1,10 +1,10 @@
 import {
-  Client,
+    Client,
 } from '@/src/services/wildserver/colyseusNative';
 
 import type {
-  ClientInstance,
-  Room,
+    ClientInstance,
+    Room,
 } from '@/src/services/wildserver/colyseusNative';
 
 const WILD_SERVER_URL = 'https://online.wfsoft.com.br';
@@ -12,6 +12,10 @@ const WILD_RACE_ROOM = 'wild_race';
 
 let client: ClientInstance | null = null;
 let currentRoom: Room | null = null;
+let driveInput: any = null;
+let driveValue = 0;
+
+let driveTimer: ReturnType<typeof setInterval> | null = null;
 
 function getWildClient() {
     if (!client) {
@@ -22,8 +26,39 @@ function getWildClient() {
 
         client = new Client(WILD_SERVER_URL);
     }
- 
+
     return client;
+}
+
+function startWildInputLoop(room: Room) {
+    if (driveTimer) {
+        clearInterval(driveTimer);
+        driveTimer = null;
+    }
+
+    driveInput = room.input();
+
+    if (!driveInput) {
+        console.warn(
+            '[WILD ONLINE] ⚠️ Sala nao possui defineInput()',
+        );
+        return;
+    }
+
+    console.log(
+        '[WILD ONLINE] Canal de input iniciado.',
+    );
+
+    driveTimer = setInterval(() => {
+        if (!driveInput) {
+            return;
+        }
+
+        driveInput.data.drive = driveValue;
+        driveInput.send();
+    },
+        1000 / 30,
+    )
 }
 
 export async function joinWildRace() {
@@ -49,6 +84,8 @@ export async function joinWildRace() {
         );
 
         currentRoom = room;
+
+        startWildInputLoop(room);
 
         console.log(
             '[WILD ONLINE] 🟢 CONECTADO AO WILD ONLINE',
@@ -106,6 +143,13 @@ export async function leaveWildRace() {
 
     try {
         await room.leave();
+        if(driveTimer){
+            clearInterval(driveTimer);
+            driveTimer = null;
+        }
+
+        driveInput = null;
+        driveValue = 0;
 
         console.log(
             '[WILD ONLINE] 🟡 Desconectado da WildRaceRoom.',
@@ -124,4 +168,8 @@ export function getCurrentWildRoom() {
 
 export function isWildOnlineConnected() {
     return currentRoom !== null;
+}
+
+export function setWildDrive(value: number) {
+    driveValue = Math.max(-1, Math.min(1, value));
 }

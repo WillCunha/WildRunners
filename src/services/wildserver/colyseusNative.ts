@@ -1,6 +1,11 @@
-import { Client } from '@colyseus/sdk';
+import {
+    Callbacks,
+    Client,
+} from '@colyseus/sdk';
 
-export { Client };
+export {
+    Callbacks, Client
+};
 
 export type ClientInstance =
     InstanceType<typeof Client>;
