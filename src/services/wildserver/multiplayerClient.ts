@@ -35,6 +35,8 @@ let driveTimer:
     | null = null;
 
 
+export type WildRacePhase = 'waiting' | 'countdown' | 'racing' | 'paused' | 'finished';
+
 export type WildOnlinePlayer = {
     sessionId: string;
     name: string;
@@ -49,6 +51,8 @@ export type WildOnlinePlayer = {
     direction: number;
 
     ready: boolean;
+    connected: boolean;
+    rank: number;
 
     isMe: boolean;
 };
@@ -66,6 +70,13 @@ export type WildOnlineState = {
 
     raceStarted:
     boolean;
+
+    // Estado autoritativo recebido da AWS (inclui pausas e resultados).
+    racePhase: WildRacePhase;
+    countdown: number;
+    raceTime: number;
+    winnerSessionId: string;
+    finishReason: string;
 
     drive:
     number;
@@ -87,6 +98,11 @@ let onlineState:
     sessionId: null,
 
     raceStarted: false,
+    racePhase: 'waiting',
+    countdown: 0,
+    raceTime: 0,
+    winnerSessionId: '',
+    finishReason: '',
 
     drive: 0,
 
@@ -200,6 +216,12 @@ function rebuildPlayers(
                             player.ready
                         ),
 
+                    connected:
+                        Boolean(player.connected ?? true),
+
+                    rank:
+                        Number(player.rank ?? 0),
+
                     isMe:
                         sessionId ===
                         room.sessionId,
@@ -217,9 +239,17 @@ function rebuildPlayers(
         ...onlineState,
 
         raceStarted:
-            Boolean(
-                room?.state?.raceStarted
-            ),
+            Boolean(room?.state?.raceStarted),
+        racePhase:
+            (room?.state?.racePhase ?? 'waiting') as WildRacePhase,
+        countdown:
+            Number(room?.state?.countdown ?? 0),
+        raceTime:
+            Number(room?.state?.raceTime ?? 0),
+        winnerSessionId:
+            String(room?.state?.winnerSessionId ?? ''),
+        finishReason:
+            String(room?.state?.finishReason ?? ''),
 
         players,
     };
@@ -288,6 +318,9 @@ function startInputLoop(
         driveInput =
             room.input();
 
+        if (!driveInput) {
+            throw new Error('Servidor sem canal defineInput disponível.');
+        }
 
         console.log(
             '[WILD INPUT] Canal iniciado.'
@@ -315,29 +348,80 @@ function startInputLoop(
     }
 
 
-    driveTimer =
-        setInterval(
-            () => {
+    let sendErrorLogged = false;
+    driveTimer = setInterval(() => {
+        if (!driveInput || currentRoom !== room) return;
 
-                if (
-                    !driveInput
-                ) {
-                    return;
-                }
-
-
-                driveInput.data.drive =
-                    driveValue;
-
-
-                driveInput.send();
-
-            },
-
-            INPUT_RATE,
-        );
+        try {
+            driveInput.data.drive = driveValue;
+            driveInput.send();
+            if (sendErrorLogged) {
+                console.log('[WILD INPUT] Envio retomado.');
+                sendErrorLogged = false;
+            }
+        } catch (error) {
+            // Oscilação de Wi-Fi não deve causar exceção não tratada no timer.
+            if (!sendErrorLogged) {
+                console.warn('[WILD INPUT] Envio suspenso temporariamente:', error);
+                sendErrorLogged = true;
+            }
+        }
+    }, INPUT_RATE);
 }
 
+function clearOnlineRoomState(error: string | null = null) {
+    onlineState = {
+        connected: false,
+        roomId: null,
+        sessionId: null,
+        raceStarted: false,
+        racePhase: 'waiting',
+        countdown: 0,
+        raceTime: 0,
+        winnerSessionId: '',
+        finishReason: '',
+        drive: 0,
+        players: [],
+        error,
+    };
+    emitState();
+}
+
+function installRoomEvents(
+    room: any
+) {
+    // Mensagens são avisos. O Schema permanece a fonte de verdade.
+    // Instalar nos três caminhos de entrada: pública, privada e por código.
+    room.onMessage('race-ready', (payload: any) => {
+        console.log('[WILD EVENT] Sala pronta:', payload?.roomId);
+    });
+    room.onMessage('race-go', () => {
+        console.log('[WILD EVENT] Largada informada pela AWS');
+    });
+    room.onMessage('race-finished', (payload: any) => {
+        console.log('[WILD EVENT] Resultado informado:', payload?.winnerSessionId,
+            payload?.finishReason);
+    });
+
+    room.onLeave((code: number) => {
+        // Um evento atrasado de uma sala anterior não apaga a sala atual.
+        if (currentRoom !== room) return;
+        console.log('[WILD ONLINE] Saiu da sala:', code);
+        currentRoom = null;
+        stopInputLoop();
+        clearOnlineRoomState();
+    });
+
+    room.onError((code: number, message: string) => {
+        if (currentRoom !== room) return;
+        console.error('[WILD ONLINE] Room error:', code, message);
+        onlineState = {
+            ...onlineState,
+            error: `${code}: ${message}`,
+        };
+        emitState();
+    });
+}
 
 export async function joinWildRace() {
 
@@ -418,83 +502,9 @@ export async function joinWildRace() {
         );
 
 
-        installStateSync(
-            room
-        );
-
-
-        startInputLoop(
-            room
-        );
-
-
-        room.onLeave(
-            code => {
-
-                console.log(
-                    '[WILD ONLINE] Saiu:',
-                    code,
-                );
-
-
-                stopInputLoop();
-
-
-                if (
-                    currentRoom === room
-                ) {
-                    currentRoom =
-                        null;
-                }
-
-
-                onlineState = {
-
-                    connected: false,
-
-                    roomId: null,
-                    sessionId: null,
-
-                    raceStarted: false,
-
-                    drive: 0,
-
-                    players: [],
-
-                    error: null,
-                };
-
-
-                emitState();
-            }
-        );
-
-
-        room.onError(
-            (
-                code,
-                message,
-            ) => {
-
-                console.error(
-                    '[WILD ONLINE] Room error:',
-                    code,
-                    message,
-                );
-
-
-                onlineState = {
-                    ...onlineState,
-
-                    error:
-                        `${code}: ${message}`,
-                };
-
-
-                emitState();
-            }
-        );
-
+        installRoomEvents(room);
+        installStateSync(room);
+        startInputLoop(room);
 
         return room;
 
@@ -506,38 +516,170 @@ export async function joinWildRace() {
         );
 
 
-        onlineState = {
-            ...onlineState,
-
-            connected: false,
-
-            error:
-                error instanceof Error
-                    ? error.message
-                    : String(error),
-        };
-
-
-        emitState();
+        clearOnlineRoomState(
+            error instanceof Error ? error.message : String(error)
+        );
 
 
         throw error;
     }
 }
 
+export async function createWildRace() {
+
+    if (currentRoom) {
+        return currentRoom;
+    }
+
+    try {
+
+        console.log(
+            '[WILD ONLINE] Criando sala privada...',
+        );
+
+        const wildClient =
+            getWildClient();
+
+        const room =
+            await wildClient.create(
+                WILD_RACE_ROOM,
+                {
+                    privateRoom: true,
+                    name: 'Player',
+                    carId: 'fusca',
+                },
+            );
+
+        currentRoom = room;
+
+        onlineState = {
+            ...onlineState,
+
+            connected: true,
+
+            roomId:
+                room.roomId,
+
+            sessionId:
+                room.sessionId,
+
+            error: null,
+        };
+
+        emitState();
+
+        console.log(
+            '[WILD ONLINE] SALA CRIADA'
+        );
+
+        console.log(
+            '[WILD ONLINE] CÓDIGO:',
+            room.roomId,
+        );
+
+        installRoomEvents(room);
+        installStateSync(room);
+        startInputLoop(room);
+
+        return room;
+
+    } catch (error) {
+
+        console.error(
+            '[WILD ONLINE] Falha ao criar sala:',
+            error,
+        );
+
+        clearOnlineRoomState(error instanceof Error ? error.message : String(error));
+        throw error;
+    }
+}
+
+export async function joinWildRaceByCode(
+    roomCode: string,
+) {
+
+    if (currentRoom) {
+        return currentRoom;
+    }
+
+    const code =
+        roomCode.trim();
+
+    if (!code) {
+        throw new Error(
+            'Código da sala vazio.'
+        );
+    }
+
+    try {
+
+        console.log(
+            '[WILD ONLINE] Procurando sala:',
+            code,
+        );
+
+        const wildClient =
+            getWildClient();
+
+        const room =
+            await wildClient.joinById(
+                code,
+                {
+                    name: 'Player',
+                    carId: 'fusca',
+                },
+            );
+
+        currentRoom = room;
+
+        onlineState = {
+            ...onlineState,
+
+            connected: true,
+
+            roomId:
+                room.roomId,
+
+            sessionId:
+                room.sessionId,
+
+            error: null,
+        };
+
+        emitState();
+
+        console.log(
+            '[WILD ONLINE] ENTROU PELO CÓDIGO:',
+            room.roomId,
+        );
+
+        installRoomEvents(room);
+        installStateSync(room);
+        startInputLoop(room);
+
+        return room;
+
+    } catch (error) {
+
+        console.error(
+            '[WILD ONLINE] Sala não encontrada:',
+            code,
+            error,
+        );
+
+        clearOnlineRoomState(error instanceof Error ? error.message : String(error));
+        throw error;
+    }
+}
 
 export function setWildDrive(
     value: number
 ) {
 
-    driveValue =
-        Math.max(
-            -1,
-            Math.min(
-                1,
-                value,
-            ),
-        );
+    driveValue = Number.isFinite(value)
+        ? Math.max(-1, Math.min(1, value))
+        : 0;
 
 
     onlineState = {
@@ -603,9 +745,8 @@ export async function leaveWildRace() {
     currentRoom =
         null;
 
-
     stopInputLoop();
-
+    clearOnlineRoomState();
 
     await room.leave();
 }

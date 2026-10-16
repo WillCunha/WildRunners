@@ -260,7 +260,7 @@ export default function CarSelectionScreen() {
             setSelectedEquipment(previewEquipment);
         }
 
-        router.push('/OnlineTest' as any);
+        router.push('/CarStore' as any);
     };
 
     const [loggingOut, setLoggingOut] = useState(false);
@@ -320,7 +320,8 @@ export default function CarSelectionScreen() {
         setSelectedColorBack(previewColorBack);
         setSelectedFinishId(previewFinishId);
         setSelectedEquipment(previewEquipment);
-        router.navigate('/deckselection' as any);
+        //router.navigate('/deckselection' as any);
+        router.navigate('/OnlineLab' as any);
     };
 
     const testRaceResult = () => {

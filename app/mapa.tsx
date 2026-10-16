@@ -25,6 +25,9 @@ import { usePlayerStore } from '@/src/store/playerStore';
 import { useTutorialStore } from '@/src/store/tutorialStore';
 import { ALL_CARDS, CARD_CATEGORIES, CARD_MAP, getCardDefinition, type CardId } from '@/src/utils/cardMap';
 import { carMaps } from '@/src/utils/carMaps';
+import { clearWildAlpha9Room, getWildAlpha9Room } from '@/src/online/wildOnlineAlpha9Session';
+import { WILD_CAR_IDS, type WildCarId } from '@/src/online/wildOnlineCarStats';
+import { WildPositionSmoother } from '@/src/online/wildOnlineSmoothing';
 import {
   evaluateRaceObjectivesLive,
   selectRaceObjectives,
@@ -136,7 +139,7 @@ const BOT_TNT_REAR_RANGE = 360;
 const BOT_DEFENSE_REACTION_CHANCE = 0.75;
 const NITRO_POWER_MULTIPLIER = 1.25;
 
-export default function Mapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: MapaProps) {
+function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: MapaProps) {
 
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
   const GROUND_Y = SCREEN_HEIGHT - (BOTTOM_HUD_HEIGHT + BOTTOM_HUD_BOTTOM + TRACK_TO_HUD_GAP);
@@ -5220,4 +5223,907 @@ const styles = StyleSheet.create({
   },
   empCardMaskText: { color: '#BDFBFF', fontSize: 10, fontWeight: '900' },
   blindEffect: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgb(255, 255, 255)', zIndex: 15 },
+});
+
+
+
+/* ===========================================================================
+ * ALPHA 9.1 — MAPA ONLINE (mesmo arquivo; o Mapa offline permanece isolado)
+ * A AWS é a única fonte de: carros, pilotos, fase, cronômetro, física e ranking.
+ * Não há bots, cartas, física local nem recompensas offline neste modo.
+ * =========================================================================== */
+
+type Alpha9Room = NonNullable<ReturnType<typeof getWildAlpha9Room>>;
+type Alpha9Input = ReturnType<Alpha9Room['input']>;
+type Alpha9Phase = 'waiting' | 'countdown' | 'racing' | 'paused' | 'finished';
+
+type Alpha9Player = {
+  sessionId: string;
+  slot: number;
+  carId: string;
+  startX: number;
+  connected: boolean;
+  ready: boolean;
+  rank: number;
+  speed: number;
+  x: number;
+  maxSpeed: number;
+  acceleration: number;
+  nitroCharges: number;
+  nitroRemaining: number;
+  nitroCooldown: number;
+  slowRemaining: number;
+  slowCooldown: number;
+  boost: number;
+  nitroPowerRemaining: number;
+  nitroPowerCooldown: number;
+  shieldCharges: number;
+  shieldCooldown: number;
+  /** Confirma que a AWS entregou os campos adicionados na Alpha 11. */
+  battleSyncReady: boolean;
+  deckSlot0: string;
+  deckSlot1: string;
+  deckSlot2: string;
+  deckSlot3: string;
+};
+
+type Alpha9Race = {
+  phase: Alpha9Phase;
+  countdown: number;
+  raceTime: number;
+  finishDistance: number;
+  winnerSessionId: string;
+  finishReason: string;
+  players: Alpha9Player[];
+};
+
+type Alpha9ServerPlayer = Partial<Alpha9Player>;
+type Alpha9ServerState = {
+  racePhase?: Alpha9Phase;
+  countdown?: number;
+  raceTime?: number;
+  finishDistance?: number;
+  winnerSessionId?: string;
+  finishReason?: string;
+  players?: {
+    forEach(callback: (player: Alpha9ServerPlayer, sessionId: string) => void): void;
+  };
+};
+
+function alpha9ReadRace(room: Alpha9Room): Alpha9Race {
+  const state = room.state as unknown as Alpha9ServerState;
+  const players: Alpha9Player[] = [];
+  state?.players?.forEach((player, sessionId) => {
+    players.push({
+      sessionId,
+      slot: Number(player.slot ?? 0),
+      carId: String(player.carId ?? ''),
+      startX: Number(player.startX ?? 0),
+      connected: player.connected !== false,
+      ready: player.ready === true,
+      rank: Number(player.rank ?? 0),
+      speed: Number(player.speed ?? 0),
+      x: Number(player.x ?? 0),
+      maxSpeed: Number(player.maxSpeed ?? 0),
+      acceleration: Number(player.acceleration ?? 0),
+      nitroCharges: Number(player.nitroCharges ?? 0),
+      nitroRemaining: Number(player.nitroRemaining ?? 0),
+      nitroCooldown: Number(player.nitroCooldown ?? 0),
+      slowRemaining: Number(player.slowRemaining ?? 0),
+      slowCooldown: Number(player.slowCooldown ?? 0),
+      boost: Number(player.boost ?? 0),
+      nitroPowerRemaining: Number(player.nitroPowerRemaining ?? 0),
+      nitroPowerCooldown: Number(player.nitroPowerCooldown ?? 0),
+      shieldCharges: Number(player.shieldCharges ?? 0),
+      shieldCooldown: Number(player.shieldCooldown ?? 0),
+      battleSyncReady: typeof player.boost === 'number' &&
+        typeof player.nitroPowerCooldown === 'number' &&
+        typeof player.shieldCooldown === 'number' &&
+        typeof player.deckSlot0 === 'string',
+      deckSlot0: String(player.deckSlot0 ?? 'slow_slow'),
+      deckSlot1: String(player.deckSlot1 ?? 'nitro_power'),
+      deckSlot2: String(player.deckSlot2 ?? 'shield'),
+      deckSlot3: String(player.deckSlot3 ?? 'bullet'),
+    });
+  });
+  // Slot identifica o jogador; a pista online tem uma única altura para todos.
+  players.sort((a, b) => a.slot - b.slot || a.sessionId.localeCompare(b.sessionId));
+  return {
+    phase: state?.racePhase ?? 'waiting',
+    countdown: Number(state?.countdown ?? 0),
+    raceTime: Number(state?.raceTime ?? 0),
+    finishDistance: Number(state?.finishDistance ?? 6000),
+    winnerSessionId: String(state?.winnerSessionId ?? ''),
+    finishReason: String(state?.finishReason ?? ''),
+    players,
+  };
+}
+
+const ALPHA9_PHASE_TEXT: Record<Alpha9Phase, string> = {
+  waiting: 'AGUARDANDO JOGADORES',
+  countdown: 'LARGADA',
+  racing: 'CORRIDA ONLINE',
+  paused: 'PAUSADA PELA AWS',
+  finished: 'CORRIDA FINALIZADA',
+};
+const ALPHA9_COLORS = ['#00D084', '#FF6B35', '#5C86FF', '#F74AC8'];
+const ALPHA9_PIXELS_PER_SERVER_UNIT = 0.34;
+const ALPHA11_TEST_DECK: CardId[] = ['slow_slow', 'nitro_power', 'shield', 'bullet'];
+const ALPHA11_ENABLED = new Set<string>(['slow_slow', 'nitro_power', 'shield']);
+
+function OnlineAlpha9Mapa() {
+  const router = useRouter();
+  const params = useLocalSearchParams<{ mapId?: string; skyTheme?: string }>();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const groundY = screenHeight - (BOTTOM_HUD_HEIGHT + BOTTOM_HUD_BOTTOM + TRACK_TO_HUD_GAP);
+  // Um único chão, sem grade falsa: as coordenadas iniciais são definidas
+  // pelo Schema da AWS e lidas diretamente de player.x (inclusive no countdown).
+  const onlineCarWidth = Math.round(Math.max(112, Math.min(150, screenHeight * 0.37)));
+  const { selectedCar, selectedColorFront, selectedColorBack, selectedFinishId, selectedEquipment } = useCarSelection();
+
+  // O laboratório transferiu a própria Room. NÃO conectar/join novamente aqui.
+  const roomRef = useRef<Alpha9Room | null>(getWildAlpha9Room());
+  const [race, setRace] = useState<Alpha9Race | null>(null);
+  const [dropped, setDropped] = useState(false);
+  const [problem, setProblem] = useState('');
+  const [ping, setPing] = useState<number | null>(null);
+  const [isLeaving, setIsLeaving] = useState(false);
+  const [cardPending, setCardPending] = useState(false);
+  const [cardFeedback, setCardFeedback] = useState('');
+  const cardPendingRef = useRef(false);
+  const cardRequestSeqRef = useRef(0);
+  const cardAckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cardFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(false);
+  const droppedRef = useRef(false);
+  const phaseRef = useRef<Alpha9Phase>('waiting');
+  const inputRef = useRef<Alpha9Input | null>(null);
+  const driveRef = useRef(0);
+  const stickWidthRef = useRef(0);
+  const stickInitialXRef = useRef(0);
+  const stickXRef = useRef(0);
+  const stickX = useRef(new Animated.Value(0)).current;
+  const positionsRef = useRef<Record<string, Animated.Value>>({});
+  const startXRef = useRef<Record<string, number>>({});
+  const relativeXRef = useRef<Record<string, ReturnType<typeof Animated.multiply>>>({});
+  const lastRosterLogRef = useRef('');
+  const smoothingRef = useRef(new WildPositionSmoother());
+  const sceneryTravel = useRef(new Animated.Value(0)).current;
+  const inputTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const visualTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pings = useRef(new Map<number, number>());
+  const pingSequence = useRef(0);
+  const mySessionId = roomRef.current?.sessionId ?? '';
+
+  // Nó Animated por sessionId: o visual é atualizado a 30 Hz sem 30 renders/seg.
+  const positionValue = (sessionId: string, initialX = 0) => {
+    if (!positionsRef.current[sessionId]) {
+      positionsRef.current[sessionId] = new Animated.Value(initialX);
+    }
+    return positionsRef.current[sessionId];
+  };
+
+  // Cache do Animated.Node: não recriar a árvore de animações a cada snapshot.
+  const relativePositionValue = (sessionId: string, sessionX: number) => {
+    if (!relativeXRef.current[sessionId]) {
+      relativeXRef.current[sessionId] = Animated.multiply(
+        Animated.subtract(positionValue(sessionId, sessionX), positionValue(mySessionId || '_waiting')),
+        ALPHA9_PIXELS_PER_SERVER_UNIT,
+      );
+    }
+    return relativeXRef.current[sessionId];
+  };
+
+  // O servidor já envia player.x. NÃO aplicar deslocamentos de largada por slot:
+  // eles simulam uma ultrapassagem ao desaparecerem no GO e não representam física.
+  // A câmera segue o jogador local e a posição relativa vem exclusivamente da AWS.
+
+  const showCardFeedback = (message: string) => {
+    setCardFeedback(message);
+    if (cardFeedbackTimerRef.current) clearTimeout(cardFeedbackTimerRef.current);
+    cardFeedbackTimerRef.current = setTimeout(() => {
+      if (mountedRef.current) setCardFeedback('');
+      cardFeedbackTimerRef.current = null;
+    }, 2800);
+  };
+
+  const clearCardPending = () => {
+    cardPendingRef.current = false;
+    setCardPending(false);
+    if (cardAckTimerRef.current) clearTimeout(cardAckTimerRef.current);
+    cardAckTimerRef.current = null;
+  };
+
+  const resetStick = () => {
+    driveRef.current = 0;
+    stickInitialXRef.current = 0;
+    stickXRef.current = 0;
+    stickX.setValue(0);
+  };
+
+  const setStick = (nextX: number) => {
+    const limit = Math.max(0, (stickWidthRef.current - ANALOG_KNOB_SIZE) / 2);
+    const bounded = Math.max(-limit, Math.min(limit, nextX));
+    stickXRef.current = bounded;
+    stickX.setValue(bounded);
+    const rawDrive = limit > 0 ? bounded / limit : 0;
+    driveRef.current = Math.abs(rawDrive) < ANALOG_DEAD_ZONE ? 0 : rawDrive;
+  };
+
+  // PanResponder monta uma vez; só lê refs, evitando closures de race antigas.
+  const stickResponder = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => {
+      stickInitialXRef.current = stickXRef.current;
+    },
+    onPanResponderMove: (_, gesture) => {
+      if (phaseRef.current !== 'racing' || droppedRef.current) return;
+      setStick(stickInitialXRef.current + gesture.dx);
+    },
+    onPanResponderRelease: resetStick,
+    onPanResponderTerminate: resetStick,
+    onPanResponderTerminationRequest: () => true,
+  })).current;
+
+  const stopSenders = () => {
+    if (inputTimer.current) clearInterval(inputTimer.current);
+    if (visualTimer.current) clearInterval(visualTimer.current);
+    if (pingTimer.current) clearInterval(pingTimer.current);
+    inputTimer.current = null;
+    visualTimer.current = null;
+    pingTimer.current = null;
+    inputRef.current = null;
+    pings.current.clear();
+    resetStick();
+    clearCardPending();
+  };
+
+  useEffect(() => {
+    mountedRef.current = true;
+    const room = roomRef.current;
+    if (!room) {
+      setProblem('Nenhuma sessão Alpha 9 foi transferida. Entre no WildOnlineLab primeiro.');
+      return () => { mountedRef.current = false; };
+    }
+
+    const subscriptions: Array<() => void> = [];
+    const collectCleanup = (registration: unknown) => {
+      if (typeof registration === 'function') {
+        subscriptions.push(registration as () => void);
+      } else if (registration && typeof (registration as { remove?: () => void }).remove === 'function') {
+        subscriptions.push(() => (registration as { remove: () => void }).remove());
+      }
+    };
+
+    const applySnapshot = (hardReset = false) => {
+      if (!mountedRef.current || roomRef.current !== room) return;
+      const snapshot = alpha9ReadRace(room);
+      phaseRef.current = snapshot.phase;
+      // O ACK 'card-result' remove o pending; o snapshot nao confirma uma
+      // carta especifica se duas ações chegam quase simultaneamente.
+      if (snapshot.phase !== 'racing' && cardPendingRef.current) clearCardPending();
+      startXRef.current = Object.fromEntries(snapshot.players.map(p => [p.sessionId, p.startX]));
+      if (snapshot.phase !== 'racing' && driveRef.current !== 0) resetStick();
+      const rosterKey = snapshot.players.map(player =>
+        `${player.sessionId}:${player.slot}:${player.carId}:${player.startX}`,
+      ).join('|');
+      if (lastRosterLogRef.current !== rosterKey) {
+        lastRosterLogRef.current = rosterKey;
+        console.log('[WILD MAPA ALPHA 9] Carros confirmados pela AWS:',
+          snapshot.players.map(player => ({
+            sessionId: player.sessionId,
+            slot: player.slot,
+            carId: player.carId,
+            startX: player.startX,
+            local: player.sessionId === room.sessionId,
+          })),
+        );
+      }
+      smoothingRef.current.ingest(snapshot.players, snapshot.phase, hardReset);
+      for (const player of snapshot.players) positionValue(player.sessionId, player.x);
+      if (hardReset) {
+        const firstFrame = smoothingRef.current.frame(Date.now());
+        snapshot.players.forEach(player => {
+          positionValue(player.sessionId, player.x).setValue(firstFrame[player.sessionId] ?? player.x);
+        });
+      }
+      setRace(snapshot);
+    };
+
+    const startSenders = () => {
+      stopSenders();
+      try {
+        const input = room.input();
+        if (!input) throw new Error('defineInput() não está disponível na sala.');
+        inputRef.current = input;
+      } catch (error) {
+        if (mountedRef.current) setProblem('Erro ao preparar a pilotagem: ' + String(error));
+        return;
+      }
+
+      let inputErrorReported = false;
+      inputTimer.current = setInterval(() => {
+        if (roomRef.current !== room || droppedRef.current || !inputRef.current) return;
+        // Somente o comando. x, velocidade e física são exclusivamente da AWS.
+        const drive = phaseRef.current === 'racing' ? driveRef.current : 0;
+        try {
+          inputRef.current.data.drive = drive;
+          inputRef.current.send();
+          inputErrorReported = false;
+        } catch (error) {
+          if (!inputErrorReported) console.warn('[WILD MAPA ALPHA 9] Falha no input:', error);
+          inputErrorReported = true;
+        }
+      }, 1000 / 30);
+
+      visualTimer.current = setInterval(() => {
+        if (!mountedRef.current || roomRef.current !== room || droppedRef.current) return;
+        const frame = smoothingRef.current.frame(Date.now());
+        for (const [sessionId, x] of Object.entries(frame)) {
+          positionValue(sessionId, x).setValue(x);
+        }
+        const me = frame[room.sessionId];
+        if (Number.isFinite(me)) {
+          const myStartX = startXRef.current[room.sessionId] ?? 0;
+          sceneryTravel.setValue(Math.max(0, me - myStartX) * SCENARIO_TRAVEL_SCALE);
+        }
+      }, 1000 / 30);
+
+      pingTimer.current = setInterval(() => {
+        if (roomRef.current !== room || droppedRef.current) return;
+        const now = Date.now();
+        for (const [seq, when] of pings.current) {
+          if (now - when > 10000) pings.current.delete(seq);
+        }
+        const seq = ++pingSequence.current;
+        try {
+          room.send('ping-check', { seq });
+          pings.current.set(seq, now);
+        } catch (error) {
+          console.warn('[WILD MAPA ALPHA 9] Ping indisponível:', error);
+        }
+      }, 2000);
+    };
+
+    // A configuração de reconexão é a mesma do laboratório.
+    room.reconnection.enabled = true;
+    room.reconnection.minUptime = 1000;
+    room.reconnection.maxRetries = 12;
+    room.reconnection.maxDelay = 1000;
+    room.reconnection.maxEnqueuedMessages = 0;
+
+    applySnapshot(true);
+    collectCleanup(room.onStateChange(() => applySnapshot()));
+    collectCleanup(room.onDrop(() => {
+      if (!mountedRef.current || roomRef.current !== room) return;
+      droppedRef.current = true;
+      stopSenders();
+      setDropped(true);
+      setPing(null);
+      setProblem('Conexão interrompida. Tentando recuperar a sessão com a AWS...');
+    }));
+    collectCleanup(room.onReconnect(() => {
+      if (!mountedRef.current || roomRef.current !== room) return;
+      droppedRef.current = false;
+      setDropped(false);
+      setProblem('');
+      setPing(null);
+      applySnapshot(true);
+      startSenders();
+    }));
+    collectCleanup(room.onLeave((code: number) => {
+      if (!mountedRef.current || roomRef.current !== room) return;
+      stopSenders();
+      clearWildAlpha9Room(room);
+      roomRef.current = null;
+      setProblem(`Sala encerrada pela AWS (código ${code}).`);
+    }));
+    collectCleanup(room.onError((code: number, message: string) => {
+      if (mountedRef.current && roomRef.current === room) {
+        setProblem(`Servidor AWS ${code}: ${message}`);
+      }
+    }));
+    collectCleanup(room.onMessage('pong-check', (message: { seq: number }) => {
+      if (!mountedRef.current || roomRef.current !== room) return;
+      const sentAt = pings.current.get(message.seq);
+      if (sentAt === undefined) return;
+      pings.current.delete(message.seq);
+      setPing(Date.now() - sentAt);
+    }));
+    collectCleanup(room.onMessage('nitro-result', (message: { ok: boolean; message: string }) => {
+      if (mountedRef.current && roomRef.current === room && !message.ok) setProblem(message.message);
+    }));
+    collectCleanup(room.onMessage('card-result', (message: { ok: boolean; cardId: string; message: string }) => {
+      if (!mountedRef.current || roomRef.current !== room) return;
+      clearCardPending();
+      if (!message.ok) showCardFeedback('⚠️ ' + message.message);
+    }));
+    collectCleanup(room.onMessage('card-used', (message: {
+      cardId: string; sourceSessionId: string; targetSessionId: string; blocked?: boolean;
+    }) => {
+      if (!mountedRef.current || roomRef.current !== room) return;
+      if (message.cardId === 'slow_slow') {
+        showCardFeedback(message.blocked
+          ? (message.targetSessionId === room.sessionId
+            ? '🛡️ SHIELD bloqueou o Slow Slow!' : '🛡️ O rival bloqueou seu ataque!')
+          : message.targetSessionId === room.sessionId
+            ? '🐌 SLOW SLOW! Sua velocidade foi reduzida.' : '🐌 SLOW SLOW aplicado no rival!');
+      } else if (message.cardId === 'shield') {
+        showCardFeedback(message.sourceSessionId === room.sessionId
+          ? '🛡️ SHIELD equipado!' : '🛡️ Rival ativou SHIELD!');
+      } else if (message.cardId === 'nitro_power') {
+        showCardFeedback(message.sourceSessionId === room.sessionId
+          ? '⚡ NITRO POWER ativado!' : '⚡ Rival usou NITRO POWER!');
+      }
+    }));
+
+    startSenders();
+    return () => {
+      mountedRef.current = false;
+      stopSenders();
+      if (cardFeedbackTimerRef.current) clearTimeout(cardFeedbackTimerRef.current);
+      subscriptions.forEach(unsubscribe => {
+        try { unsubscribe(); } catch { /* listener já desfeito */ }
+      });
+      // NÃO room.leave(): o usuário pode voltar ao Lab e retomar esta Room.
+    };
+  }, []);
+
+  // A sala pode estar em countdown/finished; comandos são aprovados pela AWS.
+  const sendCommand = (name: 'ready' | 'nitro-activate', payload: boolean | Record<string, never>) => {
+    const room = roomRef.current;
+    if (!room || droppedRef.current) return;
+    try { room.send(name, payload); }
+    catch (error) { setProblem('Comando não enviado: ' + String(error)); }
+  };
+
+  const castOnlineCard = (cardId: string) => {
+    const room = roomRef.current;
+    if (!room || droppedRef.current || phaseRef.current !== 'racing' || cardPendingRef.current) return;
+    cardPendingRef.current = true;
+    setCardPending(true);
+    try {
+      // Um pedido discreto, nunca posicao, dano, cooldown ou ID do alvo.
+      const requestId = `${room.sessionId}-${Date.now()}-${++cardRequestSeqRef.current}`;
+      room.send('card-use', { cardId, requestId });
+      if (cardAckTimerRef.current) clearTimeout(cardAckTimerRef.current);
+      cardAckTimerRef.current = setTimeout(() => {
+        if (mountedRef.current && cardPendingRef.current) {
+          clearCardPending();
+          showCardFeedback('Sem confirmação da AWS. Verifique sua conexão.');
+        }
+      }, 5000);
+    } catch (error) {
+      clearCardPending();
+      showCardFeedback('Falha ao usar carta: ' + String(error));
+    }
+  };
+
+  const returnToLab = () => {
+    resetStick();
+    router.back();
+  };
+
+  const abandonRoom = async () => {
+    if (isLeaving) return;
+    setIsLeaving(true);
+    const room = roomRef.current;
+    roomRef.current = null;
+    if (room) {
+      clearWildAlpha9Room(room);
+      try { await room.leave(); } catch { /* a sala já pode ter fechado */ }
+    }
+    router.back();
+  };
+
+  const room = roomRef.current;
+  const me = race?.players.find(player => player.sessionId === mySessionId);
+  const phase = race?.phase ?? 'waiting';
+  const racePlayers = race?.players ?? [];
+  const canDrive = Boolean(room && me?.connected && !dropped && phase === 'racing');
+  const canNitro = canDrive && Boolean(me && me.nitroCharges > 0 &&
+    me.nitroCooldown <= 0 && me.nitroRemaining <= 0);
+  const rival = racePlayers.find(player => player.sessionId !== mySessionId);
+  const deck = me ? [me.deckSlot0, me.deckSlot1, me.deckSlot2, me.deckSlot3] : ALPHA11_TEST_DECK;
+  const cardCooldown = (id: string) => id === 'slow_slow' ? (me?.slowCooldown ?? 0) :
+    id === 'nitro_power' ? (me?.nitroPowerCooldown ?? 0) :
+    id === 'shield' ? (me?.shieldCooldown ?? 0) : Infinity;
+  // Diagnostico Alpha 11.0.1: nenhum custo/efeito e calculado no celular.
+  // A lista de motivos reflete exclusivamente o snapshot recebido da AWS.
+  const cardBlockReason = (id: string): string | null => {
+    if (!ALPHA11_ENABLED.has(id)) return 'Carta ainda nao habilitada online.';
+    if (!room || !me) return 'Aguardando dados do jogador enviados pela AWS.';
+    if (!me.battleSyncReady) return 'Estado Alpha 11 ausente. Confirme o deploy do Schema e WildRaceRoom na AWS.';
+    if (dropped || !me.connected) return 'Conexao interrompida. Aguarde a reconexao.';
+    if (phase !== 'racing') return 'Disponivel somente depois do GO (fase atual: ' + phase + ').';
+    if (cardPending) return 'Aguardando confirmacao da carta anterior pela AWS.';
+    const definition = getCardDefinition(id);
+    if (!definition) return 'Carta desconhecida pelo catalogo.';
+    const remaining = cardCooldown(id);
+    if (remaining > 0) return 'Cooldown: ' + Math.ceil(remaining) + ' segundo(s).';
+    if (me.boost < definition.cost) return 'BOOST insuficiente: ' + me.boost + '/' +
+      definition.cost + ' gotas. AWS recupera 1 gota a cada 2s de corrida.';
+    if (id === 'slow_slow') {
+      if (!rival?.connected) return 'Adversario desconectado.';
+      if (rival.slowRemaining > 0) return 'Adversario ja esta sob o efeito Slow Slow.';
+    }
+    if (id === 'nitro_power' && me.nitroPowerRemaining > 0) return 'Nitro Power ja esta ativo.';
+    if (id === 'shield' && me.shieldCharges > 0) return 'Escudo ja esta ativo.';
+    return null;
+  };
+  const cardAvailable = (id: string) => cardBlockReason(id) === null;
+  const tryOnlineCard = (id: string) => {
+    const reason = cardBlockReason(id);
+    if (reason) {
+      showCardFeedback((getCardDefinition(id)?.name ?? id) + ': ' + reason);
+      console.log('[WILD CARD DIAG]', {id, reason, phase, boost: me?.boost,
+        cooldown: cardCooldown(id), battleSyncReady: me?.battleSyncReady,
+        pending: cardPending, ping});
+      return;
+    }
+    castOnlineCard(id);
+  };
+  const canReady = Boolean(room && !dropped &&
+    (phase === 'finished' || (phase === 'waiting' && !me?.ready)));
+  const distanceRun = (player: Alpha9Player) => Math.max(0, player.x - player.startX);
+  const leadPlayer = [...racePlayers].sort((a, b) => a.rank - b.rank || distanceRun(b) - distanceRun(a));
+  const progressOf = (player: Alpha9Player) => Math.max(0,
+    Math.min(100, 100 * distanceRun(player) / Math.max(1, race?.finishDistance ?? 6000)));
+  const finishState = phase === 'finished' ? (
+    race?.winnerSessionId === mySessionId ? '🏆 VITÓRIA!' :
+    race?.winnerSessionId ? '🏁 DERROTA' : '🏁 EMPATE'
+  ) : '';
+
+  return (
+    <View style={styles.container}>
+      <MemoCenarioBackground
+        mapId={(params.mapId as CenarioId) || 'sao_paulo'}
+        skyTheme={(params.skyTheme as SkyTheme) || 'day'}
+        groundY={groundY}
+        isMoving={phase === 'racing' && !dropped}
+        travelX={sceneryTravel}
+      />
+      <View pointerEvents="none" style={[styles.flatGround, {
+        top: groundY,
+        height: Math.max(100, screenHeight - groundY),
+      }]} />
+
+      {/* Uma única linha de solo para todos os carros.
+          A posição X entre eles vem dos snapshots suavizados da AWS. */}
+
+      {/* HUD superior: mesmos estilos do offline (ranking / minimapa / cronômetro). */}
+      <View style={styles.leftHud} pointerEvents="none">
+        <View style={styles.racersPanel}>
+          {leadPlayer.map((player, index) => (
+            <View key={player.sessionId} style={[
+              styles.racerHudRow,
+              player.sessionId === mySessionId && styles.racerHudRowPlayer,
+              !player.connected && onlineMapStyles.offlineRacer,
+            ]}>
+              <Text style={styles.racerHudPosition}>{player.rank > 0 ? player.rank : index + 1}</Text>
+              <View style={[styles.racerHudDot, {
+                backgroundColor: ALPHA9_COLORS[Math.max(0, player.slot) % ALPHA9_COLORS.length],
+              }]} />
+              <Text numberOfLines={1} style={[
+                styles.racerHudName,
+                player.sessionId === mySessionId && styles.racerHudNamePlayer,
+              ]}>{player.sessionId === mySessionId ? 'VOCÊ' : 'RIVAL'} · {player.carId.toUpperCase()}</Text>
+              <Text style={onlineMapStyles.racerHudMetres}>{Math.round(distanceRun(player))}u</Text>
+            </View>
+          ))}
+          {leadPlayer.length === 0 && <Text style={onlineMapStyles.smallHint}>Recebendo corredores...</Text>}
+        </View>
+        <View style={onlineMapStyles.connectionPill}>
+          <Text numberOfLines={1} style={onlineMapStyles.smallHint}>
+            {!room ? '● SEM SESSÃO' : dropped ? '● RECONECTANDO' : '● ONLINE'} · {ping === null ? 'PING —' : `${ping}ms`}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.miniMapContainer} pointerEvents="none">
+        <View style={styles.miniMapLine} />
+        {racePlayers.map(player => {
+          const progress = progressOf(player);
+          const own = player.sessionId === mySessionId;
+          return (
+            <View key={`minimap-${player.sessionId}`} style={[
+              styles.miniMapDot,
+              { left: `${progress}%` as `${number}%`,
+                backgroundColor: ALPHA9_COLORS[Math.max(0, player.slot) % ALPHA9_COLORS.length],
+                width: own ? 14 : 10, height: own ? 14 : 10,
+                top: '50%',
+                borderRadius: own ? 7 : 5, transform: [{ translateX: own ? -7 : -5 }],
+                borderWidth: own ? 1.5 : 0, borderColor: '#FFF',
+                zIndex: own ? 4 : 2,
+              },
+            ]}/>
+          );
+        })}
+      </View>
+
+      <View style={styles.rightHud}>
+        <View style={styles.timerBadge} pointerEvents="none">
+          <Text style={styles.scoreText}>
+            ⏱ {Math.floor((race?.raceTime ?? 0) / 60)}:{Math.floor((race?.raceTime ?? 0) % 60).toString().padStart(2, '0')}
+          </Text>
+        </View>
+        <View style={onlineMapStyles.phaseChip} pointerEvents="none">
+          <Text style={onlineMapStyles.phaseChipTitle}>{ALPHA9_PHASE_TEXT[phase]}</Text>
+          {phase === 'countdown' && <Text style={onlineMapStyles.countdownText}>{Math.max(1, Math.ceil(race?.countdown ?? 0))}</Text>}
+          <Text style={onlineMapStyles.phaseChipInfo}>AWS · {racePlayers.length}/2 · {Math.round(race?.finishDistance ?? 6000)}u</Text>
+        </View>
+        <View style={onlineMapStyles.sessionActions}>
+          <TouchableOpacity style={onlineMapStyles.sessionButton} onPress={returnToLab}>
+            <Text style={onlineMapStyles.sessionButtonText}>LAB</Text>
+          </TouchableOpacity>
+          <TouchableOpacity disabled={isLeaving} style={[onlineMapStyles.sessionButton, onlineMapStyles.sessionButtonLeave]} onPress={() => void abandonRoom()}>
+            <Text style={onlineMapStyles.sessionButtonText}>SAIR</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Cada carro usa SEMPRE o carId do Schema, nunca o CarContext nem os bots. */}
+      {racePlayers.map((player) => {
+        const supported = WILD_CAR_IDS.includes(player.carId as WildCarId) &&
+          Object.prototype.hasOwnProperty.call(carMaps, player.carId);
+        const localCosmetics = player.sessionId === mySessionId && selectedCar === player.carId;
+        const frontColor = localCosmetics ? selectedColorFront : ALPHA9_COLORS[Math.max(0, player.slot) % ALPHA9_COLORS.length];
+        const backColor = localCosmetics ? selectedColorBack : frontColor;
+        const horizontalX = relativePositionValue(player.sessionId, player.x);
+        return (
+          <Animated.View
+            key={`online-car-${player.sessionId}`}
+            pointerEvents="none"
+            style={[onlineMapStyles.carAnchor, {
+              left: screenWidth * 0.42,
+              top: groundY - PLAYER_SIZE, // mesma altura e rodas na mesma pista
+              zIndex: player.sessionId === mySessionId ? 9 : 8,
+              transform: [{ translateX: horizontalX }],
+              opacity: player.connected ? 1 : 0.45,
+            }]}
+          >
+            <View style={onlineMapStyles.carTag}>
+              <Text style={onlineMapStyles.carTagText} numberOfLines={1}>
+                {player.sessionId === mySessionId ? 'VOCÊ' : `RIVAL ${player.slot}`} · {player.carId.toUpperCase()}
+              </Text>
+              {player.nitroRemaining > 0 && <Text style={onlineMapStyles.nitroFlag}>⚡ NITRO</Text>}
+              {player.slowRemaining > 0 && <Text style={onlineMapStyles.slowFlag}>
+                🐌 SLOW {player.slowRemaining.toFixed(1)}s
+              </Text>}
+              {player.shieldCharges > 0 && <Text style={onlineMapStyles.shieldFlag}>🛡️ SHIELD</Text>}
+              {player.nitroPowerRemaining > 0 && <Text style={onlineMapStyles.nitroFlag}>
+                ⚡ POWER {player.nitroPowerRemaining.toFixed(1)}s
+              </Text>}
+            </View>
+            {supported ? (
+              <View style={onlineMapStyles.carContent}>
+                <Carro
+                  carType={player.carId as CarKey}
+                  carColorFront={frontColor}
+                  carColorBack={backColor}
+                  paintFinishId={localCosmetics ? selectedFinishId : undefined}
+                  equipment={localCosmetics ? selectedEquipment : undefined}
+                  speed={player.speed / KMH_PER_PHYSICS_UNIT}
+                  skin="default"
+                  renderWidth={onlineCarWidth}
+                />
+              </View>
+            ) : (
+              <View style={onlineMapStyles.unsupportedCar}>
+                <Text style={onlineMapStyles.unsupportedText}>CARRO NÃO RECONHECIDO: {player.carId || 'SEM ID'}</Text>
+              </View>
+            )}
+          </Animated.View>
+        );
+      })}
+
+      {cardFeedback !== '' && problem === '' && (
+        <View pointerEvents="none" style={onlineMapStyles.cardFeedbackPanel}>
+          <Text style={onlineMapStyles.cardFeedbackText}>{cardFeedback}</Text>
+        </View>
+      )}
+      {problem !== '' && (
+        <View style={onlineMapStyles.warningPanel}>
+          <Text style={onlineMapStyles.warningText}>{problem}</Text>
+        </View>
+      )}
+
+      {(phase === 'paused' || dropped) && (
+        <View style={onlineMapStyles.centerNotice} pointerEvents="none">
+          <Text style={onlineMapStyles.noticeText}>⏸️ AGUARDANDO RECONEXÃO</Text>
+          <Text style={onlineMapStyles.noticeDetail}>Nenhum movimento local é calculado.</Text>
+        </View>
+      )}
+      {phase === 'finished' && (
+        <View style={onlineMapStyles.centerNotice}>
+          <Text style={onlineMapStyles.finishTitle}>{finishState}</Text>
+          <Text style={onlineMapStyles.noticeDetail}>{race?.finishReason || 'Resultado confirmado pelo servidor'}</Text>
+          {canReady && (
+            <TouchableOpacity style={onlineMapStyles.readyButton} onPress={() => sendCommand('ready', true)}>
+              <Text style={onlineMapStyles.readyText}>REVANCHE · READY</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+      {phase === 'waiting' && canReady && (
+        <View style={onlineMapStyles.centerNotice}>
+          <Text style={onlineMapStyles.noticeText}>PRONTO PARA CORRER?</Text>
+          <TouchableOpacity style={onlineMapStyles.readyButton} onPress={() => sendCommand('ready', true)}>
+            <Text style={onlineMapStyles.readyText}>ESTOU PRONTO · READY</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      {phase === 'waiting' && me?.ready && (
+        <View style={onlineMapStyles.centerNotice} pointerEvents="none">
+          <Text style={onlineMapStyles.noticeText}>AGUARDANDO O OUTRO PILOTO...</Text>
+        </View>
+      )}
+
+      {/* ALPHA 11: os 4 slots do HUD sao sincronizados pela AWS.
+          Boost, cooldowns, buffs e escudo nao sao calculados no cliente. */}
+      <View style={styles.bottomHud}>
+        <View style={styles.bottomHudLeft}>
+          <View style={styles.deckPanel}>
+            <View style={styles.deckHandContainer}>
+              {deck.map((cardId, index) => {
+                const card = getCardDefinition(cardId);
+                const available = cardAvailable(cardId);
+                const enabled = ALPHA11_ENABLED.has(cardId);
+                const cooldown = cardCooldown(cardId);
+                const cooldownMax = card?.cooldownMs ? card.cooldownMs / 1000 : 1;
+                return (
+                  <TouchableOpacity
+                    key={`alpha11-card-${index}-${cardId}`}
+                    activeOpacity={available ? 0.7 : 1}
+                    // Permite tocar nos slots validos para EXPLICAR bloqueios.
+                    // O envio continua condicionado a cardBlockReason === null.
+                    disabled={!enabled}
+                    onPress={() => tryOnlineCard(cardId)}
+                    style={[styles.dynamicCardBtn, !available && styles.dynamicCardBtnDisabled,
+                      enabled && onlineMapStyles.activeSlowCard]}
+                  >
+                    {card && <Image source={card.image} resizeMode="contain" style={styles.deckCardImage}/>}
+                    {card && <View style={styles.cardCostBadge} pointerEvents="none">
+                      <Text style={styles.cardCostText}>💧{card.cost}</Text>
+                    </View>}
+                    {enabled && cooldown > 0 && <View style={[styles.cardCooldownMask,
+                      {height: `${Math.min(100, cooldown / Math.max(1, cooldownMax) * 100)}%` as `${number}%`}]} pointerEvents="none" />}
+                    {!enabled || !available ? (
+                      <View pointerEvents="none" style={onlineMapStyles.cardLock}>
+                        <Text style={onlineMapStyles.cardLockText}>
+                          {!enabled ? '🔒' : !me?.battleSyncReady ? '⚠️' :
+                            !canDrive ? '⏳' : cardPending ? '...' :
+                            cooldown > 0 ? `${Math.ceil(cooldown)}s` :
+                            (me?.boost ?? 0) < (card?.cost ?? 0) ? '💧' :
+                            cardId === 'shield' && (me?.shieldCharges ?? 0) > 0 ? '🛡️' :
+                            cardId === 'nitro_power' && (me?.nitroPowerRemaining ?? 0) > 0 ? '⚡' :
+                            cardId === 'slow_slow' && (rival?.slowRemaining ?? 0) > 0 ? '🐌' : '⏳'}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <View style={styles.boostBarContainer}>
+              <View style={[styles.boostLiquidFill, {width: `${Math.min(100, (me?.boost ?? 0) * 10)}%` as `${number}%`}]}>
+                <View style={styles.boostLiquidSheen}/>
+              </View>
+              <View style={styles.boostBarGloss}/>
+              <Text style={styles.boostBarText}>BOOST AWS 💧 {me?.boost ?? 0}/10 · SLOW / NITRO / SHIELD</Text>
+            </View>
+            {me && !me.battleSyncReady && (
+              <Text style={onlineMapStyles.schemaMissingLabel}>⚠️ STATE ALPHA 11 NAO RECEBIDO DA AWS</Text>
+            )}
+          </View>
+        </View>
+        <View style={styles.bottomHudRight}>
+          <View style={styles.performanceRow}>
+            <TouchableOpacity
+              activeOpacity={canNitro ? 0.72 : 1}
+              disabled={!canNitro}
+              onPress={() => sendCommand('nitro-activate', {})}
+              style={[styles.nitroBtn, !canNitro && styles.nitroBtnDisabled]}
+            >
+              <Text style={styles.nitroBtnIcon}>⚡</Text>
+              <Text style={styles.nitroBtnText}>NITRO</Text>
+            </TouchableOpacity>
+            <View style={[styles.vacuumRing, {
+              borderColor: (me?.nitroCharges ?? 0) > 0 ? '#00F0FF' : 'rgba(255,255,255,0.16)',
+            }]}>
+              <View style={styles.vacuumRingInner}>
+                <Text style={styles.vacuumPercent}>{me?.nitroCharges ?? 0}×</Text>
+                <Text style={styles.vacuumLabel}>CARGAS</Text>
+              </View>
+            </View>
+            <View style={styles.speedometer}>
+              <Text style={[styles.speedometerValue, (me?.nitroRemaining ?? 0) > 0 && styles.speedometerValueNitro]}>
+                {Math.max(0, Math.round(me?.speed ?? 0))}
+              </Text>
+              <Text style={styles.speedometerUnit}>VEL. AWS</Text>
+            </View>
+          </View>
+          <View style={[styles.analogPanel, !canDrive && onlineMapStyles.disabledAnalog]}>
+            <Text style={[styles.analogSideLabel, styles.analogBrakeLabel]}>FREIO</Text>
+            <View {...stickResponder.panHandlers} style={styles.analogTrack}
+              onLayout={e => { stickWidthRef.current = e.nativeEvent.layout.width; }}>
+              <View style={styles.analogBrakeZone}/>
+              <View style={styles.analogThrottleZone}/>
+              <View style={styles.analogCenterMark}/>
+              <Animated.View style={[styles.analogKnob, { transform: [{ translateX: stickX }] }]}>
+                <View style={styles.analogKnobInner}/>
+              </Animated.View>
+            </View>
+            <Text style={[styles.analogSideLabel, styles.analogThrottleLabel]}>ACELERA</Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// O isolamento entre componentes impede que qualquer effect/game loop offline
+// execute quando a rota veio do WildOnlineLab.
+export default function Mapa(props: MapaProps) {
+  const params = useLocalSearchParams<{ mode?: string }>();
+  return params.mode === 'onlineAlpha9'
+    ? <OnlineAlpha9Mapa />
+    : <OfflineMapa {...props} />;
+}
+
+const onlineMapStyles = StyleSheet.create({
+  // Pista única: as artes têm a mesma coordenada Y.
+  carAnchor: { position: 'absolute', width: PLAYER_SIZE, height: PLAYER_SIZE,
+    alignItems: 'center', justifyContent: 'flex-end' },
+  carContent: { width: '200%', alignItems: 'center', justifyContent: 'flex-end' },
+  carTag: { position: 'absolute', bottom: 65, alignSelf: 'center', minWidth: 76,
+    borderRadius: 7, paddingHorizontal: 5, paddingVertical: 2,
+    backgroundColor: 'rgba(12,15,24,0.88)', alignItems: 'center' },
+  carTagText: { color: '#FFF', fontSize: 8, fontWeight: '900' },
+  nitroFlag: { color: '#00FFFF', fontSize: 8, fontWeight: '900' },
+  slowFlag: { color: '#FFDB68', fontSize: 8, fontWeight: '900' },
+  shieldFlag: { color: '#61B8FF', fontSize: 8, fontWeight: '900' },
+  unsupportedCar: { width: 130, borderRadius: 8, backgroundColor: '#A83232', padding: 5 },
+  unsupportedText: { color: '#FFF', fontSize: 9, fontWeight: '800' },
+  offlineRacer: { opacity: 0.43 },
+  racerHudMetres: { color: '#B9FFDF', fontSize: 8, fontWeight: '800' },
+  connectionPill: { paddingHorizontal: 7, paddingVertical: 5, marginTop: 5,
+    borderRadius: 8, backgroundColor: 'rgba(8,8,12,0.58)' },
+  smallHint: { color: '#FFF', fontSize: 8, fontWeight: '800' },
+  phaseChip: { marginTop: 5, borderRadius: 9, paddingVertical: 4,
+    paddingHorizontal: 7, backgroundColor: 'rgba(8,8,12,0.60)', alignItems: 'center' },
+  phaseChipTitle: { color: '#FFD60A', fontSize: 8, fontWeight: '900' },
+  phaseChipInfo: { color: '#DDD', fontSize: 7, fontWeight: '700' },
+  countdownText: { color: '#00D084', fontSize: 24, fontWeight: '900' },
+  sessionActions: { flexDirection: 'row', gap: 5, marginTop: 5 },
+  sessionButton: { backgroundColor: 'rgba(36,47,70,0.9)', borderRadius: 6,
+    paddingHorizontal: 11, paddingVertical: 6 },
+  sessionButtonLeave: { backgroundColor: 'rgba(160,33,48,0.92)' },
+  sessionButtonText: { color: '#FFF', fontWeight: '900', fontSize: 9 },
+  inactiveCard: { position: 'relative' },
+  activeSlowCard: { borderWidth: 1.5, borderColor: '#FFDB68' },
+  cardFeedbackPanel: { position: 'absolute', bottom: BOTTOM_HUD_HEIGHT + 7,
+    left: 12, right: 12, zIndex: 54, padding: 8, borderRadius: 8,
+    backgroundColor: 'rgba(25,28,38,0.93)', borderWidth: 1, borderColor: '#FFDB68' },
+  cardFeedbackText: { color: '#FFDB68', fontSize: 10, fontWeight: '900', textAlign: 'center' },
+  cardLock: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center',
+    backgroundColor: 'rgba(4,7,12,0.33)' },
+  cardLockText: { fontSize: 19 },
+  schemaMissingLabel: { color: '#FF6767', fontSize: 8, fontWeight: '900', textAlign: 'center' },
+  disabledAnalog: { opacity: 0.42 },
+  warningPanel: { position: 'absolute', bottom: BOTTOM_HUD_HEIGHT + 7, left: 12, right: 12,
+    backgroundColor: 'rgba(180,20,20,0.93)', padding: 7, borderRadius: 8, zIndex: 55 },
+  warningText: { color: '#FFF', fontSize: 10, fontWeight: '800', textAlign: 'center' },
+  centerNotice: { position: 'absolute', top: '37%', alignSelf: 'center', zIndex: 45,
+    backgroundColor: 'rgba(7,12,21,0.88)', borderRadius: 16, padding: 16,
+    minWidth: 245, alignItems: 'center', gap: 10, borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)' },
+  noticeText: { color: '#FFD60A', fontSize: 15, fontWeight: '900', textAlign: 'center' },
+  finishTitle: { color: '#00D084', fontSize: 25, fontWeight: '900' },
+  noticeDetail: { color: '#FFF', fontSize: 11, textAlign: 'center' },
+  readyButton: { backgroundColor: '#00A86B', paddingVertical: 11,
+    paddingHorizontal: 22, borderRadius: 10, borderWidth: 2, borderColor: '#FFF' },
+  readyText: { color: '#FFF', fontSize: 12, fontWeight: '900' },
 });
