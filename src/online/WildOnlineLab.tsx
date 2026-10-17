@@ -19,7 +19,8 @@ import {
   ActivityIndicator,
   Pressable,
   SafeAreaView,
-  ScrollView,
+  Modal,
+  useWindowDimensions,
   Share,
   StyleSheet,
   Text,
@@ -116,6 +117,9 @@ const phaseText: Record<Phase, string> = {
 
 export default function WildOnlineLab() {
   const router = useRouter();
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
+  const compact = viewportHeight < 440;
+  const portrait = viewportHeight > viewportWidth;
   const { selectedCar } = useCarSelection();
   const profile = usePlayerStore(state => state.profile);
   // Fonte única para o veículo: garagem / CarSelection.
@@ -476,313 +480,339 @@ export default function WildOnlineLab() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView
-        contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.hero}>
-          <View pointerEvents="none" style={styles.heroOrbA} />
-          <View pointerEvents="none" style={styles.heroOrbB} />
-          <View style={styles.heroTop}>
-            <Text style={styles.heroMicro}>WF SOFT  /  WILD RUNNERS</Text>
-            <Text style={styles.heroVersion}>PRÉ-ALPHA 12</Text>
-          </View>
-          <Text style={styles.heroTitle}>WILD<Text style={styles.heroTitleAccent}> ONLINE</Text></Text>
-          <Text style={styles.heroSubtitle}>Seu rival está a um código de distância.</Text>
-          <View style={styles.heroBottom}>
-            <Text style={styles.heroTag}>🏁  1 PISTA</Text>
-            <Text style={styles.heroTag}>🏎️  2 PILOTOS</Text>
-            <Text style={styles.heroTag}>⚡  PvP</Text>
-          </View>
+      {portrait ? (
+        <View style={styles.rotateScreen}>
+          <Text style={styles.rotateIcon}>↻</Text>
+          <Text style={styles.rotateTitle}>GIRE PARA JOGAR</Text>
+          <Text style={styles.rotateText}>O lobby do Wild Online foi projetado para a tela horizontal.</Text>
+          <Pressable style={styles.rotateBack} onPress={() => router.back()}>
+            <Text style={styles.rotateBackText}>← VOLTAR</Text>
+          </Pressable>
         </View>
-
-        <View style={styles.connectionStrip}>
-          <View style={[styles.connectionDot, isPreview ? styles.dotGold : connectedRoomId && !isReconnecting ? styles.dotGreen : isReconnecting ? styles.dotOrange : styles.dotGrey]} />
-          <View style={styles.connectionInfo}>
-            <Text style={styles.connectionLabel}>{statusLabel}</Text>
-            <Text style={styles.connectionHint} numberOfLines={2}>
-              {isPreview ? 'Interface de demonstração · sem conexão AWS' : connectedRoomId ? (isReconnecting ? 'Reconectando com a AWS' : 'Servidor AWS · São Paulo') : 'Conecte-se quando sua rede estiver estável'}
-            </Text>
-          </View>
-          <View style={[styles.pingPill, pingIsHigh && styles.pingPillHigh]}>
-            <Text style={[styles.pingText, pingIsHigh && styles.pingTextHigh]}>
-              {isPreview || ping === null ? 'PING —' : `${ping} ms`}
-            </Text>
-          </View>
-        </View>
-
-        {!!detail && !isPreview && (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>{detail}</Text>
-          </View>
-        )}
-
-        {!connectedRoomId && hasTransferredRoom && (
-          <View style={styles.sectionCard}>
-            <Text style={styles.eyebrow}>SESSÃO ATIVA</Text>
-            <Text style={styles.sectionTitle}>Sua corrida ainda está no mapa</Text>
-            <Text style={styles.muted}>Retome a mesma conexão, sem criar outro jogador na AWS.</Text>
-            <Pressable style={styles.primaryButton} onPress={resumeTransferred}>
-              <Text style={styles.primaryButtonText}>🏎️  RETOMAR CORRIDA   →</Text>
-            </Pressable>
-            <Pressable style={styles.ghostDangerButton} onPress={() => void endTransferred()}>
-              <Text style={styles.dangerText}>Encerrar sessão anterior</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {!showingRoom && !hasTransferredRoom && (
-          <>
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionNumber}>01</Text>
-                <View style={styles.sectionHeaderText}>
-                  <Text style={styles.eyebrow}>VEÍCULO DA GARAGEM</Text>
-                  <Text style={styles.sectionTitle}>{hasGarageCar ? carId.toUpperCase() : 'SEM CARRO SELECIONADO'}</Text>
-                </View>
-              </View>
-              <View style={styles.garageSummary}>
-                <Text style={styles.garageSummaryIcon}>🏎️</Text>
-                <View style={styles.garageSummaryInfo}>
-                  <Text style={styles.garageSummaryTitle}>{hasGarageCar ? 'CARRO CONFIRMADO' : 'VOLTE A CAR SELECTION'}</Text>
-                  <Text style={styles.garageSummarySub}>
-                    {hasGarageCar ? 'O mesmo veículo da garagem será enviado para a AWS.' : 'A sala online não escolherá um veículo por você.'}
-                  </Text>
-                </View>
-                <Text style={styles.garageSummaryCheck}>{hasGarageCar ? '✓' : '!'}</Text>
-              </View>
-              {hasGarageCar && (
-                <View style={styles.statsStrip}>
-                  <Text style={styles.statsText}>⚙️ MOTOR VEL. NV.{localMotor?.speedLevel ?? 1}</Text>
-                  <Text style={styles.statsText}>🚀 ACEL. NV.{localMotor?.accelerationLevel ?? 1}</Text>
-                  <Text style={styles.statsText}>🏁 {localStats.topSpeedKmh.toFixed(0)} km/h (local)</Text>
-                </View>
-              )}
-              <Text style={styles.captionText}>
-                O online usa o carro selecionado em CAR SELECTION. Os upgrades locais ainda não alteram os atributos do servidor de testes.
+      ) : (
+        <View style={[styles.shell, compact && styles.shellCompact]}>
+          {/* Barra fixa: sem cabeçalho alto e sem necessidade de scroll. */}
+          <View style={styles.topBar}>
+            <View style={styles.brandMark}><Text style={styles.brandMarkText}>WF</Text></View>
+            <View style={styles.brandTextBlock}>
+              <Text style={styles.brandTitle}>WILD <Text style={styles.brandAccent}>ONLINE</Text></Text>
+              <Text style={styles.brandSub}>SALA MULTIPLAYER  /  PRÉ-ALPHA 12</Text>
+            </View>
+            <View style={styles.topFill} />
+            <View style={styles.connectionBadge}>
+              <View style={[styles.statusDot,
+                isPreview ? styles.goldDot : connectedRoomId && !isReconnecting ? styles.greenDot :
+                isReconnecting ? styles.orangeDot : styles.greyDot]} />
+              <Text style={styles.connectionText} numberOfLines={1}>{statusLabel}</Text>
+            </View>
+            <View style={[styles.pingBadge, pingIsHigh && styles.pingBadgeHigh]}>
+              <Text style={[styles.pingText, pingIsHigh && styles.pingTextHigh]}>
+                {isPreview || ping === null ? 'PING —' : `PING ${ping} ms`}
               </Text>
             </View>
+            <Pressable style={styles.backTop} onPress={() => {
+              if (isPreview) { setPreviewLobby(false); return; }
+              void leave();
+              router.back();
+            }}>
+              <Text style={styles.backTopText}>← VOLTAR</Text>
+            </Pressable>
+          </View>
 
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionNumber}>02</Text>
-                <View style={styles.sectionHeaderText}>
-                  <Text style={styles.eyebrow}>ESCOLHA COMO JOGAR</Text>
-                  <Text style={styles.sectionTitle}>Encontrar seu rival</Text>
+          {/* 70 / 30: painéis fixos e independentes da altura do conteúdo. */}
+          <View style={styles.split}>
+            <View style={styles.leftColumn}>
+              {!connectedRoomId && hasTransferredRoom ? (
+                <View style={[styles.mainPanel, compact && styles.compactMainPanel]}>
+                  <Text style={styles.sectionKicker}>SESSÃO EM ANDAMENTO</Text>
+                  <Text style={styles.mainTitle}>Sua corrida continua ativa</Text>
+                  <Text style={styles.desc} numberOfLines={2}>
+                    Retome a mesma conexão sem criar um jogador duplicado na AWS.
+                  </Text>
+                  <View style={styles.filler} />
+                  <View style={styles.actionsRow}>
+                    <Pressable style={[styles.mainAction, styles.flexGrow]} onPress={resumeTransferred}>
+                      <Text style={styles.mainActionText}>🏎️  RETOMAR CORRIDA →</Text>
+                    </Pressable>
+                    <Pressable style={styles.secondaryAction} onPress={() => void endTransferred()}>
+                      <Text style={styles.secondaryActionText}>ENCERRAR SESSÃO</Text>
+                    </Pressable>
+                  </View>
                 </View>
-              </View>
+              ) : !showingRoom ? (
+                <View style={[styles.mainPanel, compact && styles.compactMainPanel]}>
+                  <View style={styles.panelHeading}>
+                    <View style={styles.headingText}>
+                      <Text style={styles.sectionKicker}>01  /  MULTIPLAYER</Text>
+                      <Text style={styles.mainTitle}>ESCOLHA SUA SALA</Text>
+                    </View>
+                    <View style={styles.capacityChip}><Text style={styles.capacityText}>2 PILOTOS  ·  PRIVADA</Text></View>
+                  </View>
 
-              <View style={styles.modeSwitcher}>
-                <Pressable onPress={() => setLobbyMode('create')}
-                  style={[styles.modeButton, lobbyMode === 'create' && styles.modeSelected]}>
-                  <Text style={[styles.modeText, lobbyMode === 'create' && styles.modeTextSelected]}>＋  CRIAR SALA</Text>
-                </Pressable>
-                <Pressable onPress={() => setLobbyMode('join')}
-                  style={[styles.modeButton, lobbyMode === 'join' && styles.modeSelected]}>
-                  <Text style={[styles.modeText, lobbyMode === 'join' && styles.modeTextSelected]}>↗  ENTRAR</Text>
-                </Pressable>
-              </View>
+                  <View style={styles.modeRow}>
+                    <Pressable style={[styles.modeTab, lobbyMode === 'create' && styles.modeTabActive]}
+                      onPress={() => setLobbyMode('create')}>
+                      <Text style={[styles.modeLabel, lobbyMode === 'create' && styles.modeLabelActive]}>＋ CRIAR SALA</Text>
+                    </Pressable>
+                    <Pressable style={[styles.modeTab, lobbyMode === 'join' && styles.modeTabActive]}
+                      onPress={() => setLobbyMode('join')}>
+                      <Text style={[styles.modeLabel, lobbyMode === 'join' && styles.modeLabelActive]}>↗ ENTRAR COM CÓDIGO</Text>
+                    </Pressable>
+                  </View>
 
-              {lobbyMode === 'create' ? (
-                <View style={styles.modeDescription}>
-                  <Text style={styles.modeTitle}>Uma sala só de vocês.</Text>
-                  <Text style={styles.muted}>Crie uma sala privada, compartilhe o código com um amigo e corram juntos.</Text>
-                  <View style={styles.privacyChip}><Text style={styles.privacyText}>🔒  SALA PRIVADA · ATÉ 2 JOGADORES</Text></View>
+                  {lobbyMode === 'create' ? (
+                    <View style={styles.modeBody}>
+                      <Text style={styles.modeBodyTitle}>Crie uma sala só de vocês.</Text>
+                      <Text style={styles.desc} numberOfLines={2}>Compartilhe o código com um amigo e espere os dois pilotos ficarem prontos.</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.modeBodyJoin}>
+                      <Text style={styles.formLabel}>CÓDIGO DO CONVITE</Text>
+                      <TextInput
+                        style={styles.codeInput}
+                        placeholder="Ex.: 3BT0b4oXx"
+                        placeholderTextColor="#66768F"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        maxLength={48}
+                        value={roomCode}
+                        onChangeText={setRoomCode}
+                        returnKeyType="done"
+                      />
+                    </View>
+                  )}
+
+                  <View style={styles.filler} />
+                  <View style={styles.actionsRow}>
+                    <Pressable
+                      style={[styles.mainAction, styles.flexGrow, (busy || !hasGarageCar) && styles.disabled]}
+                      disabled={busy || !hasGarageCar}
+                      onPress={() => void connect(lobbyMode === 'join')}
+                    >
+                      {busy ? <ActivityIndicator color="#101522" size="small" /> : (
+                        <Text style={styles.mainActionText}>
+                          {lobbyMode === 'join' ? 'ENTRAR NA SALA  →' : 'CRIAR SALA PRIVADA  →'}
+                        </Text>
+                      )}
+                    </Pressable>
+                    <Pressable style={styles.secondaryAction} onPress={() => {
+                      setPreviewLobby(true);
+                      setPreviewOpponent(false);
+                      setShowDiagnostics(false);
+                    }}>
+                      <Text style={styles.secondaryActionText}>◇ PRÉVIA OFFLINE</Text>
+                    </Pressable>
+                  </View>
                 </View>
               ) : (
-                <View style={styles.modeDescription}>
-                  <Text style={styles.modeTitle}>Já recebeu um convite?</Text>
-                  <Text style={styles.muted}>Cole ou digite o código da sala enviada pelo anfitrião.</Text>
-                  <TextInput
-                    style={styles.codeInput}
-                    placeholder="Cole o código da sala"
-                    placeholderTextColor="#6D758A"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    maxLength={48}
-                    value={roomCode}
-                    onChangeText={setRoomCode}
-                    returnKeyType="done"
-                  />
+                <View style={[styles.mainPanel, compact && styles.compactMainPanel]}>
+                  <View style={styles.roomHeading}>
+                    <View style={styles.roomIdentity}>
+                      <Text style={styles.sectionKicker}>{isPreview ? 'MODO DEMONSTRAÇÃO · SEM AWS' : 'SALA PRIVADA  /  CONVITE'}</Text>
+                      <Text style={styles.inviteCode} selectable={!isPreview} numberOfLines={1} adjustsFontSizeToFit>
+                        {isPreview ? 'DEMO-LOCAL' : connectedRoomId}
+                      </Text>
+                    </View>
+                    <View style={styles.roomTopActions}>
+                      <Text style={styles.roomCount}>{roomPlayers}/2</Text>
+                      {!isPreview && (
+                        <Pressable style={styles.shareAction} onPress={() => void shareRoom()}>
+                          <Text style={styles.shareActionText}>↗ COMPARTILHAR</Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  </View>
+
+                  <View style={styles.pilotsRow}>
+                    <View style={[styles.pilotCompact, styles.pilotMine]}>
+                      <View style={styles.pilotNumber}><Text style={styles.pilotNumberText}>01</Text></View>
+                      <View style={styles.pilotDetails}>
+                        <Text style={styles.pilotName}>VOCÊ</Text>
+                        <Text style={styles.pilotCar} numberOfLines={1}>{isPreview ? (hasGarageCar ? carId.toUpperCase() : 'SEM CARRO') : (myPlayer?.carId ?? carId).toUpperCase()}</Text>
+                      </View>
+                      <Text style={[styles.pilotReady, !(isPreview || myPlayer?.ready) && styles.pilotNotReady]}>
+                        {isPreview ? 'DEMO' : myPlayer?.ready ? '✓ READY' : 'AGUARDANDO'}
+                      </Text>
+                    </View>
+                    <View style={[styles.pilotCompact, roomPlayers < 2 && styles.pilotEmpty]}>
+                      <View style={[styles.pilotNumber, styles.pilotNumberRival]}><Text style={styles.pilotNumberText}>02</Text></View>
+                      <View style={styles.pilotDetails}>
+                        <Text style={styles.pilotName}>{roomPlayers >= 2 ? (isPreview ? 'RIVAL DEMO' : 'RIVAL') : 'VAGA LIVRE'}</Text>
+                        <Text style={styles.pilotCar} numberOfLines={1}>{roomPlayers >= 2 ? (isPreview ? 'FUSCA · DEMO' : (race?.players.find(p => p.sessionId !== sessionId)?.carId ?? 'RIVAL').toUpperCase()) : 'AGUARDANDO PILOTO'}</Text>
+                      </View>
+                      <Text style={[styles.pilotReady, styles.pilotNotReady]}>
+                        {roomPlayers >= 2 ? (isPreview ? 'DEMO' : race?.players.find(p => p.sessionId !== sessionId)?.ready ? '✓ READY' : 'NA SALA') : '○ LIVRE'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.phaseRow}>
+                    <Text style={styles.phaseLabel} numberOfLines={1}>
+                      {isPreview ? '⏳ AGUARDANDO RIVAL' : phaseText[currentPhase]}
+                    </Text>
+                    {currentPhase === 'countdown' && !isPreview && <Text style={styles.countdown}>{race?.countdown ?? 3}</Text>}
+                    {currentPhase === 'finished' && !isPreview && (
+                      <Text style={styles.finishResult}>
+                        {race?.winnerSessionId === sessionId ? '🏆 VITÓRIA' : race?.winnerSessionId ? 'DERROTA' : 'EMPATE'}
+                      </Text>
+                    )}
+                    <View style={styles.filler} />
+                    {!isPreview && currentPhase === 'waiting' && myPlayer?.ready && <Text style={styles.readyMini}>✓ PRONTO</Text>}
+                  </View>
+
+                  <View style={styles.filler} />
+                  <View style={styles.actionsRow}>
+                    {isPreview ? (
+                      <>
+                        <Pressable style={[styles.mainAction, styles.flexGrow]} onPress={() => setPreviewOpponent(value => !value)}>
+                          <Text style={styles.mainActionText}>{previewOpponent ? '− OCULTAR RIVAL' : '＋ SIMULAR RIVAL'}</Text>
+                        </Pressable>
+                        <Pressable style={styles.secondaryAction} onPress={() => setPreviewLobby(false)}>
+                          <Text style={styles.secondaryActionText}>SAIR DA PRÉVIA</Text>
+                        </Pressable>
+                      </>
+                    ) : (
+                      <>
+                        {canReady && (
+                          <Pressable style={[styles.mainAction, styles.flexGrow]} onPress={() => sendRaceCommand('ready', true)}>
+                            <Text style={styles.mainActionText}>{currentPhase === 'finished' ? '↻ REVANCHE' : '✓ ESTOU PRONTO!'}</Text>
+                          </Pressable>
+                        )}
+                        {!isReconnecting && (
+                          <Pressable style={[styles.mapAction, !canReady && styles.flexGrow]} onPress={enterOnlineMap}>
+                            <Text style={styles.mapActionText}>🏎️ ABRIR PISTA →</Text>
+                          </Pressable>
+                        )}
+                        <Pressable style={styles.roomLeave} onPress={() => void leave()}>
+                          <Text style={styles.roomLeaveText}>SAIR</Text>
+                        </Pressable>
+                      </>
+                    )}
+                  </View>
                 </View>
               )}
 
-              <Pressable
-                style={[styles.primaryButton, (busy || !hasGarageCar) && styles.inactive]}
-                disabled={busy || !hasGarageCar}
-                onPress={() => void connect(lobbyMode === 'join')}
-              >
-                {busy ? <ActivityIndicator color="#111827" /> : (
-                  <Text style={styles.primaryButtonText}>
-                    {lobbyMode === 'join' ? 'ENTRAR NA SALA   →' : 'CRIAR SALA PRIVADA   →'}
-                  </Text>
+              <View style={styles.leftBottomBar}>
+                <Text style={styles.bottomStatus} numberOfLines={1} ellipsizeMode="tail">
+                  {isPreview ? 'Prévia local: nenhum jogador conectado à AWS.' : detail}
+                </Text>
+                {!!connectedRoomId && !isPreview && (
+                  <Pressable style={styles.toolsLink} onPress={() => setShowDiagnostics(true)}>
+                    <Text style={styles.toolsLinkText}>⚙ TELEMETRIA</Text>
+                  </Pressable>
                 )}
+              </View>
+            </View>
+
+            <View style={styles.rightColumn}>
+              <View style={[styles.garagePanel, compact && styles.compactSidePanel]}>
+                <View style={styles.sideTitleRow}>
+                  <Text style={styles.sectionKicker}>SEU VEÍCULO</Text>
+                  <Text style={styles.sideCheck}>{hasGarageCar ? '✓ GARAGEM' : 'SEM SELEÇÃO'}</Text>
+                </View>
+                <View style={styles.carIdentity}>
+                  <View style={[styles.carIconArea, compact && styles.compactCarIconArea]}><Text style={styles.carIcon}>🏎️</Text></View>
+                  <View style={styles.carIdentityText}>
+                    <Text style={styles.carName} numberOfLines={1} adjustsFontSizeToFit>
+                      {hasGarageCar ? carId.toUpperCase() : 'SELECIONE UM CARRO'}
+                    </Text>
+                    <Text style={styles.carSub} numberOfLines={1}>CAR SELECTION · VEÍCULO ATIVO</Text>
+                  </View>
+                </View>
+                <View style={styles.carSpecs}>
+                  <View style={styles.specCol}>
+                    <Text style={styles.specLabel}>VELOCIDADE</Text>
+                    <Text style={styles.specNumber}>{localStats.topSpeedKmh.toFixed(0)} <Text style={styles.specUnit}>km/h</Text></Text>
+                  </View>
+                  <View style={styles.specDivider} />
+                  <View style={styles.specCol}>
+                    <Text style={styles.specLabel}>MOTOR</Text>
+                    <Text style={styles.specNumber}>NV. {localMotor?.speedLevel ?? 1}</Text>
+                  </View>
+                </View>
+                <Text style={styles.sideCaveat} numberOfLines={compact ? 1 : 2}>Dados da garagem. A física da corrida online ainda usa os atributos definidos pela AWS.</Text>
+              </View>
+
+              <View style={[styles.deckPanel, compact && styles.compactSidePanel]}>
+                <View style={styles.sideTitleRow}>
+                  <Text style={styles.sectionKicker}>SEU DECK</Text>
+                  <Text style={styles.deckCount}>0/4 VINCULADAS</Text>
+                </View>
+                <View style={styles.deckGrid}>
+                  {[0, 1, 2, 3].map(slot => (
+                    <View key={slot} style={styles.deckSlot}>
+                      <Text style={styles.deckSlotIcon}>◇</Text>
+                      <Text style={styles.deckSlotLabel}>SLOT 0{slot + 1}</Text>
+                    </View>
+                  ))}
+                </View>
+                <Text style={styles.deckNote} numberOfLines={compact ? 1 : 2}>Espaços reservados. O deck equipado será conectado nesta tela numa próxima etapa.</Text>
+              </View>
+            </View>
+          </View>
+          <View style={styles.footer}>
+            <Text style={styles.footerBrand}>WF SOFT  /  WILD RUNNERS</Text>
+            <Text style={styles.footerInfo}>LOBBY PRIVADO • 2 JOGADORES • PRÉ-ALPHA 12</Text>
+          </View>
+        </View>
+      )}
+
+      {/* Ferramentas fora da área principal, em janela sobreposta. */}
+      <Modal visible={showDiagnostics && !portrait} animationType="fade" transparent
+        onRequestClose={() => setShowDiagnostics(false)} supportedOrientations={['landscape', 'landscape-left', 'landscape-right']}>
+        <View style={styles.modalShade}>
+          <View style={[styles.modalPanel, { maxWidth: Math.min(viewportWidth - 28, 980), maxHeight: viewportHeight - 24 }]}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.sectionKicker}>SALA ONLINE / AWS</Text>
+                <Text style={styles.modalTitle}>FERRAMENTAS DE LABORATÓRIO</Text>
+              </View>
+              <Pressable style={styles.modalClose} onPress={() => setShowDiagnostics(false)}>
+                <Text style={styles.modalCloseText}>✕ FECHAR</Text>
               </Pressable>
             </View>
-
-            <Pressable style={styles.previewButton} onPress={() => { setPreviewLobby(true); setPreviewOpponent(false); setShowDiagnostics(false); }}>
-              <Text style={styles.previewButtonText}>◇  VER PRÉVIA DO LOBBY SEM INTERNET</Text>
-              <Text style={styles.previewHint}>Somente visual · nenhum comando enviado</Text>
-            </Pressable>
-          </>
-        )}
-
-        {showingRoom && (
-          <>
-            <View style={styles.roomCard}>
-              <View style={styles.roomCardHeader}>
-                <Text style={styles.eyebrow}>{isPreview ? 'DEMONSTRAÇÃO LOCAL' : 'SUA SALA PRIVADA'}</Text>
-                <View style={styles.privateBadge}><Text style={styles.privateBadgeText}>🔒 PRIVADA</Text></View>
-              </View>
-              <Text style={styles.roomHelp}>{isPreview ? 'Veja como o lobby ficará com um segundo jogador.' : 'Compartilhe este código com seu rival:'}</Text>
-              <Text selectable={!isPreview} style={styles.roomCode}>{isPreview ? 'DEMO-LOCAL' : connectedRoomId}</Text>
-              {!isPreview && (
-                <Pressable style={styles.inviteButton} onPress={() => void shareRoom()}>
-                  <Text style={styles.inviteText}>↗   COMPARTILHAR CONVITE</Text>
-                </Pressable>
-              )}
-              <Text style={styles.roomFoot}>{isPreview ? 'Prévia visual — esta sala não existe na AWS.' : 'Também é possível selecionar e copiar o código acima.'}</Text>
-            </View>
-
-            <View style={styles.sectionCard}>
-              <View style={styles.lobbyTitleRow}>
-                <View>
-                  <Text style={styles.eyebrow}>LOBBY MULTIPLAYER</Text>
-                  <Text style={styles.sectionTitle}>Pilotos na pista</Text>
-                </View>
-                <Text style={styles.playerCount}>{roomPlayers}/2</Text>
-              </View>
-              <View style={styles.pilotSlots}>
-                <View style={styles.pilotCard}>
-                  <View style={styles.pilotBadge}><Text style={styles.pilotBadgeText}>01</Text></View>
-                  <View style={styles.pilotInfo}>
-                    <Text style={styles.pilotTitle}>{isPreview ? 'VOCÊ' : (myPlayer ? 'VOCÊ' : 'JOGADOR 1')}</Text>
-                    <Text style={styles.pilotSub} numberOfLines={1}>{isPreview ? (hasGarageCar ? carId.toUpperCase() : 'SEM CARRO') : (myPlayer?.carId ?? race?.players[0]?.carId ?? carId).toUpperCase()}</Text>
-                  </View>
-                  <Text style={styles.pilotState}>{isPreview ? 'NA SALA' : myPlayer?.ready ? '✓ PRONTO' : 'CONECTADO'}</Text>
-                </View>
-                <View style={[styles.pilotCard, roomPlayers < 2 && styles.pilotCardEmpty]}>
-                  <View style={[styles.pilotBadge, styles.pilotBadgeSecondary]}><Text style={styles.pilotBadgeText}>02</Text></View>
-                  <View style={styles.pilotInfo}>
-                    <Text style={styles.pilotTitle}>{roomPlayers >= 2 ? (isPreview ? 'RIVAL DEMO' : 'RIVAL') : 'AGUARDANDO...'}</Text>
-                    <Text style={styles.pilotSub} numberOfLines={1}>{roomPlayers >= 2 ? (isPreview ? 'FUSCA · FICTÍCIO' : (race?.players.find(p => p.sessionId !== sessionId)?.carId ?? 'RIVAL').toUpperCase()) : 'Convide outro jogador'}</Text>
-                  </View>
-                  <Text style={[styles.pilotState, roomPlayers < 2 && styles.pilotStateWait]}>
-                    {roomPlayers >= 2 ? (race?.players.find(p => p.sessionId !== sessionId)?.ready ? '✓ PRONTO' : 'NA SALA') : '○ LIVRE'}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.phaseStrip}>
-                <Text style={styles.phaseText}>{isPreview ? '⏳ AGUARDANDO RIVAL' : phaseText[currentPhase]}</Text>
-                {currentPhase === 'countdown' && !isPreview && <Text style={styles.countdownText}>{race?.countdown ?? 3}</Text>}
-              </View>
-              {currentPhase === 'finished' && !isPreview && (
-                <Text style={styles.resultText}>
-                  {race?.winnerSessionId === sessionId ? '🏆 VITÓRIA' : race?.winnerSessionId ? '🏁 DERROTA' : '🏁 EMPATE'}
-                </Text>
-              )}
-              {!isPreview && canReady && (
-                <Pressable style={styles.primaryButton} onPress={() => sendRaceCommand('ready', true)}>
-                  <Text style={styles.primaryButtonText}>{currentPhase === 'finished' ? '↻   PEDIR REVANCHE' : '✓   ESTOU PRONTO!'}</Text>
-                </Pressable>
-              )}
-              {!isPreview && currentPhase === 'waiting' && myPlayer?.ready && (
-                <Text style={styles.readyHint}>✓ Você está pronto. A corrida começará quando o outro jogador também estiver.</Text>
-              )}
-              {!isPreview && !isReconnecting && (
-                <Pressable style={styles.mapButton} onPress={enterOnlineMap}>
-                  <Text style={styles.mapButtonText}>🏎️   ABRIR PISTA ONLINE   →</Text>
-                </Pressable>
-              )}
-              {isPreview && (
-                <Pressable style={styles.previewOpponentButton} onPress={() => setPreviewOpponent(value => !value)}>
-                  <Text style={styles.previewOpponentText}>{previewOpponent ? '○  OCULTAR RIVAL DEMONSTRATIVO' : '＋  SIMULAR RIVAL (SOMENTE VISUAL)'}</Text>
-                </Pressable>
-              )}
-              {isPreview && (
-                <Pressable style={styles.mapButton} onPress={() => setPreviewLobby(false)}>
-                  <Text style={styles.mapButtonText}>←   SAIR DA PRÉVIA</Text>
-                </Pressable>
-              )}
-              <Text style={styles.captionText}>
-                {isPreview ? 'READY e acesso ao mapa estão desativados na prévia.' : 'As posições, READY e resultados continuam sendo definidos pela AWS.'}
-              </Text>
-            </View>
-
-            {!isPreview && (
-              <>
-                <Pressable style={styles.diagnosticsToggle} onPress={() => setShowDiagnostics(value => !value)}>
-                  <View>
-                    <Text style={styles.diagnosticsTitle}>⚙️   Ferramentas de laboratório</Text>
-                    <Text style={styles.diagnosticsCaption}>Ping, telemetria e controles de teste</Text>
-                  </View>
-                  <Text style={styles.diagnosticsChevron}>{showDiagnostics ? '−' : '＋'}</Text>
-                </Pressable>
-
-                {showDiagnostics && (
-                  <>
-                    <View style={styles.sectionCard}>
-                      <Text style={styles.eyebrow}>TELEMETRIA AWS</Text>
-                      <Text style={styles.sectionTitle}>Posições oficiais</Text>
-                      <Text style={styles.muted}>Sessão: {sessionId || '—'} · Tempo: {(race?.raceTime ?? 0).toFixed(2)} s</Text>
-                      {(race?.players ?? []).map(player => {
-                        const visualX = visualPositions[player.sessionId] ?? player.x;
-                        const progressWorld = Math.max(0, visualX - player.startX);
-                        const progress = Math.max(0, Math.min(100, 100 * progressWorld / Math.max(1, race?.finishDistance ?? 6000)));
-                        return (
-                          <View key={player.sessionId} style={[styles.telemetryRow, player.sessionId === sessionId && styles.telemetryRowSelf]}>
-                            <Text style={styles.telemetryTitle}>
-                              {player.sessionId === sessionId ? 'VOCÊ' : 'RIVAL'} · {player.carId.toUpperCase()} · {player.rank}º
-                            </Text>
-                            <View style={styles.track}>
-                              <View style={[styles.trackFill, { width: `${progress}%` as `${number}%` }]} />
-                              <View style={[styles.trackCar, { left: `${Math.min(91, progress)}%` as `${number}%` }]}><Text>🏎️</Text></View>
-                            </View>
-                            <Text style={styles.telemetryCaption}>Progresso {progress.toFixed(1)}% · x={player.x.toFixed(1)} · largada={player.startX.toFixed(0)}</Text>
-                            <Text style={styles.telemetryCaption}>Velocidade {player.speed.toFixed(1)} / {player.maxSpeed.toFixed(1)} · Nitro {player.nitroCharges} cargas</Text>
-                            <Text style={styles.telemetryCaption}>{player.connected ? 'Conectado' : 'Reconectando'} · Efeito nitro {player.nitroRemaining.toFixed(1)}s · Recarga {player.nitroCooldown.toFixed(1)}s</Text>
-                          </View>
-                        );
-                      })}
+            <View style={styles.modalContent}>
+              <View style={styles.modalTelemetry}>
+                <Text style={styles.modalSectionTitle}>POSIÇÕES OFICIAIS · {(race?.raceTime ?? 0).toFixed(1)}s</Text>
+                {(race?.players ?? []).map(player => {
+                  const visualX = visualPositions[player.sessionId] ?? player.x;
+                  const progress = Math.max(0, Math.min(100, 100 * Math.max(0, visualX - player.startX) / Math.max(1, race?.finishDistance ?? 6000)));
+                  return (
+                    <View key={player.sessionId} style={styles.telemetryCard}>
+                      <Text style={styles.telemetryName}>{player.sessionId === sessionId ? 'VOCÊ' : 'RIVAL'} · {player.carId.toUpperCase()} · {player.rank}º</Text>
+                      <View style={styles.telemetryTrack}><View style={[styles.telemetryFill, { width: `${progress}%` as `${number}%` }]} /></View>
+                      <Text style={styles.telemetryData}>{progress.toFixed(0)}% · {player.speed.toFixed(0)} u/s · {player.connected ? 'CONECTADO' : 'RECONEXÃO'}</Text>
                     </View>
-                    <View style={styles.sectionCard}>
-                      <Text style={styles.eyebrow}>CONTROLES DE TESTE · 30 HZ</Text>
-                      <View style={styles.buttonPair}>
-                        <Pressable disabled={!canControl} style={[styles.smallAction, autoDrive && styles.actionOn, !canControl && styles.inactive]} onPress={toggleAuto}>
-                          <Text style={styles.smallActionText}>AUTO: {autoDrive ? 'ON' : 'OFF'}</Text>
-                        </Pressable>
-                        <Pressable disabled={!canNitro} style={[styles.smallAction, !canNitro && styles.inactive]} onPress={() => sendRaceCommand('nitro-activate', {})}>
-                          <Text style={styles.smallActionText}>⚡ NITRO</Text>
-                        </Pressable>
-                      </View>
-                      <View style={styles.buttonPair}>
-                        <Pressable disabled={!canControl} style={[styles.brakeAction, !canControl && styles.inactive]}
-                          onPressIn={() => holdDrive('brake', true)} onPressOut={() => holdDrive('brake', false)}>
-                          <Text style={styles.smallActionText}>FREAR</Text>
-                        </Pressable>
-                        <Pressable disabled={!canControl} style={[styles.accelAction, !canControl && styles.inactive]}
-                          onPressIn={() => holdDrive('accel', true)} onPressOut={() => holdDrive('accel', false)}>
-                          <Text style={styles.smallActionText}>ACELERAR</Text>
-                        </Pressable>
-                      </View>
-                      <Text style={styles.captionText}>Aceleração e freio são enviados para a AWS; nenhuma física local é aplicada.</Text>
-                    </View>
-                  </>
-                )}
-                <Pressable style={styles.exitRoomButton} onPress={() => void leave()}>
-                  <Text style={styles.exitRoomText}>SAIR DA SALA</Text>
-                </Pressable>
-              </>
-            )}
-          </>
-        )}
-
-        <Pressable style={styles.backButton} onPress={() => { if (isPreview) { setPreviewLobby(false); return; } void leave(); router.back(); }}>
-          <Text style={styles.backButtonText}>←  VOLTAR</Text>
-        </Pressable>
-        <Text style={styles.footerText}>WILD RUNNERS  •  WF SOFT  •  ONLINE LAB</Text>
-      </ScrollView>
+                  );
+                })}
+              </View>
+              <View style={styles.modalControlArea}>
+                <Text style={styles.modalSectionTitle}>COMANDOS DE TESTE · 30 HZ</Text>
+                <View style={styles.modalActions}>
+                  <Pressable disabled={!canControl} style={[styles.modalAction, autoDrive && styles.autoEnabled, !canControl && styles.disabled]} onPress={toggleAuto}>
+                    <Text style={styles.modalActionText}>AUTO {autoDrive ? 'ON' : 'OFF'}</Text>
+                  </Pressable>
+                  <Pressable disabled={!canNitro} style={[styles.modalAction, !canNitro && styles.disabled]} onPress={() => sendRaceCommand('nitro-activate', {})}>
+                    <Text style={styles.modalActionText}>⚡ NITRO</Text>
+                  </Pressable>
+                </View>
+                <View style={styles.modalActions}>
+                  <Pressable disabled={!canControl} style={[styles.modalAction, styles.brakeAction, !canControl && styles.disabled]}
+                    onPressIn={() => holdDrive('brake', true)} onPressOut={() => holdDrive('brake', false)}>
+                    <Text style={styles.modalActionText}>FREAR</Text>
+                  </Pressable>
+                  <Pressable disabled={!canControl} style={[styles.modalAction, styles.accelAction, !canControl && styles.disabled]}
+                    onPressIn={() => holdDrive('accel', true)} onPressOut={() => holdDrive('accel', false)}>
+                    <Text style={styles.modalActionText}>ACELERAR</Text>
+                  </Pressable>
+                </View>
+                <Text style={styles.modalInfo} numberOfLines={2}>A AWS continua responsável pela física, posição, nitro e resultado.</Text>
+              </View>
+            </View>
+            <Text style={styles.modalFoot} numberOfLines={2}>SESSÃO: {sessionId || '—'}  ·  {detail}</Text>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -798,118 +828,146 @@ const COLORS = {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLORS.bg },
-  container: { width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 54, gap: 14 },
-  hero: { backgroundColor: '#18243B', borderColor: '#364761', borderWidth: 1, borderRadius: 24, paddingHorizontal: 22, paddingTop: 18, paddingBottom: 22, overflow: 'hidden', minHeight: 191 },
-  heroOrbA: { position: 'absolute', width: 210, height: 210, borderRadius: 105, backgroundColor: '#263F60', right: -83, top: -114, opacity: 0.85 },
-  heroOrbB: { position: 'absolute', width: 112, height: 112, borderRadius: 56, backgroundColor: '#30476B', right: 42, bottom: -72, opacity: 0.58 },
-  heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
-  heroMicro: { color: '#A3B3CF', fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
-  heroVersion: { color: COLORS.gold, fontSize: 10, fontWeight: '900', letterSpacing: 0.7 },
-  heroTitle: { color: COLORS.white, fontSize: 36, fontWeight: '900', letterSpacing: -1.8, marginTop: 20 },
-  heroTitleAccent: { color: COLORS.gold },
-  heroSubtitle: { color: '#C6D2E5', fontSize: 14, marginTop: 6, fontWeight: '600' },
-  heroBottom: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 20 },
-  heroTag: { color: '#E7EAF0', fontSize: 10, fontWeight: '900', paddingVertical: 7, paddingHorizontal: 9, borderRadius: 9, overflow: 'hidden', backgroundColor: '#263650' },
-  connectionStrip: { flexDirection: 'row', backgroundColor: '#11192B', borderRadius: 16, padding: 13, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', gap: 10 },
-  connectionDot: { width: 9, height: 9, borderRadius: 5 },
-  dotGold: { backgroundColor: COLORS.gold },
-  dotGreen: { backgroundColor: '#45D89E' },
-  dotOrange: { backgroundColor: '#FFAB5C' },
-  dotGrey: { backgroundColor: '#6E7D95' },
-  connectionInfo: { flex: 1, minWidth: 0 },
-  connectionLabel: { color: COLORS.white, fontSize: 12, fontWeight: '900', letterSpacing: 0.8 },
-  connectionHint: { color: COLORS.soft, fontSize: 11, marginTop: 3 },
-  pingPill: { borderColor: '#43506C', borderWidth: 1, backgroundColor: '#253148', paddingHorizontal: 10, paddingVertical: 7, borderRadius: 11 },
-  pingPillHigh: { backgroundColor: '#49301F', borderColor: '#99643B' },
-  pingText: { color: '#CFD9ED', fontSize: 12, fontWeight: '900' },
-  pingTextHigh: { color: '#FFBE77' },
-  notice: { backgroundColor: '#121C30', borderLeftWidth: 3, borderLeftColor: '#789CD4', paddingHorizontal: 14, paddingVertical: 11, borderRadius: 8 },
-  noticeText: { color: '#C9D4EA', fontSize: 12, lineHeight: 17 },
-  sectionCard: { backgroundColor: COLORS.card, borderRadius: 20, borderWidth: 1, borderColor: COLORS.border, padding: 17, gap: 13 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  sectionHeaderText: { flex: 1 },
-  sectionNumber: { backgroundColor: '#283650', overflow: 'hidden', borderRadius: 13, color: COLORS.gold, fontWeight: '900', fontSize: 17, paddingVertical: 12, paddingHorizontal: 12 },
-  eyebrow: { fontSize: 10, color: COLORS.gold, fontWeight: '900', letterSpacing: 1.3, marginBottom: 5 },
-  sectionTitle: { fontSize: 20, color: COLORS.white, fontWeight: '900' },
-  muted: { color: COLORS.soft, fontSize: 13, lineHeight: 19 },
-  garageSummary: { flexDirection: 'row', alignItems: 'center', gap: 13, padding: 12, backgroundColor: '#1E2A40', borderRadius: 14, borderWidth: 1, borderColor: '#344258' },
-  garageSummaryIcon: { fontSize: 28 },
-  garageSummaryInfo: { flex: 1, gap: 4 },
-  garageSummaryTitle: { color: COLORS.white, fontWeight: '900', fontSize: 12 },
-  garageSummarySub: { color: COLORS.soft, fontSize: 11, lineHeight: 16 },
-  garageSummaryCheck: { color: COLORS.gold, fontWeight: '900', fontSize: 19 },
-  statsStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, backgroundColor: '#11192B', padding: 11, borderRadius: 11 },
-  statsText: { fontSize: 11, color: '#BED4F8', fontWeight: '800' },
-  captionText: { color: '#9EAAC0', fontSize: 11, lineHeight: 16 },
-  modeSwitcher: { flexDirection: 'row', padding: 5, backgroundColor: '#0E1625', borderRadius: 13, gap: 5 },
-  modeButton: { flex: 1, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 10, paddingHorizontal: 6 },
-  modeSelected: { backgroundColor: '#34445E' },
-  modeText: { color: '#9DACC6', fontSize: 12, fontWeight: '900' },
-  modeTextSelected: { color: COLORS.white },
-  modeDescription: { gap: 9 },
-  modeTitle: { color: COLORS.white, fontSize: 15, fontWeight: '900' },
-  privacyChip: { alignSelf: 'flex-start', paddingHorizontal: 11, paddingVertical: 8, backgroundColor: '#243746', borderRadius: 9 },
-  privacyText: { fontSize: 10, color: '#8DE2B7', fontWeight: '900' },
-  codeInput: { borderColor: '#465675', borderWidth: 1, paddingHorizontal: 16, minHeight: 55, backgroundColor: '#0E1524', borderRadius: 12, color: COLORS.white, fontWeight: '800', fontSize: 16 },
-  primaryButton: { backgroundColor: COLORS.gold, minHeight: 53, borderRadius: 13, justifyContent: 'center', alignItems: 'center', padding: 13 },
-  primaryButtonText: { color: '#171B27', fontSize: 13, fontWeight: '900', letterSpacing: 0.2, textAlign: 'center' },
-  inactive: { opacity: 0.45 },
-  previewButton: { borderWidth: 1, borderStyle: 'dashed', borderColor: '#536581', borderRadius: 14, padding: 15, alignItems: 'center', gap: 3 },
-  previewButtonText: { color: '#DCE5F5', fontWeight: '900', fontSize: 12 },
-  previewHint: { color: '#8797B3', fontSize: 11 },
-  previewOpponentButton: { alignItems: 'center', justifyContent: 'center', borderColor: '#566783', borderWidth: 1, borderRadius: 12, paddingVertical: 13 },
-  previewOpponentText: { color: '#C3D5F2', fontSize: 11, fontWeight: '900' },
-  roomCard: { backgroundColor: '#1B2942', borderRadius: 20, borderWidth: 1, borderColor: '#4C6385', padding: 18, gap: 10 },
-  roomCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  privateBadge: { paddingHorizontal: 10, paddingVertical: 5, backgroundColor: '#28463E', borderRadius: 9 },
-  privateBadgeText: { color: '#8DE2B7', fontSize: 10, fontWeight: '900' },
-  roomHelp: { color: '#BBC7DA', fontSize: 12 },
-  roomCode: { fontSize: 31, fontWeight: '900', color: COLORS.white, letterSpacing: 1.8, textAlign: 'center', paddingVertical: 5 },
-  inviteButton: { backgroundColor: '#F3F7FF', minHeight: 43, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
-  inviteText: { fontSize: 12, color: '#1C2940', fontWeight: '900' },
-  roomFoot: { color: '#9EADCA', fontSize: 11, textAlign: 'center' },
-  lobbyTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
-  playerCount: { fontSize: 18, color: COLORS.gold, fontWeight: '900', paddingHorizontal: 13, paddingVertical: 9, borderRadius: 10, backgroundColor: '#2E3240' },
-  pilotSlots: { gap: 9 },
-  pilotCard: { flexDirection: 'row', gap: 11, alignItems: 'center', backgroundColor: '#202E43', borderRadius: 14, padding: 13, borderColor: '#3C5270', borderWidth: 1 },
-  pilotCardEmpty: { borderStyle: 'dashed', borderColor: '#4E5B71', backgroundColor: '#192236' },
-  pilotBadge: { borderRadius: 11, height: 37, width: 37, alignItems: 'center', justifyContent: 'center', backgroundColor: '#574A25' },
-  pilotBadgeSecondary: { backgroundColor: '#2B3A52' },
-  pilotBadgeText: { fontSize: 14, color: COLORS.white, fontWeight: '900' },
-  pilotInfo: { flex: 1, minWidth: 0, gap: 4 },
-  pilotTitle: { color: COLORS.white, fontWeight: '900', fontSize: 12 },
-  pilotSub: { color: '#B3C0D3', fontWeight: '700', fontSize: 11 },
-  pilotState: { color: '#82E3AC', fontSize: 10, fontWeight: '900' },
-  pilotStateWait: { color: '#D4B96F' },
-  phaseStrip: { backgroundColor: '#10192B', paddingVertical: 12, paddingHorizontal: 13, borderRadius: 12, flexDirection: 'row', justifyContent: 'space-between' },
-  phaseText: { color: '#DEE9FC', fontSize: 12, fontWeight: '900' },
-  countdownText: { color: COLORS.gold, fontSize: 18, fontWeight: '900' },
-  resultText: { color: COLORS.gold, fontSize: 21, fontWeight: '900', textAlign: 'center' },
-  readyHint: { color: '#A0E8BD', fontSize: 12, textAlign: 'center' },
-  mapButton: { backgroundColor: '#294265', minHeight: 52, borderRadius: 13, justifyContent: 'center', alignItems: 'center', borderColor: '#4E719C', borderWidth: 1, padding: 11 },
-  mapButtonText: { color: COLORS.white, fontSize: 13, fontWeight: '900' },
-  ghostDangerButton: { alignItems: 'center', padding: 12 },
-  dangerText: { color: '#FF9B9B', fontWeight: '800', fontSize: 12 },
-  diagnosticsToggle: { backgroundColor: '#121B2C', borderRadius: 15, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 16, paddingVertical: 15, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  diagnosticsTitle: { color: '#D7E1F0', fontSize: 13, fontWeight: '900' },
-  diagnosticsCaption: { color: '#8090A9', fontSize: 11, marginTop: 5 },
-  diagnosticsChevron: { color: COLORS.gold, fontSize: 22 },
-  telemetryRow: { borderWidth: 1, borderColor: '#34445D', padding: 11, borderRadius: 12, gap: 6 },
-  telemetryRowSelf: { borderColor: '#F4D24A' },
-  telemetryTitle: { color: COLORS.white, fontSize: 12, fontWeight: '900' },
-  telemetryCaption: { color: '#BCC8DB', fontSize: 11 },
-  track: { height: 24, backgroundColor: '#2D3A50', borderRadius: 6, overflow: 'hidden', justifyContent: 'center' },
-  trackFill: { height: 7, backgroundColor: COLORS.gold, borderRadius: 3 },
-  trackCar: { position: 'absolute', top: 1 },
-  buttonPair: { flexDirection: 'row', gap: 9 },
-  smallAction: { flex: 1, padding: 13, backgroundColor: '#285078', borderRadius: 12, alignItems: 'center' },
-  actionOn: { backgroundColor: '#28764D' },
-  brakeAction: { flex: 1, padding: 13, backgroundColor: '#85373A', borderRadius: 12, alignItems: 'center' },
-  accelAction: { flex: 1, padding: 13, backgroundColor: '#277A53', borderRadius: 12, alignItems: 'center' },
-  smallActionText: { color: COLORS.white, fontWeight: '900', fontSize: 12 },
-  exitRoomButton: { alignItems: 'center', padding: 13 },
-  exitRoomText: { color: '#FCA3A3', fontWeight: '900', fontSize: 12 },
-  backButton: { alignItems: 'center', padding: 10 },
-  backButtonText: { color: '#97A9C3', fontWeight: '900', fontSize: 13 },
-  footerText: { color: '#526580', fontSize: 10, textAlign: 'center', fontWeight: '900', letterSpacing: 1.3 },
+  shell: { flex: 1, paddingHorizontal: 12, paddingTop: 5, paddingBottom: 3, gap: 7 },
+  shellCompact: { paddingHorizontal: 8, gap: 5 },
+  topBar: { height: 43, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 3 },
+  brandMark: { width: 35, height: 35, borderRadius: 10, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center' },
+  brandMarkText: { fontSize: 15, color: '#131A28', fontWeight: '900', fontStyle: 'italic' },
+  brandTextBlock: { justifyContent: 'center', gap: 1 },
+  brandTitle: { fontSize: 19, fontWeight: '900', letterSpacing: -0.6, color: COLORS.white },
+  brandAccent: { color: COLORS.gold },
+  brandSub: { color: '#92A2BC', fontSize: 8, fontWeight: '800', letterSpacing: 1.0 },
+  topFill: { flex: 1 },
+  connectionBadge: { maxWidth: 155, minWidth: 78, flexDirection: 'row', alignItems: 'center', paddingVertical: 7, paddingHorizontal: 8, gap: 6, borderRadius: 9, borderWidth: 1, borderColor: COLORS.border, backgroundColor: '#172238' },
+  statusDot: { width: 7, height: 7, borderRadius: 4 },
+  greenDot: { backgroundColor: '#43DBA0' },
+  goldDot: { backgroundColor: COLORS.gold },
+  orangeDot: { backgroundColor: '#FFA961' },
+  greyDot: { backgroundColor: '#758299' },
+  connectionText: { flexShrink: 1, fontSize: 9, color: COLORS.white, fontWeight: '900' },
+  pingBadge: { paddingHorizontal: 9, paddingVertical: 8, borderRadius: 9, backgroundColor: '#18253A' },
+  pingBadgeHigh: { backgroundColor: '#51321E' },
+  pingText: { color: '#D1DDEE', fontSize: 10, fontWeight: '900' },
+  pingTextHigh: { color: '#FFC28C' },
+  backTop: { paddingHorizontal: 11, paddingVertical: 8, borderWidth: 1, borderColor: '#384760', borderRadius: 9 },
+  backTopText: { fontSize: 10, fontWeight: '900', color: '#DCE6F6' },
+  split: { flex: 1, minHeight: 0, flexDirection: 'row', gap: 9 },
+  leftColumn: { flex: 7, minWidth: 0, gap: 5 },
+  rightColumn: { flex: 3, minWidth: 0, gap: 7 },
+  mainPanel: { flex: 1, minHeight: 0, backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.border, borderRadius: 16, padding: 12, gap: 8 },
+  sectionKicker: { color: COLORS.gold, fontWeight: '900', letterSpacing: 1.0, fontSize: 9 },
+  panelHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
+  headingText: { gap: 3, flex: 1 },
+  mainTitle: { fontSize: 21, fontWeight: '900', color: COLORS.white, letterSpacing: -0.5 },
+  capacityChip: { backgroundColor: '#203448', borderRadius: 8, paddingHorizontal: 9, paddingVertical: 7 },
+  capacityText: { color: '#B1EDCF', fontSize: 9, fontWeight: '900' },
+  modeRow: { flexDirection: 'row', borderRadius: 10, backgroundColor: '#0A1221', padding: 4, gap: 5 },
+  modeTab: { flex: 1, minHeight: 34, borderRadius: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  modeTabActive: { backgroundColor: '#344761' },
+  modeLabel: { color: '#99A9C4', fontSize: 10, fontWeight: '900' },
+  modeLabelActive: { color: COLORS.white },
+  modeBody: { gap: 4, justifyContent: 'center' },
+  modeBodyJoin: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  modeBodyTitle: { color: COLORS.white, fontWeight: '900', fontSize: 13 },
+  formLabel: { width: 102, color: COLORS.soft, fontWeight: '900', fontSize: 9 },
+  codeInput: { flex: 1, minWidth: 0, height: 39, backgroundColor: '#0E1727', borderRadius: 9, color: COLORS.white, borderWidth: 1, borderColor: '#486082', paddingHorizontal: 12, fontWeight: '800', fontSize: 14 },
+  desc: { color: COLORS.soft, fontSize: 11, lineHeight: 15 },
+  filler: { flex: 1 },
+  actionsRow: { flexDirection: 'row', alignItems: 'stretch', gap: 7 },
+  flexGrow: { flex: 1 },
+  mainAction: { minHeight: 39, paddingHorizontal: 9, paddingVertical: 9, backgroundColor: COLORS.gold, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  mainActionText: { color: '#192131', fontWeight: '900', fontSize: 11, textAlign: 'center' },
+  secondaryAction: { minHeight: 39, minWidth: 116, justifyContent: 'center', alignItems: 'center', backgroundColor: '#263751', borderRadius: 10, paddingHorizontal: 8 },
+  secondaryActionText: { fontSize: 10, color: '#DCE9FF', fontWeight: '900', textAlign: 'center' },
+  disabled: { opacity: 0.4 },
+  leftBottomBar: { height: 23, paddingHorizontal: 3, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  bottomStatus: { fontSize: 10, flex: 1, color: '#A7B8D0' },
+  toolsLink: { paddingHorizontal: 7, paddingVertical: 3, borderColor: '#3C567A', borderWidth: 1, borderRadius: 6 },
+  toolsLinkText: { color: '#B9D2FF', fontWeight: '900', fontSize: 9 },
+  roomHeading: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  roomIdentity: { flex: 1, minWidth: 0, gap: 2 },
+  inviteCode: { color: COLORS.white, fontWeight: '900', fontSize: 23, letterSpacing: 1.0 },
+  roomTopActions: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  roomCount: { color: COLORS.gold, fontWeight: '900', fontSize: 16 },
+  shareAction: { borderRadius: 9, backgroundColor: '#ECF4FF', paddingHorizontal: 10, minHeight: 32, justifyContent: 'center' },
+  shareActionText: { color: '#172238', fontWeight: '900', fontSize: 10 },
+  pilotsRow: { flexDirection: 'row', gap: 8 },
+  pilotCompact: { flex: 1, minWidth: 0, minHeight: 51, flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 9, borderRadius: 10, borderColor: '#426A78', borderWidth: 1, backgroundColor: '#1C3340' },
+  pilotMine: { borderColor: '#A68B39', backgroundColor: '#322E26' },
+  pilotEmpty: { borderStyle: 'dashed', borderColor: '#48556C', backgroundColor: '#1C2534' },
+  pilotNumber: { borderRadius: 7, backgroundColor: '#574C25', paddingHorizontal: 6, paddingVertical: 7 },
+  pilotNumberRival: { backgroundColor: '#365270' },
+  pilotNumberText: { color: COLORS.white, fontSize: 10, fontWeight: '900' },
+  pilotDetails: { minWidth: 0, flex: 1, gap: 3 },
+  pilotName: { fontSize: 11, color: COLORS.white, fontWeight: '900' },
+  pilotCar: { fontSize: 9, color: '#B8C6DD', fontWeight: '700' },
+  pilotReady: { color: '#98EEC8', fontSize: 8, fontWeight: '900' },
+  pilotNotReady: { color: '#D7B96D' },
+  phaseRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 29, borderRadius: 8, paddingHorizontal: 10, backgroundColor: '#0D1627' },
+  phaseLabel: { color: '#C6D9F1', fontSize: 10, fontWeight: '900' },
+  countdown: { color: COLORS.gold, fontWeight: '900', fontSize: 17 },
+  finishResult: { color: COLORS.gold, fontWeight: '900', fontSize: 10 },
+  readyMini: { color: '#81E8B2', fontSize: 10, fontWeight: '900' },
+  mapAction: { minHeight: 39, backgroundColor: '#2C527D', borderRadius: 10, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 12 },
+  mapActionText: { color: '#EFF6FF', fontWeight: '900', fontSize: 11, textAlign: 'center' },
+  roomLeave: { paddingHorizontal: 10, justifyContent: 'center', backgroundColor: '#472730', borderRadius: 10 },
+  roomLeaveText: { color: '#FFBAC2', fontSize: 10, fontWeight: '900' },
+  compactMainPanel: { padding: 9, gap: 6 },
+  compactSidePanel: { padding: 7, gap: 4 },
+  compactCarIconArea: { width: 31, height: 31 },
+  garagePanel: { flex: 1, minHeight: 0, backgroundColor: '#1B2A40', borderWidth: 1, borderColor: '#3C5272', padding: 10, borderRadius: 15, gap: 8 },
+  sideTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4 },
+  sideCheck: { color: '#A3E5BC', fontSize: 8, fontWeight: '900' },
+  carIdentity: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  carIconArea: { width: 42, height: 42, borderRadius: 10, backgroundColor: '#2D3C52', alignItems: 'center', justifyContent: 'center' },
+  carIcon: { fontSize: 25 },
+  carIdentityText: { minWidth: 0, flex: 1, gap: 3 },
+  carName: { color: COLORS.white, fontWeight: '900', fontSize: 15 },
+  carSub: { fontSize: 8, color: '#9EB0CC', fontWeight: '800' },
+  carSpecs: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111C2C', borderRadius: 9, paddingHorizontal: 7, paddingVertical: 5 },
+  specCol: { flex: 1, alignItems: 'center', gap: 2 },
+  specLabel: { color: '#9EB0CC', fontSize: 8, fontWeight: '900' },
+  specNumber: { color: COLORS.white, fontWeight: '900', fontSize: 13 },
+  specUnit: { fontSize: 9, fontWeight: '800' },
+  specDivider: { height: 22, width: 1, backgroundColor: '#394A60' },
+  sideCaveat: { color: '#95A6BD', fontSize: 9, lineHeight: 12 },
+  deckPanel: { flex: 1, minHeight: 0, backgroundColor: COLORS.card, borderColor: COLORS.border, borderWidth: 1, borderRadius: 15, padding: 10, gap: 7 },
+  deckCount: { color: '#9CABC2', fontSize: 8, fontWeight: '900' },
+  deckGrid: { flex: 1, minHeight: 0, flexDirection: 'row', flexWrap: 'wrap', gap: 5, alignContent: 'center' },
+  deckSlot: { width: '48%', minHeight: 34, flexGrow: 1, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 4, borderWidth: 1, borderStyle: 'dashed', borderColor: '#53627B', borderRadius: 9, backgroundColor: '#1B2A40' },
+  deckSlotIcon: { color: '#8694AA', fontWeight: '900', fontSize: 14 },
+  deckSlotLabel: { color: '#ACBAD0', fontSize: 9, fontWeight: '900' },
+  deckNote: { color: '#97A8C0', fontSize: 9, lineHeight: 12 },
+  footer: { height: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4 },
+  footerBrand: { color: '#647892', fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  footerInfo: { color: '#647892', fontSize: 8, fontWeight: '800' },
+  rotateScreen: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 30, gap: 13 },
+  rotateIcon: { fontSize: 52, color: COLORS.gold },
+  rotateTitle: { color: COLORS.white, fontWeight: '900', fontSize: 23 },
+  rotateText: { color: COLORS.soft, textAlign: 'center', fontSize: 14 },
+  rotateBack: { paddingHorizontal: 24, paddingVertical: 13, borderRadius: 12, backgroundColor: '#2E405E' },
+  rotateBackText: { color: COLORS.white, fontWeight: '900' },
+  modalShade: { flex: 1, backgroundColor: 'rgba(2,7,16,0.92)', justifyContent: 'center', alignItems: 'center', padding: 12 },
+  modalPanel: { width: '98%', backgroundColor: COLORS.card, borderWidth: 1, borderColor: '#506585', padding: 13, borderRadius: 17, gap: 10 },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  modalTitle: { color: COLORS.white, fontWeight: '900', fontSize: 17, marginTop: 4 },
+  modalClose: { backgroundColor: '#33445C', borderRadius: 9, paddingHorizontal: 13, paddingVertical: 9 },
+  modalCloseText: { color: COLORS.white, fontWeight: '900', fontSize: 10 },
+  modalContent: { flexDirection: 'row', gap: 12 },
+  modalTelemetry: { flex: 1.3, gap: 6 },
+  modalControlArea: { flex: 1, gap: 9 },
+  modalSectionTitle: { color: COLORS.gold, fontWeight: '900', fontSize: 10 },
+  telemetryCard: { borderWidth: 1, borderColor: '#394B65', borderRadius: 10, backgroundColor: '#1B2A41', padding: 8, gap: 4 },
+  telemetryName: { color: COLORS.white, fontSize: 10, fontWeight: '900' },
+  telemetryData: { color: '#A9BDDA', fontSize: 9 },
+  telemetryTrack: { height: 6, borderRadius: 4, backgroundColor: '#40516A', overflow: 'hidden' },
+  telemetryFill: { height: 6, borderRadius: 4, backgroundColor: COLORS.gold },
+  modalActions: { flexDirection: 'row', gap: 7 },
+  modalAction: { flex: 1, minHeight: 37, paddingHorizontal: 7, alignItems: 'center', justifyContent: 'center', borderRadius: 9, backgroundColor: '#2B527D' },
+  modalActionText: { color: COLORS.white, fontSize: 11, fontWeight: '900' },
+  autoEnabled: { backgroundColor: '#296E4B' },
+  brakeAction: { backgroundColor: '#8A3B44' },
+  accelAction: { backgroundColor: '#278157' },
+  modalInfo: { color: '#9CADC6', fontSize: 10, lineHeight: 14 },
+  modalFoot: { color: '#A0B3CC', fontSize: 9 },
 });
