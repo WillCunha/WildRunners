@@ -4,7 +4,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { getDeckStoreCopy } from '@/src/utils/deckStoreText';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { beginOnlinePlayerMutation, confirmOnlinePlayerMutation } from '@/src/services/sync/onlinePlayerMutation';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -19,8 +19,17 @@ import {
 } from 'react-native';
 
 const EMPTY_CARD_IDS: string[] = [];
+// Esse catálogo precisa coincidir com WildRaceRoom e com o HUD do Mapa online.
+// Nunca se deve vender como jogável online algo não reconhecido na AWS.
+const ENABLED_ONLINE_CARDS = new Set<string>([
+  'slow_slow', 'nitro_power', 'shield', 'bullet', 'chains', 'tnt', 'oil_spit',
+  'quick_repair', 'emp_pulse',
+]);
+const ONLINE_BATTLE_COST: Record<string, number> = {quick_repair: 5, emp_pulse: 6};
 
 export default function DeckSelection() {
+  const { next } = useLocalSearchParams<{ next?: string }>();
+  const onlineFlow = next !== 'offline';
   const { width, height } = useWindowDimensions();
 
   const { t, language } = useLanguage();
@@ -34,7 +43,8 @@ export default function DeckSelection() {
 
   const ownedCardIds = profile?.unlocks?.cards ?? EMPTY_CARD_IDS;
   const ownedSet = useMemo(() => new Set(ownedCardIds), [ownedCardIds]);
-  const ownedCards = useMemo(() => ALL_CARDS.filter(card => ownedSet.has(card.id)), [ownedSet]);
+  const ownedCards = useMemo(() => ALL_CARDS.filter(card => ownedSet.has(card.id) &&
+    (!onlineFlow || ENABLED_ONLINE_CARDS.has(card.id))), [ownedSet, onlineFlow]);
 
   const [activeCategory, setActiveCategory] = useState<CardCategory>('attack');
   const [selectedDeck, setSelectedDeck] = useState<string[]>([]);
@@ -43,8 +53,9 @@ export default function DeckSelection() {
   // Após o AsyncStorage hidratar, mostra o deck salvo. Nunca sobrescreve o save vazio na partida.
   useEffect(() => {
     if (!hydrated) return;
-    setSelectedDeck(equippedDeck.filter(id => ownedSet.has(id) && !!getCardDefinition(id)));
-  }, [hydrated, profile?.id, equippedDeck, ownedSet]);
+    setSelectedDeck(equippedDeck.filter(id => ownedSet.has(id) && !!getCardDefinition(id) &&
+      (!onlineFlow || ENABLED_ONLINE_CARDS.has(id))));
+  }, [hydrated, profile?.id, equippedDeck, ownedSet, onlineFlow]);
 
   const isCompactLandscape = height < 420;
   const columns = width >= 1180 ? 4 : width >= 760 ? 3 : 2;
@@ -71,7 +82,7 @@ export default function DeckSelection() {
   );
 
   const toggleCard = (cardId: string) => {
-    if (!hydrated || !profile || !ownedSet.has(cardId)) return;
+    if (!hydrated || !profile || !ownedSet.has(cardId) || (onlineFlow && !ENABLED_ONLINE_CARDS.has(cardId))) return;
     setOpenDescriptionId(null);
 
     if (selectedDeck.includes(cardId)) {
@@ -127,17 +138,22 @@ export default function DeckSelection() {
       return;
     }
 
-    router.navigate({
-      pathname: '/MapSelectionScreen',
-      params: { deck: JSON.stringify(selectedDeck) },
-    });
+    if (onlineFlow) {
+      router.navigate('/OnlineLab' as any);
+    } else {
+      router.navigate({
+        pathname: '/MapSelectionScreen',
+        params: { deck: JSON.stringify(selectedDeck) },
+      });
+    }
   };
 
   const attackCount = ownedCards.filter(card => card.category === 'attack').length;
   const defenseCount = ownedCards.filter(card => card.category === 'defense').length;
   const isDeckComplete = selectedDeck.length === MAX_DECK_SIZE &&
     new Set(selectedDeck).size === MAX_DECK_SIZE &&
-    selectedDeck.every(id => ownedSet.has(id) && !!getCardDefinition(id));
+    selectedDeck.every(id => ownedSet.has(id) && !!getCardDefinition(id) &&
+      (!onlineFlow || ENABLED_ONLINE_CARDS.has(id)));
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -178,7 +194,7 @@ export default function DeckSelection() {
             <View style={styles.availableTopRow}>
               <View>
                 <Text style={styles.sectionTitle}>{t('deckSelection.availableCards')}</Text>
-                <Text style={styles.sectionHint}>{t('deckSelection.availableHint')}</Text>
+                <Text style={styles.sectionHint}>{onlineFlow ? 'CARTAS HABILITADAS NO MULTIPLAYER' : t('deckSelection.availableHint')}</Text>
               </View>
 
               <View style={styles.categoryTabs}>
@@ -258,7 +274,7 @@ export default function DeckSelection() {
                   >
                     <View style={styles.cardTopRow}>
                       <View style={[styles.costBadge, { borderColor: card.color }]}>
-                        <Text style={styles.costText}>💧 {card.cost}</Text>
+                        <Text style={styles.costText}>💧 {onlineFlow ? (ONLINE_BATTLE_COST[card.id] ?? card.cost) : card.cost}</Text>
                       </View>
 
                       {isSelected && (
@@ -387,7 +403,7 @@ export default function DeckSelection() {
                           `deckSelection.categories.${card.category}`
                         )}
                         {' • 💧 '}
-                        {card.cost}
+                        {onlineFlow ? (ONLINE_BATTLE_COST[card.id] ?? card.cost) : card.cost}
                       </Text>
                     </View>
 

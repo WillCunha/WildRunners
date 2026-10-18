@@ -12,11 +12,13 @@ import {
 } from '@/src/online/wildOnlineCarStats';
 import { WildPositionSmoother } from '@/src/online/wildOnlineSmoothing';
 import { usePlayerStore } from '@/src/store/playerStore';
+import { getCardDefinition } from '@/src/utils/cardMap';
 import { Client } from '@colyseus/sdk';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   SafeAreaView,
   Modal,
@@ -30,6 +32,10 @@ import {
 
 const SERVER_URL = 'https://online.wfsoft.com.br';
 const ROOM_TYPE = 'wild_race';
+const ENABLED_ONLINE_CARDS = new Set<string>([
+  'slow_slow', 'nitro_power', 'shield', 'bullet', 'chains', 'tnt', 'oil_spit',
+  'quick_repair', 'emp_pulse',
+]);
 
 // SDK v0.18.x fornece room.input(), room.onDrop() e room.onReconnect().
 type OnlineRoom = Awaited<ReturnType<Client['create']>>;
@@ -122,6 +128,11 @@ export default function WildOnlineLab() {
   const portrait = viewportHeight > viewportWidth;
   const { selectedCar } = useCarSelection();
   const profile = usePlayerStore(state => state.profile);
+  const equippedDeck = usePlayerStore(state => state.equippedDeck);
+  const deckReady = Array.isArray(equippedDeck) && equippedDeck.length === 4 &&
+    new Set(equippedDeck).size === 4 &&
+    equippedDeck.every(id => ENABLED_ONLINE_CARDS.has(id) && !!getCardDefinition(id) &&
+      profile?.unlocks?.cards?.includes(id));
   // Fonte única para o veículo: garagem / CarSelection.
   // O fallback aqui serve APENAS para renderizar dados na prévia offline.
   // Sem seleção válida, o comando de criar/entrar em sala fica bloqueado.
@@ -355,6 +366,10 @@ export default function WildOnlineLab() {
       setDetail('Nenhum carro válido selecionado. Volte a CAR SELECTION e escolha um veículo antes de correr online.');
       return;
     }
+    if (!deckReady) {
+      setDetail('Deck inválido ou com carta ainda não habilitada online. Escolha quatro cartas em DECK SELECTION.');
+      return;
+    }
     if (getWildAlpha9Room()) {
       setDetail('Já existe uma sessão no mapa online. Retome ou encerre antes de criar outra.');
       return;
@@ -368,9 +383,17 @@ export default function WildOnlineLab() {
     setDetail('Conectando ao AWS...');
     try {
       const client = new Client(SERVER_URL);
+      const cosmetics = profile?.garage?.[carId]?.customization;
+      const joinPayload = {
+        name: 'Mobile Test', carId, deck: equippedDeck,
+        colorFront: cosmetics?.paint?.primaryColor ?? '#FF3B30',
+        colorBack: cosmetics?.paint?.secondaryColor ?? '#FF3B30',
+        finishId: cosmetics?.paint?.finishId ?? 'solid',
+        equipment: cosmetics?.equipment ?? {},
+      };
       const joined = joinExisting
-        ? await client.joinById(code, { name: 'Mobile Test', carId })
-        : await client.create(ROOM_TYPE, { privateRoom: true, name: 'Mobile Test', carId });
+        ? await client.joinById(code, joinPayload)
+        : await client.create(ROOM_TYPE, { privateRoom: true, ...joinPayload });
       if (!mounted.current) {
         await joined.leave().catch(() => {});
         return;
@@ -383,7 +406,7 @@ export default function WildOnlineLab() {
     } finally {
       if (mounted.current) setBusy(false);
     }
-  }, [attachRoom, busy, carId, hasGarageCar, roomCode]);
+  }, [attachRoom, busy, carId, deckReady, equippedDeck, profile, hasGarageCar, roomCode]);
 
   // ALPHA 9: transfer the very same room to /Mapa. No JOIN, no new sessionId.
   // The LAB stops its own 30Hz sender BEFORE the online map starts another one.
@@ -736,17 +759,22 @@ export default function WildOnlineLab() {
               <View style={[styles.deckPanel, compact && styles.compactSidePanel]}>
                 <View style={styles.sideTitleRow}>
                   <Text style={styles.sectionKicker}>SEU DECK</Text>
-                  <Text style={styles.deckCount}>0/4 VINCULADAS</Text>
+                  <Text style={styles.deckCount}>{deckReady ? '4/4 VINCULADAS' : `${equippedDeck?.length ?? 0}/4 VINCULADAS`}</Text>
                 </View>
                 <View style={styles.deckGrid}>
-                  {[0, 1, 2, 3].map(slot => (
-                    <View key={slot} style={styles.deckSlot}>
-                      <Text style={styles.deckSlotIcon}>◇</Text>
-                      <Text style={styles.deckSlotLabel}>SLOT 0{slot + 1}</Text>
-                    </View>
-                  ))}
+                  {[0, 1, 2, 3].map(slot => {
+                    const cardId = equippedDeck?.[slot];
+                    const card = cardId ? getCardDefinition(cardId) : undefined;
+                    return (
+                      <View key={slot} style={styles.deckSlot}>
+                        {card ? <Image source={card.image} resizeMode="contain" style={{width: 21, height: 21}} /> :
+                          <Text style={styles.deckSlotIcon}>◇</Text>}
+                        <Text style={styles.deckSlotLabel} numberOfLines={1}>{card?.name ?? `SLOT 0${slot + 1}`}</Text>
+                      </View>
+                    );
+                  })}
                 </View>
-                <Text style={styles.deckNote} numberOfLines={compact ? 1 : 2}>Espaços reservados. O deck equipado será conectado nesta tela numa próxima etapa.</Text>
+                <Text style={styles.deckNote} numberOfLines={compact ? 1 : 2}>Deck salvo em DECK SELECTION. A AWS valida custos e recargas; posse Firestore será verificada antes da produção.</Text>
               </View>
             </View>
           </View>

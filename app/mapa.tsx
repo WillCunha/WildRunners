@@ -5265,7 +5265,25 @@ type Alpha9Player = {
   deckSlot1: string;
   deckSlot2: string;
   deckSlot3: string;
+  lives: number;
+  chainsRemaining: number;
+  oilRemaining: number;
+  hitInvulnerableRemaining: number;
+  cardCooldowns: Record<string, number>;
+  colorFront: string;
+  colorBack: string;
+  finishId: string;
+  equipmentJson: string;
 };
+
+type Alpha12Hazard = { id: string; kind: string; x: number; ownerId: string };
+// Efeitos efêmeros são somente animações: nunca produzem dano no dispositivo.
+type Alpha12VisualImpact = { id: number; kind: 'bullet' | 'tnt'; x: number };
+function parseAlpha12Json<T>(text: unknown, fallback: T): T {
+  if (typeof text !== 'string' || text.length > 2048) return fallback;
+  try { const parsed = JSON.parse(text); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as T : fallback; }
+  catch { return fallback; }
+}
 
 type Alpha9Race = {
   phase: Alpha9Phase;
@@ -5275,6 +5293,7 @@ type Alpha9Race = {
   winnerSessionId: string;
   finishReason: string;
   players: Alpha9Player[];
+  hazards: Alpha12Hazard[];
 };
 
 type Alpha9ServerPlayer = Partial<Alpha9Player>;
@@ -5288,6 +5307,7 @@ type Alpha9ServerState = {
   players?: {
     forEach(callback: (player: Alpha9ServerPlayer, sessionId: string) => void): void;
   };
+  hazards?: { forEach(callback: (hazard: {kind?: string; x?: number; ownerId?: string}, id: string) => void): void };
 };
 
 function alpha9ReadRace(room: Alpha9Room): Alpha9Race {
@@ -5319,12 +5339,27 @@ function alpha9ReadRace(room: Alpha9Room): Alpha9Race {
       battleSyncReady: typeof player.boost === 'number' &&
         typeof player.nitroPowerCooldown === 'number' &&
         typeof player.shieldCooldown === 'number' &&
-        typeof player.deckSlot0 === 'string',
+        typeof player.deckSlot0 === 'string' &&
+        typeof (player as any).lives === 'number' && typeof (player as any).equipmentJson === 'string',
       deckSlot0: String(player.deckSlot0 ?? 'slow_slow'),
       deckSlot1: String(player.deckSlot1 ?? 'nitro_power'),
       deckSlot2: String(player.deckSlot2 ?? 'shield'),
       deckSlot3: String(player.deckSlot3 ?? 'bullet'),
+      lives: Number((player as any).lives ?? 5),
+      chainsRemaining: Number((player as any).chainsRemaining ?? 0),
+      oilRemaining: Number((player as any).oilRemaining ?? 0),
+      hitInvulnerableRemaining: Number((player as any).hitInvulnerableRemaining ?? 0),
+      cardCooldowns: parseAlpha12Json<Record<string,number>>((player as any).cardCooldownsJson, {}),
+      colorFront: String((player as any).colorFront ?? '#FF3B30'),
+      colorBack: String((player as any).colorBack ?? '#FF3B30'),
+      finishId: String((player as any).finishId ?? 'solid'),
+      equipmentJson: String((player as any).equipmentJson ?? '{}'),
     });
+  });
+  const hazards: Alpha12Hazard[] = [];
+  state?.hazards?.forEach((hazard, id) => {
+    hazards.push({id, kind: String(hazard.kind ?? ''), x: Number(hazard.x ?? 0),
+      ownerId: String(hazard.ownerId ?? '')});
   });
   // Slot identifica o jogador; a pista online tem uma única altura para todos.
   players.sort((a, b) => a.slot - b.slot || a.sessionId.localeCompare(b.sessionId));
@@ -5336,6 +5371,7 @@ function alpha9ReadRace(room: Alpha9Room): Alpha9Race {
     winnerSessionId: String(state?.winnerSessionId ?? ''),
     finishReason: String(state?.finishReason ?? ''),
     players,
+    hazards,
   };
 }
 
@@ -5348,8 +5384,13 @@ const ALPHA9_PHASE_TEXT: Record<Alpha9Phase, string> = {
 };
 const ALPHA9_COLORS = ['#00D084', '#FF6B35', '#5C86FF', '#F74AC8'];
 const ALPHA9_PIXELS_PER_SERVER_UNIT = 0.34;
-const ALPHA11_TEST_DECK: CardId[] = ['slow_slow', 'nitro_power', 'shield', 'bullet'];
-const ALPHA11_ENABLED = new Set<string>(['slow_slow', 'nitro_power', 'shield']);
+const ALPHA12_TEST_DECK: CardId[] = ['slow_slow', 'nitro_power', 'shield', 'bullet'];
+const ALPHA12_ENABLED = new Set<string>([
+  'slow_slow', 'nitro_power', 'shield', 'bullet', 'chains', 'tnt', 'oil_spit',
+  'quick_repair', 'emp_pulse',
+]);
+// Custo oficial temporário das cartas novas definido no servidor Alpha 13.
+const ALPHA13_COST: Record<string, number> = {quick_repair: 5, emp_pulse: 6};
 
 function OnlineAlpha9Mapa() {
   const router = useRouter();
@@ -5369,11 +5410,21 @@ function OnlineAlpha9Mapa() {
   const [ping, setPing] = useState<number | null>(null);
   const [isLeaving, setIsLeaving] = useState(false);
   const [cardPending, setCardPending] = useState(false);
-  const [cardFeedback, setCardFeedback] = useState('');
+  const [visualImpacts, setVisualImpacts] = useState<Alpha12VisualImpact[]>([]);
+  const [onlineDefenseVisuals, setOnlineDefenseVisuals] = useState<Record<string, DefenseVisualEvent>>({});
+  const onlineDefenseVisualSeq = useRef(0);
+  const [empVisualTarget, setEmpVisualTarget] = useState<string | null>(null);
+  const empVisualTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const visualImpactSeq = useRef(0);
+  const visualImpactTimers = useRef(new Set<ReturnType<typeof setTimeout>>());
+  // Animações puramente cosméticas, uma por carro e reutilizadas em cada impacto.
+  // NÃO alteram x/speed/vida autoritativos da AWS.
+  const hitVisualsRef = useRef(new Map<string, { lift: Animated.Value; rotate: Animated.Value; sway: Animated.Value }>());
+  const raceSnapshotRef = useRef<Alpha9Race | null>(null);
+  const { playCardSfx } = useContext(AudioContext);
   const cardPendingRef = useRef(false);
   const cardRequestSeqRef = useRef(0);
   const cardAckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cardFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(false);
   const droppedRef = useRef(false);
   const phaseRef = useRef<Alpha9Phase>('waiting');
@@ -5419,13 +5470,65 @@ function OnlineAlpha9Mapa() {
   // eles simulam uma ultrapassagem ao desaparecerem no GO e não representam física.
   // A câmera segue o jogador local e a posição relativa vem exclusivamente da AWS.
 
+  // A AWS diz quando houve impacto; este método só adiciona o efeito gráfico.
+  const showVisualImpact = (kind: 'bullet' | 'tnt', worldX: number) => {
+    if (!Number.isFinite(worldX)) return;
+    const id = ++visualImpactSeq.current;
+    setVisualImpacts(current => [...current.slice(-5), { id, kind, x: worldX }]);
+    const timer = setTimeout(() => {
+      visualImpactTimers.current.delete(timer);
+      if (mountedRef.current) setVisualImpacts(current => current.filter(effect => effect.id !== id));
+    }, 650);
+    visualImpactTimers.current.add(timer);
+  };
+
+  // Feedback de uso de cartas não cobre mais a pista; estado e bloqueio ficam no HUD.
+  // Os diagnósticos permanecem disponíveis no console Metro/browser.
   const showCardFeedback = (message: string) => {
-    setCardFeedback(message);
-    if (cardFeedbackTimerRef.current) clearTimeout(cardFeedbackTimerRef.current);
-    cardFeedbackTimerRef.current = setTimeout(() => {
-      if (mountedRef.current) setCardFeedback('');
-      cardFeedbackTimerRef.current = null;
-    }, 2800);
+    console.log('[WILD CARD FEEDBACK]', message);
+  };
+
+  const getHitVisual = (sessionId: string) => {
+    let visual = hitVisualsRef.current.get(sessionId);
+    if (!visual) {
+      visual = {lift: new Animated.Value(0), rotate: new Animated.Value(0), sway: new Animated.Value(0)};
+      hitVisualsRef.current.set(sessionId, visual);
+    }
+    return visual;
+  };
+
+  const animateHit = (sessionId: string, kind: string) => {
+    if (!sessionId || !mountedRef.current) return;
+    const visual = getHitVisual(sessionId);
+    // O óleo não causa perda de vida: derrapa/oscila, sem voo nem giro completo.
+    if (kind === 'oil_spit') {
+      visual.sway.stopAnimation();
+      visual.sway.setValue(0);
+      Animated.sequence([
+        Animated.timing(visual.sway, {toValue: 1, duration: 130, useNativeDriver: true}),
+        Animated.timing(visual.sway, {toValue: -1, duration: 170, useNativeDriver: true}),
+        Animated.timing(visual.sway, {toValue: 1, duration: 190, useNativeDriver: true}),
+        Animated.timing(visual.sway, {toValue: -0.5, duration: 180, useNativeDriver: true}),
+        Animated.timing(visual.sway, {toValue: 0, duration: 160, useNativeDriver: true}),
+      ]).start();
+      return;
+    }
+    if (kind !== 'bullet' && kind !== 'tnt') return;
+    // A animação em Y/rotação acompanha o mesmo hit comunicado a ambos os clientes.
+    // A física real de velocidade/colisão NÃO depende deste Animated.View.
+    visual.lift.stopAnimation();
+    visual.rotate.stopAnimation();
+    visual.lift.setValue(0);
+    visual.rotate.setValue(0);
+    Animated.parallel([
+      Animated.sequence([
+        Animated.timing(visual.lift, {toValue: -63, duration: 210, useNativeDriver: true}),
+        Animated.timing(visual.lift, {toValue: -72, duration: 120, useNativeDriver: true}),
+        Animated.timing(visual.lift, {toValue: 0, duration: 410, useNativeDriver: true}),
+      ]),
+      Animated.timing(visual.rotate, {toValue: kind === 'tnt' ? 720 : 360,
+        duration: 740, useNativeDriver: true}),
+    ]).start();
   };
 
   const clearCardPending = () => {
@@ -5500,6 +5603,7 @@ function OnlineAlpha9Mapa() {
     const applySnapshot = (hardReset = false) => {
       if (!mountedRef.current || roomRef.current !== room) return;
       const snapshot = alpha9ReadRace(room);
+      raceSnapshotRef.current = snapshot;
       phaseRef.current = snapshot.phase;
       // O ACK 'card-result' remove o pending; o snapshot nao confirma uma
       // carta especifica se duas ações chegam quase simultaneamente.
@@ -5641,9 +5745,28 @@ function OnlineAlpha9Mapa() {
       if (!message.ok) showCardFeedback('⚠️ ' + message.message);
     }));
     collectCleanup(room.onMessage('card-used', (message: {
-      cardId: string; sourceSessionId: string; targetSessionId: string; blocked?: boolean;
+      cardId: string; sourceSessionId: string; targetSessionId: string;
+      blocked?: boolean; healedLives?: number; durationSeconds?: number;
     }) => {
       if (!mountedRef.current || roomRef.current !== room) return;
+      if (message.cardId === 'quick_repair' && (message.healedLives ?? 0) > 0) {
+        setOnlineDefenseVisuals(current => ({...current, [message.sourceSessionId]: {
+          id: ++onlineDefenseVisualSeq.current, type: 'repair', amount: message.healedLives,
+        }}));
+      }
+      if (message.cardId === 'emp_pulse' && !message.blocked) {
+        setEmpVisualTarget(message.targetSessionId);
+        if (empVisualTimeout.current) clearTimeout(empVisualTimeout.current);
+        empVisualTimeout.current = setTimeout(() => {
+          if (mountedRef.current) setEmpVisualTarget(null);
+          empVisualTimeout.current = null;
+        }, 1500);
+      }
+      // Tocar a carta somente após o comando ser confirmado pelo servidor.
+      if (['slow_slow', 'nitro_power', 'shield', 'chains', 'bullet', 'tnt', 'oil_spit',
+        'quick_repair', 'emp_pulse'].includes(message.cardId)) {
+        playCardSfx(message.cardId as CardId);
+      }
       if (message.cardId === 'slow_slow') {
         showCardFeedback(message.blocked
           ? (message.targetSessionId === room.sessionId
@@ -5656,14 +5779,46 @@ function OnlineAlpha9Mapa() {
       } else if (message.cardId === 'nitro_power') {
         showCardFeedback(message.sourceSessionId === room.sessionId
           ? '⚡ NITRO POWER ativado!' : '⚡ Rival usou NITRO POWER!');
+      } else {
+        const name = getCardDefinition(message.cardId)?.name ?? message.cardId;
+        showCardFeedback(message.blocked ? `🛡️ ${name} bloqueada!` : `⚔️ ${name} ativada na AWS!`);
       }
     }));
 
+    collectCleanup(room.onMessage('battle-hit', (event: {
+      targetSessionId: string; kind: string; blocked?: boolean; lives?: number;
+    }) => {
+      if (!mountedRef.current || roomRef.current !== room) return;
+      const target = raceSnapshotRef.current?.players.find(p => p.sessionId === event.targetSessionId);
+      if (!event.blocked) {
+        animateHit(event.targetSessionId, event.kind);
+        if (target && (event.kind === 'tnt' || event.kind === 'bullet')) {
+          showVisualImpact(event.kind, target.x);
+        }
+      }
+      const impacted = event.targetSessionId === room.sessionId ? 'Você' : 'Rival';
+      showCardFeedback(event.blocked ? `🛡️ ${impacted}: proteção segurou ${event.kind}!` :
+        `💥 ${impacted} atingido por ${event.kind}! ${event.lives ?? '?'} vidas`);
+    }));
+    // A TNT pode terminar o timer sem atingir ninguém. A explosão neste caso
+    // é apenas cosmética; o servidor continua responsável por todas as colisões.
+    collectCleanup(room.onMessage('hazard-expired', (event: {kind?: string; x?: number}) => {
+      if (!mountedRef.current || roomRef.current !== room) return;
+      if (event.kind === 'tnt' && typeof event.x === 'number') showVisualImpact('tnt', event.x);
+    }));
     startSenders();
     return () => {
       mountedRef.current = false;
+      visualImpactTimers.current.forEach(clearTimeout);
+      visualImpactTimers.current.clear();
+      hitVisualsRef.current.forEach(visual => {
+        visual.lift.stopAnimation();
+        visual.rotate.stopAnimation();
+        visual.sway.stopAnimation();
+      });
+      hitVisualsRef.current.clear();
+      if (empVisualTimeout.current) clearTimeout(empVisualTimeout.current);
       stopSenders();
-      if (cardFeedbackTimerRef.current) clearTimeout(cardFeedbackTimerRef.current);
       subscriptions.forEach(unsubscribe => {
         try { unsubscribe(); } catch { /* listener já desfeito */ }
       });
@@ -5726,16 +5881,16 @@ function OnlineAlpha9Mapa() {
   const canNitro = canDrive && Boolean(me && me.nitroCharges > 0 &&
     me.nitroCooldown <= 0 && me.nitroRemaining <= 0);
   const rival = racePlayers.find(player => player.sessionId !== mySessionId);
-  const deck = me ? [me.deckSlot0, me.deckSlot1, me.deckSlot2, me.deckSlot3] : ALPHA11_TEST_DECK;
+  const deck = me ? [me.deckSlot0, me.deckSlot1, me.deckSlot2, me.deckSlot3] : ALPHA12_TEST_DECK;
   const cardCooldown = (id: string) => id === 'slow_slow' ? (me?.slowCooldown ?? 0) :
     id === 'nitro_power' ? (me?.nitroPowerCooldown ?? 0) :
-    id === 'shield' ? (me?.shieldCooldown ?? 0) : Infinity;
-  // Diagnostico Alpha 11.0.1: nenhum custo/efeito e calculado no celular.
+    id === 'shield' ? (me?.shieldCooldown ?? 0) : (me?.cardCooldowns?.[id] ?? 0);
+  // Diagnostico Alpha 12.0: nenhum custo/efeito e calculado no celular.
   // A lista de motivos reflete exclusivamente o snapshot recebido da AWS.
   const cardBlockReason = (id: string): string | null => {
-    if (!ALPHA11_ENABLED.has(id)) return 'Carta ainda nao habilitada online.';
+    if (!ALPHA12_ENABLED.has(id)) return 'Carta ainda nao habilitada online.';
     if (!room || !me) return 'Aguardando dados do jogador enviados pela AWS.';
-    if (!me.battleSyncReady) return 'Estado Alpha 11 ausente. Confirme o deploy do Schema e WildRaceRoom na AWS.';
+    if (!me.battleSyncReady) return 'Estado Alpha 12 ausente. Confirme o deploy do Schema e WildRaceRoom na AWS.';
     if (dropped || !me.connected) return 'Conexao interrompida. Aguarde a reconexao.';
     if (phase !== 'racing') return 'Disponivel somente depois do GO (fase atual: ' + phase + ').';
     if (cardPending) return 'Aguardando confirmacao da carta anterior pela AWS.';
@@ -5743,12 +5898,20 @@ function OnlineAlpha9Mapa() {
     if (!definition) return 'Carta desconhecida pelo catalogo.';
     const remaining = cardCooldown(id);
     if (remaining > 0) return 'Cooldown: ' + Math.ceil(remaining) + ' segundo(s).';
-    if (me.boost < definition.cost) return 'BOOST insuficiente: ' + me.boost + '/' +
-      definition.cost + ' gotas. AWS recupera 1 gota a cada 2s de corrida.';
+    const officialCost = ALPHA13_COST[id] ?? definition.cost;
+    if (me.boost < officialCost) return 'BOOST insuficiente: ' + me.boost + '/' +
+      officialCost + ' gotas. AWS recupera 1 gota a cada 2s de corrida.';
+    if (id === 'quick_repair' && me.lives >= 5) return 'Vida completa.';
+    if (id === 'emp_pulse' && (!rival?.connected || rival.x <= me.x))
+      return 'EMP Pulse exige um rival conectado a frente.';
     if (id === 'slow_slow') {
       if (!rival?.connected) return 'Adversario desconectado.';
       if (rival.slowRemaining > 0) return 'Adversario ja esta sob o efeito Slow Slow.';
     }
+    if (id === 'chains' && (!rival?.connected || rival.x <= me.x || rival.x - me.x > 420))
+      return 'Chains exige rival a frente em ate 420 unidades.';
+    if (['bullet', 'tnt', 'oil_spit', 'chains'].includes(id) && !rival?.connected)
+      return 'Adversario desconectado.';
     if (id === 'nitro_power' && me.nitroPowerRemaining > 0) return 'Nitro Power ja esta ativo.';
     if (id === 'shield' && me.shieldCharges > 0) return 'Escudo ja esta ativo.';
     return null;
@@ -5852,7 +6015,7 @@ function OnlineAlpha9Mapa() {
         <View style={onlineMapStyles.phaseChip} pointerEvents="none">
           <Text style={onlineMapStyles.phaseChipTitle}>{ALPHA9_PHASE_TEXT[phase]}</Text>
           {phase === 'countdown' && <Text style={onlineMapStyles.countdownText}>{Math.max(1, Math.ceil(race?.countdown ?? 0))}</Text>}
-          <Text style={onlineMapStyles.phaseChipInfo}>AWS · {racePlayers.length}/2 · {Math.round(race?.finishDistance ?? 6000)}u</Text>
+
         </View>
         <View style={onlineMapStyles.sessionActions}>
           <TouchableOpacity style={onlineMapStyles.sessionButton} onPress={returnToLab}>
@@ -5864,13 +6027,38 @@ function OnlineAlpha9Mapa() {
         </View>
       </View>
 
+      {/* Alpha 11.2: reutiliza artes já existentes no jogo.
+          Os objetos seguem coordenadas autoritativas dos hazards na AWS.
+          Nenhum destes componentes aplica dano, física ou colisão local. */}
+      {(race?.hazards ?? []).map(hazard => {
+        const x = screenWidth * 0.42 + (hazard.x - (me?.x ?? 0)) * ALPHA9_PIXELS_PER_SERVER_UNIT;
+        if (hazard.kind === 'bullet') {
+          return <GuidedBulletVisual key={`hazard-${hazard.id}`} x={x} y={groundY - PLAYER_SIZE * 0.65} angle={0} />;
+        }
+        if (hazard.kind === 'oil_spit') {
+          return <OilSpitVisual key={`hazard-${hazard.id}`} x={x} groundY={groundY} />;
+        }
+        if (hazard.kind === 'tnt') {
+          return (
+            <View key={`hazard-${hazard.id}`} pointerEvents="none" style={[onlineMapStyles.tntCrate,
+              {left: x, top: groundY - PLAYER_SIZE}]}>
+              <View style={onlineMapStyles.tntBandTop}/>
+              <View style={onlineMapStyles.tntBandBottom}/>
+              <Text style={onlineMapStyles.tntCrateText}>TNT</Text>
+            </View>
+          );
+        }
+        return null;
+      })}
       {/* Cada carro usa SEMPRE o carId do Schema, nunca o CarContext nem os bots. */}
       {racePlayers.map((player) => {
         const supported = WILD_CAR_IDS.includes(player.carId as WildCarId) &&
           Object.prototype.hasOwnProperty.call(carMaps, player.carId);
         const localCosmetics = player.sessionId === mySessionId && selectedCar === player.carId;
-        const frontColor = localCosmetics ? selectedColorFront : ALPHA9_COLORS[Math.max(0, player.slot) % ALPHA9_COLORS.length];
-        const backColor = localCosmetics ? selectedColorBack : frontColor;
+        const frontColor = player.colorFront || (localCosmetics ? selectedColorFront : ALPHA9_COLORS[Math.max(0, player.slot) % ALPHA9_COLORS.length]);
+        const backColor = player.colorBack || (localCosmetics ? selectedColorBack : frontColor);
+        const visualEquipment = parseAlpha12Json<typeof selectedEquipment>(player.equipmentJson,
+          localCosmetics ? selectedEquipment : ({} as typeof selectedEquipment));
         const horizontalX = relativePositionValue(player.sessionId, player.x);
         return (
           <Animated.View
@@ -5892,38 +6080,74 @@ function OnlineAlpha9Mapa() {
               {player.slowRemaining > 0 && <Text style={onlineMapStyles.slowFlag}>
                 🐌 SLOW {player.slowRemaining.toFixed(1)}s
               </Text>}
+              <Text style={onlineMapStyles.shieldFlag}>❤️ {player.lives}/5</Text>
+              {player.chainsRemaining > 0 && <Text style={onlineMapStyles.slowFlag}>⛓️ CHAINS</Text>}
+              {player.oilRemaining > 0 && <Text style={onlineMapStyles.slowFlag}>🛢️ OIL</Text>}
               {player.shieldCharges > 0 && <Text style={onlineMapStyles.shieldFlag}>🛡️ SHIELD</Text>}
               {player.nitroPowerRemaining > 0 && <Text style={onlineMapStyles.nitroFlag}>
                 ⚡ POWER {player.nitroPowerRemaining.toFixed(1)}s
               </Text>}
             </View>
+            <Animated.View style={{
+              width: PLAYER_SIZE, height: PLAYER_SIZE,
+              justifyContent: 'flex-end', alignItems: 'center',
+              transform: [
+                {translateY: getHitVisual(player.sessionId).lift},
+                {translateX: getHitVisual(player.sessionId).sway.interpolate({
+                  inputRange: [-1, 0, 1], outputRange: [-11, 0, 11],
+                })},
+                {rotate: getHitVisual(player.sessionId).rotate.interpolate({
+                  inputRange: [0, 720], outputRange: ['0deg', '720deg'],
+                })},
+              ],
+            }}>
+            {player.slowRemaining > 0 && <SlowSlowVisual variant="racer" size={PLAYER_SIZE} />}
+            {empVisualTarget === player.sessionId &&
+              <EmpPulseVisual size={PLAYER_SIZE} paused={false} />}
             {supported ? (
-              <View style={onlineMapStyles.carContent}>
-                <Carro
-                  carType={player.carId as CarKey}
-                  carColorFront={frontColor}
-                  carColorBack={backColor}
-                  paintFinishId={localCosmetics ? selectedFinishId : undefined}
-                  equipment={localCosmetics ? selectedEquipment : undefined}
-                  speed={player.speed / KMH_PER_PHYSICS_UNIT}
-                  skin="default"
-                  renderWidth={onlineCarWidth}
-                />
-              </View>
+              <DefenseCardVisual size={PLAYER_SIZE} shieldCharges={player.shieldCharges}
+                armorCharges={0} isGhost={false} secondChanceReady={false}
+                isInvincible={player.hitInvulnerableRemaining > 0}
+                event={onlineDefenseVisuals[player.sessionId]}>
+                <View style={onlineMapStyles.carContent}>
+                  <Carro
+                    carType={player.carId as CarKey}
+                    carColorFront={frontColor}
+                    carColorBack={backColor}
+                    paintFinishId={(player.finishId || (localCosmetics ? selectedFinishId : 'solid')) as typeof selectedFinishId}
+                    equipment={visualEquipment}
+                    speed={player.speed / KMH_PER_PHYSICS_UNIT}
+                    skin="default"
+                    renderWidth={onlineCarWidth}
+                  />
+                </View>
+              </DefenseCardVisual>
             ) : (
               <View style={onlineMapStyles.unsupportedCar}>
                 <Text style={onlineMapStyles.unsupportedText}>CARRO NÃO RECONHECIDO: {player.carId || 'SEM ID'}</Text>
               </View>
             )}
+            </Animated.View>
           </Animated.View>
         );
       })}
 
-      {cardFeedback !== '' && problem === '' && (
-        <View pointerEvents="none" style={onlineMapStyles.cardFeedbackPanel}>
-          <Text style={onlineMapStyles.cardFeedbackText}>{cardFeedback}</Text>
-        </View>
-      )}
+      {/* Eventos gráficos breves; a AWS já computou o resultado. */}
+      {visualImpacts.map(effect => (
+        <ExplosionVisual key={`alpha12-impact-${effect.id}`}
+          x={screenWidth * 0.42 + (effect.x - (me?.x ?? 0)) * ALPHA9_PIXELS_PER_SERVER_UNIT}
+          y={groundY - PLAYER_SIZE} />
+      ))}
+      {/* Chains é um estado imposto pelo servidor; a corrente é somente visual. */}
+      {phase === 'racing' && me && rival && (me.chainsRemaining > 0 || rival.chainsRemaining > 0) && (() => {
+        const attacker = me.chainsRemaining > 0 ? rival : me;
+        const target = me.chainsRemaining > 0 ? me : rival;
+        const toScreen = (worldX: number) => screenWidth * 0.42 +
+          (worldX - me.x) * ALPHA9_PIXELS_PER_SERVER_UNIT + PLAYER_SIZE / 2;
+        return <CorrenteVisual callerX={toScreen(attacker.x)} callerY={groundY - PLAYER_SIZE / 2}
+          targetX={toScreen(target.x)} targetY={groundY - PLAYER_SIZE / 2} />;
+      })()}
+
       {problem !== '' && (
         <View style={onlineMapStyles.warningPanel}>
           <Text style={onlineMapStyles.warningText}>{problem}</Text>
@@ -5970,7 +6194,7 @@ function OnlineAlpha9Mapa() {
               {deck.map((cardId, index) => {
                 const card = getCardDefinition(cardId);
                 const available = cardAvailable(cardId);
-                const enabled = ALPHA11_ENABLED.has(cardId);
+                const enabled = ALPHA12_ENABLED.has(cardId);
                 const cooldown = cardCooldown(cardId);
                 const cooldownMax = card?.cooldownMs ? card.cooldownMs / 1000 : 1;
                 return (
@@ -5986,7 +6210,7 @@ function OnlineAlpha9Mapa() {
                   >
                     {card && <Image source={card.image} resizeMode="contain" style={styles.deckCardImage}/>}
                     {card && <View style={styles.cardCostBadge} pointerEvents="none">
-                      <Text style={styles.cardCostText}>💧{card.cost}</Text>
+                      <Text style={styles.cardCostText}>💧{ALPHA13_COST[cardId] ?? card.cost}</Text>
                     </View>}
                     {enabled && cooldown > 0 && <View style={[styles.cardCooldownMask,
                       {height: `${Math.min(100, cooldown / Math.max(1, cooldownMax) * 100)}%` as `${number}%`}]} pointerEvents="none" />}
@@ -5996,7 +6220,7 @@ function OnlineAlpha9Mapa() {
                           {!enabled ? '🔒' : !me?.battleSyncReady ? '⚠️' :
                             !canDrive ? '⏳' : cardPending ? '...' :
                             cooldown > 0 ? `${Math.ceil(cooldown)}s` :
-                            (me?.boost ?? 0) < (card?.cost ?? 0) ? '💧' :
+                            (me?.boost ?? 0) < (ALPHA13_COST[cardId] ?? card?.cost ?? 0) ? '💧' :
                             cardId === 'shield' && (me?.shieldCharges ?? 0) > 0 ? '🛡️' :
                             cardId === 'nitro_power' && (me?.nitroPowerRemaining ?? 0) > 0 ? '⚡' :
                             cardId === 'slow_slow' && (rival?.slowRemaining ?? 0) > 0 ? '🐌' : '⏳'}
@@ -6012,10 +6236,10 @@ function OnlineAlpha9Mapa() {
                 <View style={styles.boostLiquidSheen}/>
               </View>
               <View style={styles.boostBarGloss}/>
-              <Text style={styles.boostBarText}>BOOST AWS 💧 {me?.boost ?? 0}/10 · SLOW / NITRO / SHIELD</Text>
+              <Text style={styles.boostBarText}>💧 {me?.boost ?? 0}/10 · ❤️ {me?.lives ?? 5}</Text>
             </View>
             {me && !me.battleSyncReady && (
-              <Text style={onlineMapStyles.schemaMissingLabel}>⚠️ STATE ALPHA 11 NAO RECEBIDO DA AWS</Text>
+              <Text style={onlineMapStyles.schemaMissingLabel}>⚠️ STATE ALPHA 12 NAO RECEBIDO DA AWS</Text>
             )}
           </View>
         </View>
@@ -6074,6 +6298,13 @@ export default function Mapa(props: MapaProps) {
 }
 
 const onlineMapStyles = StyleSheet.create({
+  tntCrate: {position: 'absolute', width: PLAYER_SIZE, height: PLAYER_SIZE,
+    backgroundColor: '#B22222', borderWidth: 2, borderColor: '#8B0000',
+    alignItems: 'center', justifyContent: 'center', zIndex: 7},
+  tntBandTop: {position: 'absolute', width: '100%', height: 4, backgroundColor: '#8B0000', top: 10},
+  tntBandBottom: {position: 'absolute', width: '100%', height: 4, backgroundColor: '#8B0000', bottom: 10},
+  tntCrateText: {color: '#FFF', fontSize: 24, fontWeight: '900',
+    textShadowColor: '#000', textShadowOffset: {width: 1, height: 1}, textShadowRadius: 2},
   // Pista única: as artes têm a mesma coordenada Y.
   carAnchor: { position: 'absolute', width: PLAYER_SIZE, height: PLAYER_SIZE,
     alignItems: 'center', justifyContent: 'flex-end' },
@@ -6104,10 +6335,6 @@ const onlineMapStyles = StyleSheet.create({
   sessionButtonText: { color: '#FFF', fontWeight: '900', fontSize: 9 },
   inactiveCard: { position: 'relative' },
   activeSlowCard: { borderWidth: 1.5, borderColor: '#FFDB68' },
-  cardFeedbackPanel: { position: 'absolute', bottom: BOTTOM_HUD_HEIGHT + 7,
-    left: 12, right: 12, zIndex: 54, padding: 8, borderRadius: 8,
-    backgroundColor: 'rgba(25,28,38,0.93)', borderWidth: 1, borderColor: '#FFDB68' },
-  cardFeedbackText: { color: '#FFDB68', fontSize: 10, fontWeight: '900', textAlign: 'center' },
   cardLock: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center',
     backgroundColor: 'rgba(4,7,12,0.33)' },
   cardLockText: { fontSize: 19 },
