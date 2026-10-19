@@ -5408,6 +5408,8 @@ function OnlineAlpha9Mapa() {
   const [dropped, setDropped] = useState(false);
   const [problem, setProblem] = useState('');
   const [ping, setPing] = useState<number | null>(null);
+  // ALPHA 14: diagnóstico de correções efetivamente aplicadas na AWS.
+  const [serverPhysicsWarnings, setServerPhysicsWarnings] = useState(0);
   const [isLeaving, setIsLeaving] = useState(false);
   const [cardPending, setCardPending] = useState(false);
   const [visualImpacts, setVisualImpacts] = useState<Alpha12VisualImpact[]>([]);
@@ -5439,6 +5441,11 @@ function OnlineAlpha9Mapa() {
   const relativeXRef = useRef<Record<string, ReturnType<typeof Animated.multiply>>>({});
   const lastRosterLogRef = useRef('');
   const smoothingRef = useRef(new WildPositionSmoother());
+  // ALPHA 14: a camada visual nunca deve receber números não finitos da rede.
+  // O checkpoint é APENAS visual: autoridade da corrida permanece no WildServer.
+  const lastFinitePlayersRef = useRef(new Map<string, {x: number; speed: number}>());
+  const lastSnapshotPhaseRef = useRef<Alpha9Phase | null>(null);
+  const mapWarningAtRef = useRef(new Map<string, number>());
   const sceneryTravel = useRef(new Animated.Value(0)).current;
   const inputTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const visualTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -5603,6 +5610,45 @@ function OnlineAlpha9Mapa() {
     const applySnapshot = (hardReset = false) => {
       if (!mountedRef.current || roomRef.current !== room) return;
       const snapshot = alpha9ReadRace(room);
+      // Reinicialização VISUAL autorizada só ao entrar/retomar a sala ou
+      // quando a AWS muda de "finished" para "waiting" (revanche legítima).
+      const newRace = lastSnapshotPhaseRef.current === 'finished' && snapshot.phase === 'waiting';
+      if (newRace) {
+        lastFinitePlayersRef.current.clear();
+        mapWarningAtRef.current.clear();
+      }
+      lastSnapshotPhaseRef.current = snapshot.phase;
+      const visualHardReset = hardReset || newRace;
+
+      const warnSnapshot = (sessionId: string, reason: string, extra: Record<string, unknown>) => {
+        const key = `${sessionId}:${reason}`;
+        const now = Date.now();
+        if (now - (mapWarningAtRef.current.get(key) ?? 0) < 1000) return;
+        mapWarningAtRef.current.set(key, now);
+        console.warn('[WILD MAP ALPHA 14]', {sessionId, reason, phase: snapshot.phase, ...extra});
+      };
+      // Protegemos o React Native/Animated de NaN e Infinity; regressões FINITAS
+      // são sinalizadas, não ocultadas, para expor problemas reais do servidor.
+      for (const player of snapshot.players) {
+        const last = lastFinitePlayersRef.current.get(player.sessionId);
+        const rawX = player.x;
+        const rawSpeed = player.speed;
+        if (!Number.isFinite(player.startX)) player.startX = 0;
+        if (!Number.isFinite(player.maxSpeed)) player.maxSpeed = 0;
+        if (!Number.isFinite(player.acceleration)) player.acceleration = 0;
+        if (!Number.isFinite(rawX) || !Number.isFinite(rawSpeed)) {
+          warnSnapshot(player.sessionId, 'nonfinite-snapshot', {x: rawX, speed: rawSpeed});
+        }
+        player.x = Number.isFinite(rawX) ? rawX : (last?.x ?? player.startX);
+        player.speed = Number.isFinite(rawSpeed) ? Math.max(0, rawSpeed) : (last?.speed ?? 0);
+        if (snapshot.phase === 'racing' && last && player.x + 0.5 < last.x) {
+          warnSnapshot(player.sessionId, 'server-position-regression', {
+            previousX: last.x, receivedX: player.x,
+          });
+        }
+        lastFinitePlayersRef.current.set(player.sessionId, {x: player.x, speed: player.speed});
+      }
+      snapshot.hazards = snapshot.hazards.filter(hazard => Number.isFinite(hazard.x));
       raceSnapshotRef.current = snapshot;
       phaseRef.current = snapshot.phase;
       // O ACK 'card-result' remove o pending; o snapshot nao confirma uma
@@ -5625,12 +5671,13 @@ function OnlineAlpha9Mapa() {
           })),
         );
       }
-      smoothingRef.current.ingest(snapshot.players, snapshot.phase, hardReset);
+      smoothingRef.current.ingest(snapshot.players, snapshot.phase, visualHardReset);
       for (const player of snapshot.players) positionValue(player.sessionId, player.x);
-      if (hardReset) {
+      if (visualHardReset) {
         const firstFrame = smoothingRef.current.frame(Date.now());
         snapshot.players.forEach(player => {
-          positionValue(player.sessionId, player.x).setValue(firstFrame[player.sessionId] ?? player.x);
+          const candidate = firstFrame[player.sessionId];
+          positionValue(player.sessionId, player.x).setValue(Number.isFinite(candidate) ? candidate : player.x);
         });
       }
       setRace(snapshot);
@@ -5666,7 +5713,8 @@ function OnlineAlpha9Mapa() {
         if (!mountedRef.current || roomRef.current !== room || droppedRef.current) return;
         const frame = smoothingRef.current.frame(Date.now());
         for (const [sessionId, x] of Object.entries(frame)) {
-          positionValue(sessionId, x).setValue(x);
+          // Animated.Value.setValue(NaN) pode corromper toda a árvore visual.
+          if (Number.isFinite(x)) positionValue(sessionId, x).setValue(x);
         }
         const me = frame[room.sessionId];
         if (Number.isFinite(me)) {
@@ -5735,6 +5783,13 @@ function OnlineAlpha9Mapa() {
       if (sentAt === undefined) return;
       pings.current.delete(message.seq);
       setPing(Date.now() - sentAt);
+    }));
+    collectCleanup(room.onMessage('race-physics-warning', (event: {
+      sessionId: string; reason: string; previousX: number; proposedX: number | null;
+    }) => {
+      if (!mountedRef.current || roomRef.current !== room) return;
+      console.warn('[WILD MAP] AWS PHYSICS GUARD', event);
+      setServerPhysicsWarnings(count => count + 1);
     }));
     collectCleanup(room.onMessage('nitro-result', (message: { ok: boolean; message: string }) => {
       if (mountedRef.current && roomRef.current === room && !message.ok) setProblem(message.message);
@@ -5982,6 +6037,11 @@ function OnlineAlpha9Mapa() {
           <Text numberOfLines={1} style={onlineMapStyles.smallHint}>
             {!room ? '● SEM SESSÃO' : dropped ? '● RECONECTANDO' : '● ONLINE'} · {ping === null ? 'PING —' : `${ping}ms`}
           </Text>
+          {serverPhysicsWarnings > 0 && (
+            <Text style={onlineMapStyles.physicsWarningLabel}>
+              ⚠️ AWS PHYSICS GUARD: {serverPhysicsWarnings}
+            </Text>
+          )}
         </View>
       </View>
 
@@ -6323,6 +6383,7 @@ const onlineMapStyles = StyleSheet.create({
   connectionPill: { paddingHorizontal: 7, paddingVertical: 5, marginTop: 5,
     borderRadius: 8, backgroundColor: 'rgba(8,8,12,0.58)' },
   smallHint: { color: '#FFF', fontSize: 8, fontWeight: '800' },
+  physicsWarningLabel: { color: '#FFCA7D', fontSize: 8, fontWeight: '900' },
   phaseChip: { marginTop: 5, borderRadius: 9, paddingVertical: 4,
     paddingHorizontal: 7, backgroundColor: 'rgba(8,8,12,0.60)', alignItems: 'center' },
   phaseChipTitle: { color: '#FFD60A', fontSize: 8, fontWeight: '900' },
