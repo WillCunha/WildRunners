@@ -5276,6 +5276,11 @@ type Alpha9Player = {
   equipmentJson: string;
 };
 
+type Alpha15VisualState = {
+  armorCharges: number; ghostRemaining: number; secondChanceReady: boolean;
+  blindRemaining: number; tornadoRemaining: number; bubbleRemaining: number;
+  magnetRemaining: number; chipsCollected: number;
+};
 type Alpha12Hazard = { id: string; kind: string; x: number; ownerId: string };
 // Efeitos efêmeros são somente animações: nunca produzem dano no dispositivo.
 type Alpha12VisualImpact = { id: number; kind: 'bullet' | 'tnt'; x: number };
@@ -5387,10 +5392,15 @@ const ALPHA9_PIXELS_PER_SERVER_UNIT = 0.34;
 const ALPHA12_TEST_DECK: CardId[] = ['slow_slow', 'nitro_power', 'shield', 'bullet'];
 const ALPHA12_ENABLED = new Set<string>([
   'slow_slow', 'nitro_power', 'shield', 'bullet', 'chains', 'tnt', 'oil_spit',
-  'quick_repair', 'emp_pulse',
+  'quick_repair', 'emp_pulse', 'swap', 'magnet', 'blind', 'tornado',
+  'bubble_lift', 'armor', 'ghost', 'second_chance',
 ]);
 // Custo oficial temporário das cartas novas definido no servidor Alpha 13.
-const ALPHA13_COST: Record<string, number> = {quick_repair: 5, emp_pulse: 6};
+// Custos provisórios do servidor Alpha 15 (não os custos antigos do offline).
+const ALPHA13_COST: Record<string, number> = {
+  quick_repair: 5, emp_pulse: 6, swap: 5, magnet: 4, blind: 4,
+  tornado: 6, bubble_lift: 5, armor: 4, ghost: 5, second_chance: 6,
+};
 
 function OnlineAlpha9Mapa() {
   const router = useRouter();
@@ -5410,6 +5420,9 @@ function OnlineAlpha9Mapa() {
   const [ping, setPing] = useState<number | null>(null);
   // ALPHA 14: diagnóstico de correções efetivamente aplicadas na AWS.
   const [serverPhysicsWarnings, setServerPhysicsWarnings] = useState(0);
+  const [serverBuild, setServerBuild] = useState<string | null>(null);
+  const [alpha15Visual, setAlpha15Visual] = useState<Record<string, Alpha15VisualState>>({});
+  const swapVisualResetRef = useRef(false);
   const [isLeaving, setIsLeaving] = useState(false);
   const [cardPending, setCardPending] = useState(false);
   const [visualImpacts, setVisualImpacts] = useState<Alpha12VisualImpact[]>([]);
@@ -5614,11 +5627,16 @@ function OnlineAlpha9Mapa() {
       // quando a AWS muda de "finished" para "waiting" (revanche legítima).
       const newRace = lastSnapshotPhaseRef.current === 'finished' && snapshot.phase === 'waiting';
       if (newRace) {
+        setAlpha15Visual({});
         lastFinitePlayersRef.current.clear();
         mapWarningAtRef.current.clear();
       }
       lastSnapshotPhaseRef.current = snapshot.phase;
-      const visualHardReset = hardReset || newRace;
+      const visualHardReset = hardReset || newRace || swapVisualResetRef.current;
+      if (swapVisualResetRef.current) {
+        lastFinitePlayersRef.current.clear();
+        swapVisualResetRef.current = false;
+      }
 
       const warnSnapshot = (sessionId: string, reason: string, extra: Record<string, unknown>) => {
         const key = `${sessionId}:${reason}`;
@@ -5641,6 +5659,11 @@ function OnlineAlpha9Mapa() {
         }
         player.x = Number.isFinite(rawX) ? rawX : (last?.x ?? player.startX);
         player.speed = Number.isFinite(rawSpeed) ? Math.max(0, rawSpeed) : (last?.speed ?? 0);
+        // Uma posição abaixo do grid inicial pode zerar o parallax do player.
+        // Não alterar x/startX aqui: corrigir isto SOMENTE no servidor autoritativo.
+        if (snapshot.phase === 'racing' && player.x + 0.5 < player.startX) {
+          warnSnapshot(player.sessionId, 'below-start-grid', {x: player.x, startX: player.startX});
+        }
         if (snapshot.phase === 'racing' && last && player.x + 0.5 < last.x) {
           warnSnapshot(player.sessionId, 'server-position-regression', {
             previousX: last.x, receivedX: player.x,
@@ -5763,6 +5786,8 @@ function OnlineAlpha9Mapa() {
       setProblem('');
       setPing(null);
       applySnapshot(true);
+      try { room.send('wild-build-check', {}); }
+      catch (error) { console.warn('[WILD MAP] Build check após reconexão falhou', error); }
       startSenders();
     }));
     collectCleanup(room.onLeave((code: number) => {
@@ -5784,6 +5809,16 @@ function OnlineAlpha9Mapa() {
       pings.current.delete(message.seq);
       setPing(Date.now() - sentAt);
     }));
+    // Handshake de build: previne testar um Mapa novo com um PM2 antigo.
+    collectCleanup(room.onMessage('wild-build-info', (message: {build?: string; checkpoints?: boolean}) => {
+      if (!mountedRef.current || roomRef.current !== room) return;
+      const name = typeof message?.build === 'string' ? message.build : 'DESCONHECIDA';
+      setServerBuild(name);
+      console.log('[WILD MAP] AWS BUILD CONFIRMADA:', name, 'checkpoints:', message?.checkpoints);
+    }));
+    try { room.send('wild-build-check', {}); }
+    catch (error) { console.warn('[WILD MAP] Falha ao consultar build AWS', error); }
+
     collectCleanup(room.onMessage('race-physics-warning', (event: {
       sessionId: string; reason: string; previousX: number; proposedX: number | null;
     }) => {
@@ -5791,6 +5826,29 @@ function OnlineAlpha9Mapa() {
       console.warn('[WILD MAP] AWS PHYSICS GUARD', event);
       setServerPhysicsWarnings(count => count + 1);
     }));
+    // O snapshot de buffs pertence à AWS e cobre reconexões e eventos perdidos.
+    collectCleanup(room.onMessage('alpha15-sync', (payload: {
+      version?: string; players?: Record<string, Alpha15VisualState>;
+    }) => {
+      if (!mountedRef.current || roomRef.current !== room) return;
+      if (payload?.players) setAlpha15Visual(payload.players);
+    }));
+    collectCleanup(room.onMessage('alpha15-swap', (event: {sourceSessionId:string;targetSessionId:string}) => {
+      if (!mountedRef.current || roomRef.current !== room) return;
+      // Na PRÓXIMA atualização do Schema, reposiciona o smoother imediatamente.
+      swapVisualResetRef.current = true;
+      console.log('[WILD ALPHA 15] Swap confirmado pela AWS:', event);
+    }));
+    collectCleanup(room.onMessage('alpha15-loot', (event: {sessionId:string;gained:number;chipsCollected:number}) => {
+      if (roomRef.current === room) console.log('[WILD ALPHA 15] CHIPs da partida:', event);
+    }));
+    collectCleanup(room.onMessage('alpha15-revive', (event: {targetSessionId:string}) => {
+      if (!mountedRef.current || roomRef.current !== room) return;
+      setOnlineDefenseVisuals(current => ({...current, [event.targetSessionId]: {
+        id: ++onlineDefenseVisualSeq.current, type: 'second_chance_revive',
+      }}));
+    }));
+    try { room.send('alpha15-request-sync', {}); } catch { /* Versão anterior */ }
     collectCleanup(room.onMessage('nitro-result', (message: { ok: boolean; message: string }) => {
       if (mountedRef.current && roomRef.current === room && !message.ok) setProblem(message.message);
     }));
@@ -5804,6 +5862,14 @@ function OnlineAlpha9Mapa() {
       blocked?: boolean; healedLives?: number; durationSeconds?: number;
     }) => {
       if (!mountedRef.current || roomRef.current !== room) return;
+      if (message.cardId === 'armor' || message.cardId === 'ghost' ||
+          message.cardId === 'second_chance') {
+        const visualType: DefenseVisualKind = message.cardId === 'armor' ? 'armor_activate' :
+          message.cardId === 'ghost' ? 'ghost_activate' : 'second_chance_arm';
+        setOnlineDefenseVisuals(current => ({...current, [message.sourceSessionId]: {
+          id: ++onlineDefenseVisualSeq.current, type: visualType,
+        }}));
+      }
       if (message.cardId === 'quick_repair' && (message.healedLives ?? 0) > 0) {
         setOnlineDefenseVisuals(current => ({...current, [message.sourceSessionId]: {
           id: ++onlineDefenseVisualSeq.current, type: 'repair', amount: message.healedLives,
@@ -5819,7 +5885,8 @@ function OnlineAlpha9Mapa() {
       }
       // Tocar a carta somente após o comando ser confirmado pelo servidor.
       if (['slow_slow', 'nitro_power', 'shield', 'chains', 'bullet', 'tnt', 'oil_spit',
-        'quick_repair', 'emp_pulse'].includes(message.cardId)) {
+        'quick_repair', 'emp_pulse', 'swap', 'magnet', 'blind', 'tornado',
+        'bubble_lift', 'armor', 'ghost', 'second_chance'].includes(message.cardId)) {
         playCardSfx(message.cardId as CardId);
       }
       if (message.cardId === 'slow_slow') {
@@ -5937,6 +6004,8 @@ function OnlineAlpha9Mapa() {
     me.nitroCooldown <= 0 && me.nitroRemaining <= 0);
   const rival = racePlayers.find(player => player.sessionId !== mySessionId);
   const deck = me ? [me.deckSlot0, me.deckSlot1, me.deckSlot2, me.deckSlot3] : ALPHA12_TEST_DECK;
+  const myAlpha15 = alpha15Visual[mySessionId];
+  const rivalAlpha15 = rival ? alpha15Visual[rival.sessionId] : undefined;
   const cardCooldown = (id: string) => id === 'slow_slow' ? (me?.slowCooldown ?? 0) :
     id === 'nitro_power' ? (me?.nitroPowerCooldown ?? 0) :
     id === 'shield' ? (me?.shieldCooldown ?? 0) : (me?.cardCooldowns?.[id] ?? 0);
@@ -5944,6 +6013,9 @@ function OnlineAlpha9Mapa() {
   // A lista de motivos reflete exclusivamente o snapshot recebido da AWS.
   const cardBlockReason = (id: string): string | null => {
     if (!ALPHA12_ENABLED.has(id)) return 'Carta ainda nao habilitada online.';
+    // Não liberar cartas Alpha 15 conectadas acidentalmente a um PM2 Alpha 14.
+    if (['swap','magnet','blind','tornado','bubble_lift','armor','ghost','second_chance'].includes(id)
+        && !serverBuild?.startsWith('ALPHA15-')) return 'Aguardando servidor Alpha 15 confirmado.';
     if (!room || !me) return 'Aguardando dados do jogador enviados pela AWS.';
     if (!me.battleSyncReady) return 'Estado Alpha 12 ausente. Confirme o deploy do Schema e WildRaceRoom na AWS.';
     if (dropped || !me.connected) return 'Conexao interrompida. Aguarde a reconexao.';
@@ -5957,6 +6029,19 @@ function OnlineAlpha9Mapa() {
     if (me.boost < officialCost) return 'BOOST insuficiente: ' + me.boost + '/' +
       officialCost + ' gotas. AWS recupera 1 gota a cada 2s de corrida.';
     if (id === 'quick_repair' && me.lives >= 5) return 'Vida completa.';
+    if (['blind','tornado','bubble_lift','swap'].includes(id) && (!rival?.connected || rival.lives <= 0))
+      return 'Rival indisponivel.';
+    if (id === 'swap' && (!rival || rival.x - rival.startX <= me.x - me.startX + 20))
+      return 'Swap exige rival a frente.';
+    if (['tornado','bubble_lift'].includes(id) && (!rival || rival.x - rival.startX <= me.x - me.startX + 20))
+      return 'Requer rival a frente.';
+    if (id === 'armor' && (myAlpha15?.armorCharges ?? 0) > 0) return 'Armor ainda ativa.';
+    if (id === 'ghost' && (myAlpha15?.ghostRemaining ?? 0) > 0) return 'Ghost ainda ativo.';
+    if (id === 'second_chance' && myAlpha15?.secondChanceReady) return 'Segunda chance ja armada.';
+    if (id === 'magnet' && (myAlpha15?.magnetRemaining ?? 0) > 0) return 'Magnet ainda ativo.';
+    if (id === 'blind' && (rivalAlpha15?.blindRemaining ?? 0) > 0) return 'Blind ja ativo no rival.';
+    if (id === 'tornado' && (rivalAlpha15?.tornadoRemaining ?? 0) > 0) return 'Tornado ja ativo no rival.';
+    if (id === 'bubble_lift' && (rivalAlpha15?.bubbleRemaining ?? 0) > 0) return 'Bubble Lift ja ativo no rival.';
     if (id === 'emp_pulse' && (!rival?.connected || rival.x <= me.x))
       return 'EMP Pulse exige um rival conectado a frente.';
     if (id === 'slow_slow') {
@@ -6036,6 +6121,12 @@ function OnlineAlpha9Mapa() {
         <View style={onlineMapStyles.connectionPill}>
           <Text numberOfLines={1} style={onlineMapStyles.smallHint}>
             {!room ? '● SEM SESSÃO' : dropped ? '● RECONECTANDO' : '● ONLINE'} · {ping === null ? 'PING —' : `${ping}ms`}
+          </Text>
+          {myAlpha15 && <Text style={onlineMapStyles.smallHint}>
+            🧲 CHIPs da corrida: {myAlpha15.chipsCollected} · 🛡️ ARMOR: {myAlpha15.armorCharges}
+          </Text>}
+          <Text numberOfLines={1} style={[onlineMapStyles.smallHint, {color: serverBuild ? '#8DFBB3' : '#FFCA7D'}]}>
+            AWS BUILD: {serverBuild ?? 'NÃO CONFIRMADA'}
           </Text>
           {serverPhysicsWarnings > 0 && (
             <Text style={onlineMapStyles.physicsWarningLabel}>
@@ -6120,6 +6211,7 @@ function OnlineAlpha9Mapa() {
         const visualEquipment = parseAlpha12Json<typeof selectedEquipment>(player.equipmentJson,
           localCosmetics ? selectedEquipment : ({} as typeof selectedEquipment));
         const horizontalX = relativePositionValue(player.sessionId, player.x);
+        const fx = alpha15Visual[player.sessionId];
         return (
           <Animated.View
             key={`online-car-${player.sessionId}`}
@@ -6144,6 +6236,12 @@ function OnlineAlpha9Mapa() {
               {player.chainsRemaining > 0 && <Text style={onlineMapStyles.slowFlag}>⛓️ CHAINS</Text>}
               {player.oilRemaining > 0 && <Text style={onlineMapStyles.slowFlag}>🛢️ OIL</Text>}
               {player.shieldCharges > 0 && <Text style={onlineMapStyles.shieldFlag}>🛡️ SHIELD</Text>}
+              {(fx?.armorCharges ?? 0) > 0 && <Text style={onlineMapStyles.shieldFlag}>🦾 ARMOR ×{fx.armorCharges}</Text>}
+              {(fx?.ghostRemaining ?? 0) > 0 && <Text style={onlineMapStyles.shieldFlag}>👻 GHOST</Text>}
+              {fx?.secondChanceReady && <Text style={onlineMapStyles.shieldFlag}>❤️ SECOND CHANCE</Text>}
+              {(fx?.magnetRemaining ?? 0) > 0 && <Text style={onlineMapStyles.shieldFlag}>🧲 MAGNET</Text>}
+              {(fx?.tornadoRemaining ?? 0) > 0 && <Text style={onlineMapStyles.slowFlag}>🌪️ TORNADO</Text>}
+              {(fx?.bubbleRemaining ?? 0) > 0 && <Text style={onlineMapStyles.slowFlag}>🫧 BUBBLE</Text>}
               {player.nitroPowerRemaining > 0 && <Text style={onlineMapStyles.nitroFlag}>
                 ⚡ POWER {player.nitroPowerRemaining.toFixed(1)}s
               </Text>}
@@ -6162,11 +6260,15 @@ function OnlineAlpha9Mapa() {
               ],
             }}>
             {player.slowRemaining > 0 && <SlowSlowVisual variant="racer" size={PLAYER_SIZE} />}
+            {(fx?.tornadoRemaining ?? 0) > 0 && <Text style={onlineMapStyles.alpha15EffectIcon}>🌪️</Text>}
+            {(fx?.bubbleRemaining ?? 0) > 0 && <Text style={onlineMapStyles.alpha15EffectIcon}>🫧</Text>}
+            {(fx?.magnetRemaining ?? 0) > 0 && <Text style={onlineMapStyles.alpha15EffectIcon}>🧲</Text>}
             {empVisualTarget === player.sessionId &&
               <EmpPulseVisual size={PLAYER_SIZE} paused={false} />}
             {supported ? (
               <DefenseCardVisual size={PLAYER_SIZE} shieldCharges={player.shieldCharges}
-                armorCharges={0} isGhost={false} secondChanceReady={false}
+                armorCharges={fx?.armorCharges ?? 0} isGhost={(fx?.ghostRemaining ?? 0) > 0}
+                secondChanceReady={fx?.secondChanceReady ?? false}
                 isInvincible={player.hitInvulnerableRemaining > 0}
                 event={onlineDefenseVisuals[player.sessionId]}>
                 <View style={onlineMapStyles.carContent}>
@@ -6208,6 +6310,11 @@ function OnlineAlpha9Mapa() {
           targetX={toScreen(target.x)} targetY={groundY - PLAYER_SIZE / 2} />;
       })()}
 
+      {phase === 'racing' && (myAlpha15?.blindRemaining ?? 0) > 0 && (
+        <View pointerEvents="none" style={onlineMapStyles.alpha15BlindOverlay}>
+          <Text style={onlineMapStyles.alpha15BlindText}>⚪ BLIND · {Math.ceil(myAlpha15.blindRemaining)}s</Text>
+        </View>
+      )}
       {problem !== '' && (
         <View style={onlineMapStyles.warningPanel}>
           <Text style={onlineMapStyles.warningText}>{problem}</Text>
@@ -6358,6 +6465,10 @@ export default function Mapa(props: MapaProps) {
 }
 
 const onlineMapStyles = StyleSheet.create({
+  alpha15EffectIcon: {fontSize: 18, textAlign: 'center'},
+  alpha15BlindOverlay: {...StyleSheet.absoluteFillObject, zIndex: 38,
+    backgroundColor:'rgba(255,255,255,0.90)', alignItems:'center', justifyContent:'center'},
+  alpha15BlindText: {fontSize:18, color:'#242424', fontWeight:'900'},
   tntCrate: {position: 'absolute', width: PLAYER_SIZE, height: PLAYER_SIZE,
     backgroundColor: '#B22222', borderWidth: 2, borderColor: '#8B0000',
     alignItems: 'center', justifyContent: 'center', zIndex: 7},
