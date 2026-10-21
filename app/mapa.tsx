@@ -5230,7 +5230,8 @@ const styles = StyleSheet.create({
 /* ===========================================================================
  * ALPHA 9.1 — MAPA ONLINE (mesmo arquivo; o Mapa offline permanece isolado)
  * A AWS é a única fonte de: carros, pilotos, fase, cronômetro, física e ranking.
- * Não há bots, cartas, física local nem recompensas offline neste modo.
+ * Não há bots, física local nem recompensas offline neste modo.
+ * Cartas e colisões pertencem à AWS; animações são executadas localmente.
  * =========================================================================== */
 
 type Alpha9Room = NonNullable<ReturnType<typeof getWildAlpha9Room>>;
@@ -5402,6 +5403,93 @@ const ALPHA13_COST: Record<string, number> = {
   tornado: 6, bubble_lift: 5, armor: 4, ghost: 5, second_chance: 6,
 };
 
+/* ===========================================================================
+ * ALPHA 15.3 — VFX multiplayer. Estes componentes são 100% visuais.
+ * Os eventos card-used / alpha15-sync / battle-hit chegam da AWS; o cliente
+ * NÃO resolve alvo, dano, posição, colisão, gravidade ou duração de buffs.
+ * =========================================================================== */
+type Alpha153Cue = { id: number; sessionId: string; cardId: string; blocked?: boolean };
+type Alpha153Tornado = {
+  id: number; callerX: number; targetX: number; targetSessionId: string;
+};
+type Alpha153BubbleShot = {id: number; callerX: number; targetX: number; targetSessionId: string};
+const ALPHA153_BUBBLE_TRAVEL_MS = 680;
+const ALPHA153_EMP_VISUAL_MS = 2000; // 120 frames / 60 FPS no offline.
+type Alpha153SwapHold = {beforeX: number; afterX: number; released: boolean};
+
+const ALPHA153_CARD_GLYPHS: Record<string, {icon: string; tint: string}> = {
+  swap: {icon: '🔄', tint: '#FF5DA2'}, chains: {icon: '⛓️', tint: '#C0C8D4'},
+  bullet: {icon: '🚀', tint: '#FF754D'}, tnt: {icon: '💥', tint: '#FF623D'},
+  oil_spit: {icon: '🛢️', tint: '#535353'}, slow_slow: {icon: '🐌', tint: '#E9D56A'},
+  nitro_power: {icon: '⚡', tint: '#36E6FF'}, shield: {icon: '🛡️', tint: '#62BFFF'},
+  quick_repair: {icon: '🔧', tint: '#64DD88'}, emp_pulse: {icon: '⚡', tint: '#B983FF'},
+  magnet: {icon: '🧲', tint: '#F56969'}, blind: {icon: '☀️', tint: '#FFEAC4'},
+  tornado: {icon: '🌪️', tint: '#9DE0FF'}, bubble_lift: {icon: '🫧', tint: '#8BE4FF'},
+  armor: {icon: '🦾', tint: '#FFCC6A'}, ghost: {icon: '👻', tint: '#C4B0FF'},
+  second_chance: {icon: '❤️', tint: '#FF7190'},
+  chips: {icon: '🟣', tint: '#D0A1FF'},
+};
+
+function Alpha153CardBurst({cardId, blocked = false}: {cardId: string; blocked?: boolean}) {
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.sequence([
+      Animated.timing(anim, {toValue: 1, duration: 230, useNativeDriver: true}),
+      Animated.timing(anim, {toValue: 2, duration: 560, useNativeDriver: true}),
+    ]).start();
+    return () => anim.stopAnimation();
+  }, [anim]);
+  const config = ALPHA153_CARD_GLYPHS[cardId] ?? {icon: '✨', tint: '#FFFFFF'};
+  return (
+    <Animated.View pointerEvents="none" style={[onlineMapStyles.alpha153Burst, {
+      borderColor: blocked ? '#71C8FF' : config.tint,
+      opacity: anim.interpolate({inputRange: [0, 0.4, 1, 2], outputRange: [0, 1, 1, 0]}),
+      transform: [
+        {translateY: anim.interpolate({inputRange: [0, 2], outputRange: [4, -32]})},
+        {scale: anim.interpolate({inputRange: [0, 1, 2], outputRange: [0.45, 1.23, 1.8]})},
+      ],
+    }]}>
+      <Text style={onlineMapStyles.alpha153BurstIcon}>{blocked ? '🛡️' : config.icon}</Text>
+    </Animated.View>
+  );
+}
+
+function Alpha153BubbleTravel({distance}: {distance: number}) {
+  const travel = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(travel, {toValue: 1, duration: ALPHA153_BUBBLE_TRAVEL_MS, useNativeDriver: true}).start();
+    return () => travel.stopAnimation();
+  }, [travel]);
+  return (
+    <Animated.View pointerEvents="none" style={{position: 'absolute', width: 42, height: 42,
+      transform: [{translateX: travel.interpolate({inputRange: [0, 1], outputRange: [0, distance]})}]}}>
+      <BubbleLiftVisual variant="travel" x={0} y={0} size={40} />
+    </Animated.View>
+  );
+}
+
+
+// O servidor determina a trajetória X e a colisão. Esta curvatura é apenas
+// apresentação (o GuidedBulletEffect offline controla alvos e não pode rodar
+// como simulador paralelo dentro do multiplayer).
+function Alpha153BulletFlight({x, y, targetX}: {x: number; y: number; targetX?: number}) {
+  const wobble = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const animation = Animated.loop(Animated.sequence([
+      Animated.timing(wobble, {toValue: 1, duration: 240, useNativeDriver: true}),
+      Animated.timing(wobble, {toValue: 0, duration: 240, useNativeDriver: true}),
+    ]));
+    animation.start();
+    return () => {animation.stop(); wobble.stopAnimation();};
+  }, [wobble]);
+  const angle = typeof targetX === 'number' ? (targetX >= x ? -8 : 8) : 0;
+  return <Animated.View pointerEvents="none" style={{position: 'absolute', zIndex: 12,
+    left: x, top: y - 8,
+    transform: [{translateY: wobble.interpolate({inputRange: [0, 1], outputRange: [0, -17]})}]}}>
+    <GuidedBulletVisual x={0} y={0} angle={angle} />
+  </Animated.View>;
+}
+
 function OnlineAlpha9Mapa() {
   const router = useRouter();
   const params = useLocalSearchParams<{ mapId?: string; skyTheme?: string }>();
@@ -5423,6 +5511,20 @@ function OnlineAlpha9Mapa() {
   const [serverBuild, setServerBuild] = useState<string | null>(null);
   const [alpha15Visual, setAlpha15Visual] = useState<Record<string, Alpha15VisualState>>({});
   const swapVisualResetRef = useRef(false);
+  // Mantém os carros na posição anterior até encolherem: não adia a física da AWS.
+  const swapVisualHoldRef = useRef(new Map<string, Alpha153SwapHold>());
+  // Eventos de disparo curtos (cast) e efeitos maiores (Tornado/Bubble).
+  const [alpha153Cues, setAlpha153Cues] = useState<Alpha153Cue[]>([]);
+  const [alpha153Tornados, setAlpha153Tornados] = useState<Alpha153Tornado[]>([]);
+  const [alpha153Bubbles, setAlpha153Bubbles] = useState<Alpha153BubbleShot[]>([]);
+  const [alpha153BubbleInFlight, setAlpha153BubbleInFlight] = useState<string[]>([]);
+  const alpha153BubbleAtRef = useRef(new Map<string, number>());
+  const alpha153Seq = useRef(0);
+  const alpha153Timers = useRef(new Set<ReturnType<typeof setTimeout>>());
+  const alpha153StatesRef = useRef<Record<string, Alpha15VisualState>>({});
+  const alpha153LiftAtRef = useRef(new Map<string, number>());
+  const alpha153TornadoAtRef = useRef(new Map<string, number>());
+  const alpha153TornadoHitIdsRef = useRef(new Set<number>());
   const [isLeaving, setIsLeaving] = useState(false);
   const [cardPending, setCardPending] = useState(false);
   const [visualImpacts, setVisualImpacts] = useState<Alpha12VisualImpact[]>([]);
@@ -5434,9 +5536,18 @@ function OnlineAlpha9Mapa() {
   const visualImpactTimers = useRef(new Set<ReturnType<typeof setTimeout>>());
   // Animações puramente cosméticas, uma por carro e reutilizadas em cada impacto.
   // NÃO alteram x/speed/vida autoritativos da AWS.
-  const hitVisualsRef = useRef(new Map<string, { lift: Animated.Value; rotate: Animated.Value; sway: Animated.Value }>());
+  const hitVisualsRef = useRef(new Map<string, { lift: Animated.Value; rotate: Animated.Value;
+    sway: Animated.Value; swapScale: Animated.Value }>());
   const raceSnapshotRef = useRef<Alpha9Race | null>(null);
-  const { playCardSfx } = useContext(AudioContext);
+  // Alpha 15.3 — semáforo sincronizado ao countdown do Schema na AWS.
+  const [onlineStartGoVisible, setOnlineStartGoVisible] = useState(false);
+  const lastOnlineStartPhaseRef = useRef<Alpha9Phase | null>(null);
+  const lastOnlineTrafficStepRef = useRef<number | null>(null);
+  const onlineRaceMusicPlayingRef = useRef(false);
+  const onlineGoHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Largada online: reutiliza os bipes e a música do offline, mas não inicia
+  // a corrida no celular. O estado/countdown/GO continuam autoritativos da AWS.
+  const { playCardSfx, playBeep, playMusic, pauseMusic } = useContext(AudioContext);
   const cardPendingRef = useRef(false);
   const cardRequestSeqRef = useRef(0);
   const cardAckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -5508,10 +5619,50 @@ function OnlineAlpha9Mapa() {
     console.log('[WILD CARD FEEDBACK]', message);
   };
 
+  // Mantemos um teto para efeitos/temporizadores, inclusive numa partida com spam.
+  const queueAlpha153Timer = (callback: () => void, ms: number) => {
+    const timer = setTimeout(() => {
+      alpha153Timers.current.delete(timer);
+      if (mountedRef.current) callback();
+    }, ms);
+    alpha153Timers.current.add(timer);
+  };
+  const queueAlpha153Cue = (sessionId: string, cardId: string, blocked = false) => {
+    if (!sessionId || !mountedRef.current) return;
+    const id = ++alpha153Seq.current;
+    setAlpha153Cues(prev => [...prev.slice(-17), {id, sessionId, cardId, blocked}]);
+    queueAlpha153Timer(() => setAlpha153Cues(prev => prev.filter(fx => fx.id !== id)), 900);
+  };
+  const queueAlpha153Bubble = (callerX: number, targetX: number,
+    targetSessionId: string, onArrival: () => void) => {
+    if (!Number.isFinite(callerX) || !Number.isFinite(targetX) || !targetSessionId) return;
+    alpha153BubbleAtRef.current.set(targetSessionId, Date.now());
+    const id = ++alpha153Seq.current;
+    setAlpha153Bubbles(prev => [...prev.slice(-5), {id, callerX, targetX, targetSessionId}]);
+    // O efeito de aprisionamento/levitação só começa quando a arte chega ao alvo.
+    setAlpha153BubbleInFlight(prev => [...new Set([...prev, targetSessionId])]);
+    queueAlpha153Timer(() => {
+      setAlpha153Bubbles(prev => prev.filter(fx => fx.id !== id));
+      setAlpha153BubbleInFlight(prev => prev.filter(sessionId => sessionId !== targetSessionId));
+      onArrival();
+    }, ALPHA153_BUBBLE_TRAVEL_MS);
+  };
+  const queueAlpha153Tornado = (callerX: number, targetX: number, targetSessionId: string) => {
+    if (!targetSessionId || !Number.isFinite(callerX) || !Number.isFinite(targetX)) return;
+    const now = Date.now();
+    if (now - (alpha153TornadoAtRef.current.get(targetSessionId) ?? 0) < 1400) return;
+    alpha153TornadoAtRef.current.set(targetSessionId, now);
+    const id = ++alpha153Seq.current;
+    setAlpha153Tornados(prev => [...prev.slice(-3), {id, callerX, targetX, targetSessionId}]);
+    // Fallback se o componente for desmontado, interrompido ou não chamar onComplete.
+    queueAlpha153Timer(() => setAlpha153Tornados(prev => prev.filter(fx => fx.id !== id)), 3300);
+  };
+
   const getHitVisual = (sessionId: string) => {
     let visual = hitVisualsRef.current.get(sessionId);
     if (!visual) {
-      visual = {lift: new Animated.Value(0), rotate: new Animated.Value(0), sway: new Animated.Value(0)};
+      visual = {lift: new Animated.Value(0), rotate: new Animated.Value(0),
+        sway: new Animated.Value(0), swapScale: new Animated.Value(1)};
       hitVisualsRef.current.set(sessionId, visual);
     }
     return visual;
@@ -5533,6 +5684,30 @@ function OnlineAlpha9Mapa() {
       ]).start();
       return;
     }
+    if (kind === 'tornado' || kind === 'bubble_lift') {
+      const now = Date.now();
+      if (now - (alpha153LiftAtRef.current.get(sessionId) ?? 0) < 1250) return;
+      alpha153LiftAtRef.current.set(sessionId, now);
+      visual.lift.stopAnimation();
+      visual.rotate.stopAnimation();
+      visual.lift.setValue(0);
+      visual.rotate.setValue(0);
+      // Somente reação VISUAL. Y, velocidade e gravidade oficiais virão na Alpha 16.
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(visual.lift, {toValue: kind === 'tornado' ? -98 : -86,
+            duration: 310, useNativeDriver: true}),
+          Animated.delay(kind === 'tornado' ? 600 : 1500),
+          Animated.timing(visual.lift, {toValue: 0,
+            duration: kind === 'tornado' ? 520 : 670, useNativeDriver: true}),
+        ]),
+        Animated.timing(visual.rotate, {
+          toValue: kind === 'tornado' ? 720 : 0,
+          duration: kind === 'tornado' ? 1430 : 2500, useNativeDriver: true,
+        }),
+      ]).start();
+      return;
+    }
     if (kind !== 'bullet' && kind !== 'tnt') return;
     // A animação em Y/rotação acompanha o mesmo hit comunicado a ambos os clientes.
     // A física real de velocidade/colisão NÃO depende deste Animated.View.
@@ -5549,6 +5724,56 @@ function OnlineAlpha9Mapa() {
       Animated.timing(visual.rotate, {toValue: kind === 'tnt' ? 720 : 360,
         duration: 740, useNativeDriver: true}),
     ]).start();
+  };
+
+  const animateAlpha153Swap = (sourceSessionId: string, targetSessionId: string,
+    casterX?: number, targetX?: number,
+    sourceBeforeX?: number, targetBeforeX?: number) => {
+    const snapshot = raceSnapshotRef.current;
+    const beforeSource = snapshot?.players.find(p => p.sessionId === sourceSessionId);
+    const beforeTarget = snapshot?.players.find(p => p.sessionId === targetSessionId);
+    // alpha15-swap traz as coordenadas NOVAS, validadas pela AWS.
+    const transitions = [
+      {sessionId: sourceSessionId, before: sourceBeforeX ?? beforeSource?.x, after: casterX},
+      {sessionId: targetSessionId, before: targetBeforeX ?? beforeTarget?.x, after: targetX},
+    ];
+    for (const {sessionId, before, after} of transitions) {
+      if (!sessionId) continue;
+      if (Number.isFinite(before) && Number.isFinite(after)) {
+        swapVisualHoldRef.current.set(sessionId, {
+          beforeX: before as number, afterX: after as number, released: false,
+        });
+        positionValue(sessionId, before as number).setValue(before as number);
+      }
+      const scale = getHitVisual(sessionId).swapScale;
+      scale.stopAnimation();
+      scale.setValue(1);
+      Animated.sequence([
+        Animated.timing(scale, {toValue: 0.10, duration: 220, useNativeDriver: true}),
+        Animated.timing(scale, {toValue: 1, duration: 280, useNativeDriver: true}),
+      ]).start();
+    }
+    // Antes deste momento, os carros continuam nas coordenadas antigas na tela,
+    // mesmo se o Schema já publicou a troca. O servidor NUNCA espera este timer.
+    queueAlpha153Timer(() => {
+      for (const {sessionId} of transitions) {
+        const hold = swapVisualHoldRef.current.get(sessionId);
+        if (hold) {
+          hold.released = true;
+          positionValue(sessionId).setValue(hold.afterX);
+        }
+      }
+      swapVisualResetRef.current = true;
+    }, 220);
+    queueAlpha153Timer(() => {
+      transitions.forEach(({sessionId}) => swapVisualHoldRef.current.delete(sessionId));
+      // Evita voltar aos samples pré-Swap do interpolador após liberar o hold.
+      const latest = raceSnapshotRef.current;
+      if (latest) {
+        smoothingRef.current.ingest(latest.players, latest.phase, true);
+        latest.players.forEach(player => positionValue(player.sessionId).setValue(player.x));
+      }
+    }, 540);
   };
 
   const clearCardPending = () => {
@@ -5628,6 +5853,16 @@ function OnlineAlpha9Mapa() {
       const newRace = lastSnapshotPhaseRef.current === 'finished' && snapshot.phase === 'waiting';
       if (newRace) {
         setAlpha15Visual({});
+        alpha153StatesRef.current = {};
+        alpha153LiftAtRef.current.clear();
+        alpha153TornadoAtRef.current.clear();
+        alpha153TornadoHitIdsRef.current.clear();
+        alpha153BubbleAtRef.current.clear();
+        swapVisualHoldRef.current.clear();
+        setAlpha153BubbleInFlight([]);
+        setAlpha153Cues([]);
+        setAlpha153Tornados([]);
+        setAlpha153Bubbles([]);
         lastFinitePlayersRef.current.clear();
         mapWarningAtRef.current.clear();
       }
@@ -5664,7 +5899,8 @@ function OnlineAlpha9Mapa() {
         if (snapshot.phase === 'racing' && player.x + 0.5 < player.startX) {
           warnSnapshot(player.sessionId, 'below-start-grid', {x: player.x, startX: player.startX});
         }
-        if (snapshot.phase === 'racing' && last && player.x + 0.5 < last.x) {
+        if (snapshot.phase === 'racing' && last && player.x + 0.5 < last.x &&
+            !swapVisualHoldRef.current.has(player.sessionId)) {
           warnSnapshot(player.sessionId, 'server-position-regression', {
             previousX: last.x, receivedX: player.x,
           });
@@ -5700,7 +5936,9 @@ function OnlineAlpha9Mapa() {
         const firstFrame = smoothingRef.current.frame(Date.now());
         snapshot.players.forEach(player => {
           const candidate = firstFrame[player.sessionId];
-          positionValue(player.sessionId, player.x).setValue(Number.isFinite(candidate) ? candidate : player.x);
+          const hold = swapVisualHoldRef.current.get(player.sessionId);
+          if (!hold) positionValue(player.sessionId, player.x).setValue(
+            Number.isFinite(candidate) ? candidate : player.x);
         });
       }
       setRace(snapshot);
@@ -5737,9 +5975,12 @@ function OnlineAlpha9Mapa() {
         const frame = smoothingRef.current.frame(Date.now());
         for (const [sessionId, x] of Object.entries(frame)) {
           // Animated.Value.setValue(NaN) pode corromper toda a árvore visual.
-          if (Number.isFinite(x)) positionValue(sessionId, x).setValue(x);
+          const hold = swapVisualHoldRef.current.get(sessionId);
+          if (hold) positionValue(sessionId).setValue(hold.released ? hold.afterX : hold.beforeX);
+          else if (Number.isFinite(x)) positionValue(sessionId, x).setValue(x);
         }
-        const me = frame[room.sessionId];
+        const ownHold = swapVisualHoldRef.current.get(room.sessionId);
+        const me = ownHold ? (ownHold.released ? ownHold.afterX : ownHold.beforeX) : frame[room.sessionId];
         if (Number.isFinite(me)) {
           const myStartX = startXRef.current[room.sessionId] ?? 0;
           sceneryTravel.setValue(Math.max(0, me - myStartX) * SCENARIO_TRAVEL_SCALE);
@@ -5810,9 +6051,12 @@ function OnlineAlpha9Mapa() {
       setPing(Date.now() - sentAt);
     }));
     // Handshake de build: previne testar um Mapa novo com um PM2 antigo.
-    collectCleanup(room.onMessage('wild-build-info', (message: {build?: string; checkpoints?: boolean}) => {
+    collectCleanup(room.onMessage('wild-build-info', (message: {
+      build?: string; checkpoints?: boolean; vfxPatch?: string;
+    }) => {
       if (!mountedRef.current || roomRef.current !== room) return;
-      const name = typeof message?.build === 'string' ? message.build : 'DESCONHECIDA';
+      const base = typeof message?.build === 'string' ? message.build : 'DESCONHECIDA';
+      const name = message.vfxPatch ? `${base} / VFX ${message.vfxPatch}` : base;
       setServerBuild(name);
       console.log('[WILD MAP] AWS BUILD CONFIRMADA:', name, 'checkpoints:', message?.checkpoints);
     }));
@@ -5831,16 +6075,28 @@ function OnlineAlpha9Mapa() {
       version?: string; players?: Record<string, Alpha15VisualState>;
     }) => {
       if (!mountedRef.current || roomRef.current !== room) return;
-      if (payload?.players) setAlpha15Visual(payload.players);
+      if (payload?.players) {
+        // Buffs vêm da AWS. NÃO iniciar levitação no sync: a colisão visual
+        // pertence ao onHitVictim do tornado ou à chegada da bolha. Ao reconectar
+        // no meio de um efeito, apenas o estado persistente é restaurado.
+        alpha153StatesRef.current = payload.players;
+        setAlpha15Visual(payload.players);
+      }
     }));
-    collectCleanup(room.onMessage('alpha15-swap', (event: {sourceSessionId:string;targetSessionId:string}) => {
+    collectCleanup(room.onMessage('alpha15-swap', (event: {
+      sourceSessionId:string; targetSessionId:string; casterX?:number; targetX?:number;
+      sourceBeforeX?:number; targetBeforeX?:number;
+    }) => {
       if (!mountedRef.current || roomRef.current !== room) return;
-      // Na PRÓXIMA atualização do Schema, reposiciona o smoother imediatamente.
-      swapVisualResetRef.current = true;
-      console.log('[WILD ALPHA 15] Swap confirmado pela AWS:', event);
+      animateAlpha153Swap(event.sourceSessionId, event.targetSessionId,
+        event.casterX, event.targetX, event.sourceBeforeX, event.targetBeforeX);
+      console.log('[WILD ALPHA 15.3] Swap confirmado pela AWS:', event);
     }));
     collectCleanup(room.onMessage('alpha15-loot', (event: {sessionId:string;gained:number;chipsCollected:number}) => {
-      if (roomRef.current === room) console.log('[WILD ALPHA 15] CHIPs da partida:', event);
+      if (roomRef.current === room && mountedRef.current) {
+        console.log('[WILD ALPHA 15.3] CHIPs da partida:', event);
+        if (event.gained > 0) queueAlpha153Cue(event.sessionId, 'chips');
+      }
     }));
     collectCleanup(room.onMessage('alpha15-revive', (event: {targetSessionId:string}) => {
       if (!mountedRef.current || roomRef.current !== room) return;
@@ -5859,12 +6115,43 @@ function OnlineAlpha9Mapa() {
     }));
     collectCleanup(room.onMessage('card-used', (message: {
       cardId: string; sourceSessionId: string; targetSessionId: string;
-      blocked?: boolean; healedLives?: number; durationSeconds?: number;
+      blocked?: boolean; blockedDefense?: 'shield' | 'ghost' | '';
+      healedLives?: number; durationSeconds?: number;
     }) => {
       if (!mountedRef.current || roomRef.current !== room) return;
-      if (message.cardId === 'armor' || message.cardId === 'ghost' ||
-          message.cardId === 'second_chance') {
-        const visualType: DefenseVisualKind = message.cardId === 'armor' ? 'armor_activate' :
+      // VFX apenas para ativações aceitas pela AWS. O targetId sempre vem dela:
+      // nunca escolhemos ou alteramos vítimas pelo celular.
+      queueAlpha153Cue(message.sourceSessionId, message.cardId);
+      if (message.blocked && message.targetSessionId) {
+        queueAlpha153Cue(message.targetSessionId, message.cardId, true);
+        if (message.blockedDefense === 'ghost' || message.blockedDefense === 'shield') {
+          setOnlineDefenseVisuals(current => ({...current, [message.targetSessionId]: {
+            id: ++onlineDefenseVisualSeq.current,
+            type: message.blockedDefense === 'ghost' ? 'ghost_evade' : 'shield_break',
+          }}));
+        }
+      }
+      const visualSnapshot = raceSnapshotRef.current;
+      const caster = visualSnapshot?.players.find(p => p.sessionId === message.sourceSessionId);
+      const victim = visualSnapshot?.players.find(p => p.sessionId === message.targetSessionId);
+      if (!message.blocked && caster && victim && caster.sessionId !== victim.sessionId) {
+        if (message.cardId === 'bubble_lift') {
+          queueAlpha153Bubble(caster.x, victim.x, victim.sessionId,
+            () => animateHit(victim.sessionId, 'bubble_lift'));
+        }
+        if (message.cardId === 'tornado') {
+          // O giro só começa quando TornadoVisual avisar que alcançou o carro.
+          queueAlpha153Tornado(caster.x, victim.x, victim.sessionId);
+        }
+      }
+      console.log('[WILD ALPHA 15.3] VFX card-used', {
+        cardId: message.cardId, source: message.sourceSessionId,
+        target: message.targetSessionId, blocked: Boolean(message.blocked),
+      });
+      if (message.cardId === 'shield' || message.cardId === 'armor' ||
+          message.cardId === 'ghost' || message.cardId === 'second_chance') {
+        const visualType: DefenseVisualKind = message.cardId === 'shield' ? 'shield_activate' :
+          message.cardId === 'armor' ? 'armor_activate' :
           message.cardId === 'ghost' ? 'ghost_activate' : 'second_chance_arm';
         setOnlineDefenseVisuals(current => ({...current, [message.sourceSessionId]: {
           id: ++onlineDefenseVisualSeq.current, type: visualType,
@@ -5881,7 +6168,7 @@ function OnlineAlpha9Mapa() {
         empVisualTimeout.current = setTimeout(() => {
           if (mountedRef.current) setEmpVisualTarget(null);
           empVisualTimeout.current = null;
-        }, 1500);
+        }, ALPHA153_EMP_VISUAL_MS);
       }
       // Tocar a carta somente após o comando ser confirmado pelo servidor.
       if (['slow_slow', 'nitro_power', 'shield', 'chains', 'bullet', 'tnt', 'oil_spit',
@@ -5909,14 +6196,24 @@ function OnlineAlpha9Mapa() {
 
     collectCleanup(room.onMessage('battle-hit', (event: {
       targetSessionId: string; kind: string; blocked?: boolean; lives?: number;
+      defense?: 'shield' | 'armor' | 'ghost' | 'second_chance' | string;
     }) => {
       if (!mountedRef.current || roomRef.current !== room) return;
       const target = raceSnapshotRef.current?.players.find(p => p.sessionId === event.targetSessionId);
-      if (!event.blocked) {
+      // Armor absorve a perda de vida, mas conserva o impacto físico/visual.
+      if (!event.blocked || event.defense === 'armor') {
         animateHit(event.targetSessionId, event.kind);
-        if (target && (event.kind === 'tnt' || event.kind === 'bullet')) {
-          showVisualImpact(event.kind, target.x);
-        }
+      }
+      if (target && (event.kind === 'tnt' || event.kind === 'bullet')) {
+        showVisualImpact(event.kind, target.x);
+      }
+      const defenseType: DefenseVisualKind | null = event.defense === 'ghost' ? 'ghost_evade' :
+        event.defense === 'shield' ? 'shield_break' :
+        event.defense === 'armor' ? 'armor_hit' : null;
+      if (defenseType) {
+        setOnlineDefenseVisuals(current => ({...current, [event.targetSessionId]: {
+          id: ++onlineDefenseVisualSeq.current, type: defenseType,
+        }}));
       }
       const impacted = event.targetSessionId === room.sessionId ? 'Você' : 'Rival';
       showCardFeedback(event.blocked ? `🛡️ ${impacted}: proteção segurou ${event.kind}!` :
@@ -5933,10 +6230,20 @@ function OnlineAlpha9Mapa() {
       mountedRef.current = false;
       visualImpactTimers.current.forEach(clearTimeout);
       visualImpactTimers.current.clear();
+      alpha153Timers.current.forEach(clearTimeout);
+      alpha153Timers.current.clear();
+      swapVisualHoldRef.current.clear();
+      alpha153TornadoHitIdsRef.current.clear();
+      alpha153BubbleAtRef.current.clear();
+      if (onlineGoHideTimerRef.current) {
+        clearTimeout(onlineGoHideTimerRef.current);
+        onlineGoHideTimerRef.current = null;
+      }
       hitVisualsRef.current.forEach(visual => {
         visual.lift.stopAnimation();
         visual.rotate.stopAnimation();
         visual.sway.stopAnimation();
+        visual.swapScale.stopAnimation();
       });
       hitVisualsRef.current.clear();
       if (empVisualTimeout.current) clearTimeout(empVisualTimeout.current);
@@ -6079,6 +6386,99 @@ function OnlineAlpha9Mapa() {
     race?.winnerSessionId ? '🏁 DERROTA' : '🏁 EMPATE'
   ) : '';
 
+  // ALPHA 15.3 — reuso da apresentação de startRaceSequence() do offline.
+  // Não executamos startRaceSequence() aqui: ela contém sleep, focusOn,
+  // largada de bots e setStarted(), que romperiam a sincronização online.
+  // O semáforo acompanha APENAS o contador do servidor. O GO aparece quando
+  // a fase realmente muda para racing. Sem zoom e sem minigame.
+  const rawOnlineCountdown = Number(race?.countdown ?? 0);
+  const onlineTrafficStep = phase === 'countdown' && Number.isFinite(rawOnlineCountdown)
+    ? Math.max(1, Math.ceil(rawOnlineCountdown)) : null;
+
+  useEffect(() => {
+    const previousPhase = lastOnlineStartPhaseRef.current;
+
+    if (dropped) {
+      // Reconexão: sem bipes ou GO fictício. Música é pausada enquanto a AWS
+      // interrompe a sessão; ao recuperar, retoma sem reiniciar a corrida.
+      if (onlineRaceMusicPlayingRef.current) {
+        pauseMusic();
+        onlineRaceMusicPlayingRef.current = false;
+      }
+      if (onlineGoHideTimerRef.current) {
+        clearTimeout(onlineGoHideTimerRef.current);
+        onlineGoHideTimerRef.current = null;
+      }
+      setOnlineStartGoVisible(false);
+      lastOnlineStartPhaseRef.current = phase;
+      return;
+    }
+
+    if (phase === 'countdown') {
+      if (previousPhase !== 'countdown') {
+        lastOnlineTrafficStepRef.current = null;
+        if (onlineGoHideTimerRef.current) {
+          clearTimeout(onlineGoHideTimerRef.current);
+          onlineGoHideTimerRef.current = null;
+        }
+        setOnlineStartGoVisible(false);
+      }
+      // Cada uma das três luzes dispara um único bip por etapa, mesmo que
+      // a AWS envie dezenas de snapshots no mesmo segundo.
+      if (onlineTrafficStep !== null && onlineTrafficStep <= 3 &&
+          onlineTrafficStep !== lastOnlineTrafficStepRef.current) {
+        lastOnlineTrafficStepRef.current = onlineTrafficStep;
+        playBeep();
+      }
+      if (onlineRaceMusicPlayingRef.current) {
+        pauseMusic();
+        onlineRaceMusicPlayingRef.current = false;
+      }
+    } else if (phase === 'racing') {
+      // Só mostra JÁ! numa transição REAL countdown -> racing; nunca inventa
+      // uma largada no meio de uma corrida ao reconectar ou entrar no mapa.
+      if (previousPhase === 'countdown') {
+        setOnlineStartGoVisible(true);
+        if (onlineGoHideTimerRef.current) clearTimeout(onlineGoHideTimerRef.current);
+        onlineGoHideTimerRef.current = setTimeout(() => {
+          onlineGoHideTimerRef.current = null;
+          setOnlineStartGoVisible(false);
+        }, 800);
+      }
+      if (!onlineRaceMusicPlayingRef.current) {
+        playMusic(MAP_MUSIC, {
+          volume: 0.5,
+          loop: true,
+          restart: previousPhase === 'countdown',
+        });
+        onlineRaceMusicPlayingRef.current = true;
+      }
+    } else {
+      // waiting, paused, finished — inclusive nas revanches.
+      if (onlineRaceMusicPlayingRef.current) {
+        pauseMusic();
+        onlineRaceMusicPlayingRef.current = false;
+      }
+      if (previousPhase !== phase && onlineGoHideTimerRef.current) {
+        clearTimeout(onlineGoHideTimerRef.current);
+        onlineGoHideTimerRef.current = null;
+      }
+      if (previousPhase !== phase) setOnlineStartGoVisible(false);
+      if (phase === 'waiting' || phase === 'finished') lastOnlineTrafficStepRef.current = null;
+    }
+    lastOnlineStartPhaseRef.current = phase;
+  }, [phase, onlineTrafficStep, dropped, playBeep, playMusic, pauseMusic]);
+
+  // Ao sair do Mapa, não deixar a trilha online tocando no laboratório.
+  useEffect(() => () => {
+    if (onlineGoHideTimerRef.current) clearTimeout(onlineGoHideTimerRef.current);
+    onlineGoHideTimerRef.current = null;
+    if (onlineRaceMusicPlayingRef.current) {
+      pauseMusic();
+      onlineRaceMusicPlayingRef.current = false;
+    }
+  }, [pauseMusic]);
+
   return (
     <View style={styles.container}>
       <MemoCenarioBackground
@@ -6165,8 +6565,7 @@ function OnlineAlpha9Mapa() {
         </View>
         <View style={onlineMapStyles.phaseChip} pointerEvents="none">
           <Text style={onlineMapStyles.phaseChipTitle}>{ALPHA9_PHASE_TEXT[phase]}</Text>
-          {phase === 'countdown' && <Text style={onlineMapStyles.countdownText}>{Math.max(1, Math.ceil(race?.countdown ?? 0))}</Text>}
-
+          {/* A contagem agora fica no semáforo central, não em números no HUD. */}
         </View>
         <View style={onlineMapStyles.sessionActions}>
           <TouchableOpacity style={onlineMapStyles.sessionButton} onPress={returnToLab}>
@@ -6184,7 +6583,11 @@ function OnlineAlpha9Mapa() {
       {(race?.hazards ?? []).map(hazard => {
         const x = screenWidth * 0.42 + (hazard.x - (me?.x ?? 0)) * ALPHA9_PIXELS_PER_SERVER_UNIT;
         if (hazard.kind === 'bullet') {
-          return <GuidedBulletVisual key={`hazard-${hazard.id}`} x={x} y={groundY - PLAYER_SIZE * 0.65} angle={0} />;
+          const intended = racePlayers.find(player => player.sessionId !== hazard.ownerId && player.connected);
+          const targetScreenX = intended ? screenWidth * 0.42 +
+            (intended.x - (me?.x ?? 0)) * ALPHA9_PIXELS_PER_SERVER_UNIT : undefined;
+          return <Alpha153BulletFlight key={`hazard-${hazard.id}`}
+            x={x} y={groundY - PLAYER_SIZE * 0.65} targetX={targetScreenX} />;
         }
         if (hazard.kind === 'oil_spit') {
           return <OilSpitVisual key={`hazard-${hazard.id}`} x={x} groundY={groundY} />;
@@ -6257,12 +6660,29 @@ function OnlineAlpha9Mapa() {
                 {rotate: getHitVisual(player.sessionId).rotate.interpolate({
                   inputRange: [0, 720], outputRange: ['0deg', '720deg'],
                 })},
+                {scale: getHitVisual(player.sessionId).swapScale},
               ],
             }}>
             {player.slowRemaining > 0 && <SlowSlowVisual variant="racer" size={PLAYER_SIZE} />}
-            {(fx?.tornadoRemaining ?? 0) > 0 && <Text style={onlineMapStyles.alpha15EffectIcon}>🌪️</Text>}
-            {(fx?.bubbleRemaining ?? 0) > 0 && <Text style={onlineMapStyles.alpha15EffectIcon}>🫧</Text>}
-            {(fx?.magnetRemaining ?? 0) > 0 && <Text style={onlineMapStyles.alpha15EffectIcon}>🧲</Text>}
+            {player.nitroPowerRemaining > 0 && (
+              <View pointerEvents="none" style={onlineMapStyles.alpha153NitroAura}>
+                <Text style={onlineMapStyles.alpha153NitroAuraIcon}>⚡</Text>
+              </View>
+            )}
+            {(fx?.magnetRemaining ?? 0) > 0 && (
+              <View pointerEvents="none" style={styles.magnetAura}>
+                <Text style={styles.magnetAuraIcon}>🧲</Text>
+              </View>
+            )}
+            {(fx?.bubbleRemaining ?? 0) > 0 && !alpha153BubbleInFlight.includes(player.sessionId) && (
+              <BubbleLiftVisual variant="trap" x={0} y={0} targetSize={PLAYER_SIZE}
+                padding={10} angle={0} />
+            )}
+            {alpha153Cues.filter(cue => cue.sessionId === player.sessionId).map(cue => (
+              <Alpha153CardBurst key={`alpha153-burst-${cue.id}`}
+                cardId={cue.cardId} blocked={cue.blocked} />
+            ))}
+            {/* Os ícones Alpha 15 foram substituídos por efeitos reais na Alpha 15.3. */}
             {empVisualTarget === player.sessionId &&
               <EmpPulseVisual size={PLAYER_SIZE} paused={false} />}
             {supported ? (
@@ -6300,6 +6720,45 @@ function OnlineAlpha9Mapa() {
           x={screenWidth * 0.42 + (effect.x - (me?.x ?? 0)) * ALPHA9_PIXELS_PER_SERVER_UNIT}
           y={groundY - PLAYER_SIZE} />
       ))}
+      {/* A bolha percorre visualmente o caminho confirmado; a vítima é do servidor. */}
+      {alpha153Bubbles.map(effect => (
+        <View key={`alpha153-bubble-${effect.id}`} pointerEvents="none"
+          style={{position: 'absolute', zIndex: 13,
+            left: screenWidth * 0.42 + (effect.callerX - (me?.x ?? 0)) * ALPHA9_PIXELS_PER_SERVER_UNIT,
+            top: groundY - PLAYER_SIZE - 8}}>
+          <Alpha153BubbleTravel
+            distance={(effect.targetX - effect.callerX) * ALPHA9_PIXELS_PER_SERVER_UNIT} />
+        </View>
+      ))}
+      {/* TornadoVisual do OFFLINE: somente desenho, sem chamar handleTornadoHit. */}
+      {alpha153Tornados.map(effect => (
+        <TornadoVisual key={`alpha153-tornado-${effect.id}`}
+          callerX={screenWidth * 0.42 + (effect.callerX - (me?.x ?? 0)) * ALPHA9_PIXELS_PER_SERVER_UNIT}
+          callerY={groundY - PLAYER_SIZE}
+          victims={[{
+            id: effect.targetSessionId,
+            x: screenWidth * 0.42 + (effect.targetX - (me?.x ?? 0)) * ALPHA9_PIXELS_PER_SERVER_UNIT,
+            y: groundY - PLAYER_SIZE,
+          }]}
+          onHitVictim={(victimId) => {
+            if (victimId === effect.targetSessionId &&
+                !alpha153TornadoHitIdsRef.current.has(effect.id)) {
+              alpha153TornadoHitIdsRef.current.add(effect.id);
+              animateHit(victimId, 'tornado');
+            }
+          }}
+          onComplete={() => {
+            // Fallback só se ainda houver debuff real, caso a colisão COSMÉTICA
+            // do TornadoVisual não detecte o carro por atraso/interpolação.
+            if (!alpha153TornadoHitIdsRef.current.has(effect.id) &&
+                (alpha153StatesRef.current[effect.targetSessionId]?.tornadoRemaining ?? 0) > 0) {
+              animateHit(effect.targetSessionId, 'tornado');
+            }
+            alpha153TornadoHitIdsRef.current.delete(effect.id);
+            setAlpha153Tornados(prev => prev.filter(fx => fx.id !== effect.id));
+          }}
+        />
+      ))}
       {/* Chains é um estado imposto pelo servidor; a corrente é somente visual. */}
       {phase === 'racing' && me && rival && (me.chainsRemaining > 0 || rival.chainsRemaining > 0) && (() => {
         const attacker = me.chainsRemaining > 0 ? rival : me;
@@ -6310,11 +6769,38 @@ function OnlineAlpha9Mapa() {
           targetX={toScreen(target.x)} targetY={groundY - PLAYER_SIZE / 2} />;
       })()}
 
+      {phase === 'racing' && (me?.slowRemaining ?? 0) > 0 && (
+        <SlowSlowVisual variant="screen" />
+      )}
       {phase === 'racing' && (myAlpha15?.blindRemaining ?? 0) > 0 && (
-        <View pointerEvents="none" style={onlineMapStyles.alpha15BlindOverlay}>
-          <Text style={onlineMapStyles.alpha15BlindText}>⚪ BLIND · {Math.ceil(myAlpha15.blindRemaining)}s</Text>
+        <View pointerEvents="none" style={styles.blindEffect} />
+      )}
+      {/* Semáforo da largada offline, dirigido exclusivamente pelo countdown da AWS.
+          Sem câmera aproximando os carros, sem minigame e sem setStarted local. */}
+      {((phase === 'countdown' && !dropped) || onlineStartGoVisible) && (
+        <View pointerEvents="none" style={[styles.overlay, onlineMapStyles.onlineStartOverlay]}>
+          {phase === 'countdown' ? (
+            onlineTrafficStep !== null && onlineTrafficStep > 3 ? (
+              <Text style={styles.titleText}>PREPARANDO...</Text>
+            ) : (
+              <View style={styles.trafficLightContainer}>
+                <View style={[styles.light, {
+                  backgroundColor: (onlineTrafficStep ?? 4) <= 3 ? '#00D084' : '#FF3B30',
+                }]} />
+                <View style={[styles.light, {
+                  backgroundColor: (onlineTrafficStep ?? 4) <= 2 ? '#00D084' : '#FF3B30',
+                }]} />
+                <View style={[styles.light, {
+                  backgroundColor: (onlineTrafficStep ?? 4) <= 1 ? '#00D084' : '#FF3B30',
+                }]} />
+              </View>
+            )
+          ) : (
+            <Text style={[styles.titleText, {color: '#00D084'}]}>JÁ!</Text>
+          )}
         </View>
       )}
+
       {problem !== '' && (
         <View style={onlineMapStyles.warningPanel}>
           <Text style={onlineMapStyles.warningText}>{problem}</Text>
@@ -6465,10 +6951,19 @@ export default function Mapa(props: MapaProps) {
 }
 
 const onlineMapStyles = StyleSheet.create({
+  // Acima dos HUDs online; a apresentação usa trafficLightContainer/light
+  // originais do OfflineMapa para manter o mesmo visual de largada.
+  onlineStartOverlay: {zIndex: 80, elevation: 80},
   alpha15EffectIcon: {fontSize: 18, textAlign: 'center'},
-  alpha15BlindOverlay: {...StyleSheet.absoluteFillObject, zIndex: 38,
-    backgroundColor:'rgba(255,255,255,0.90)', alignItems:'center', justifyContent:'center'},
-  alpha15BlindText: {fontSize:18, color:'#242424', fontWeight:'900'},
+  alpha153Burst: { position: 'absolute', alignSelf: 'center', top: -28,
+    zIndex: 19, width: 36, height: 36, borderWidth: 2.5, borderRadius: 22,
+    backgroundColor: 'rgba(10,13,24,0.7)', alignItems: 'center', justifyContent: 'center' },
+  alpha153BurstIcon: {fontSize: 19, textAlign: 'center'},
+  alpha153NitroAura: {position: 'absolute', top: 3, left: -8,
+    width: 60, height: 40, borderRadius: 30,
+    borderWidth: 2, borderColor: 'rgba(45,233,255,0.85)',
+    backgroundColor: 'rgba(10,207,255,0.16)', zIndex: 0},
+  alpha153NitroAuraIcon: {fontSize: 15, position: 'absolute', left: -11, top: 9},
   tntCrate: {position: 'absolute', width: PLAYER_SIZE, height: PLAYER_SIZE,
     backgroundColor: '#B22222', borderWidth: 2, borderColor: '#8B0000',
     alignItems: 'center', justifyContent: 'center', zIndex: 7},
@@ -6499,7 +6994,6 @@ const onlineMapStyles = StyleSheet.create({
     paddingHorizontal: 7, backgroundColor: 'rgba(8,8,12,0.60)', alignItems: 'center' },
   phaseChipTitle: { color: '#FFD60A', fontSize: 8, fontWeight: '900' },
   phaseChipInfo: { color: '#DDD', fontSize: 7, fontWeight: '700' },
-  countdownText: { color: '#00D084', fontSize: 24, fontWeight: '900' },
   sessionActions: { flexDirection: 'row', gap: 5, marginTop: 5 },
   sessionButton: { backgroundColor: 'rgba(36,47,70,0.9)', borderRadius: 6,
     paddingHorizontal: 11, paddingVertical: 6 },

@@ -19,13 +19,29 @@ import {
 } from 'react-native';
 
 const EMPTY_CARD_IDS: string[] = [];
-// Esse catálogo precisa coincidir com WildRaceRoom e com o HUD do Mapa online.
-// Nunca se deve vender como jogável online algo não reconhecido na AWS.
+// ALPHA 15 — 17 cartas habilitadas no PvP (9 anteriores + 8 novas).
+// Esta lista espelha WildRaceRoom / WildAlpha15Rules no WildServer.
+// O inventário continua vindo de profile.unlocks.cards: habilitada não significa comprada.
 const ENABLED_ONLINE_CARDS = new Set<string>([
   'slow_slow', 'nitro_power', 'shield', 'bullet', 'chains', 'tnt', 'oil_spit',
   'quick_repair', 'emp_pulse',
+  'swap', 'magnet', 'blind', 'tornado', 'bubble_lift', 'armor', 'ghost', 'second_chance',
 ]);
-const ONLINE_BATTLE_COST: Record<string, number> = {quick_repair: 5, emp_pulse: 6};
+
+// Custos específicos do PvP: manter sincronizados com as regras autoritativas da AWS.
+// As outras 7 cartas antigas continuam usando os custos do cardMap.
+const ONLINE_BATTLE_COST: Record<string, number> = {
+  quick_repair: 5,
+  emp_pulse: 6,
+  swap: 5,
+  magnet: 4,
+  blind: 4,
+  tornado: 6,
+  bubble_lift: 5,
+  armor: 4,
+  ghost: 5,
+  second_chance: 6,
+};
 
 export default function DeckSelection() {
   const { next } = useLocalSearchParams<{ next?: string }>();

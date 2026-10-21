@@ -32,10 +32,38 @@ import {
 
 const SERVER_URL = 'https://online.wfsoft.com.br';
 const ROOM_TYPE = 'wild_race';
+// ALPHA 15 — mesmo catálogo online usado pela DeckSelection e pela AWS.
+// O inventário do jogador é conferido separadamente: habilitada não significa comprada.
 const ENABLED_ONLINE_CARDS = new Set<string>([
   'slow_slow', 'nitro_power', 'shield', 'bullet', 'chains', 'tnt', 'oil_spit',
   'quick_repair', 'emp_pulse',
+  'swap', 'magnet', 'blind', 'tornado', 'bubble_lift', 'armor', 'ghost', 'second_chance',
 ]);
+
+// Mensagem detalhada para não confundir carta não habilitada com inventário não sincronizado.
+function validateOnlineDeck(
+  deck: readonly string[] | null | undefined,
+  ownedCards: readonly string[] | null | undefined,
+): string | null {
+  if (!Array.isArray(deck) || deck.length !== 4) {
+    return 'Escolha exatamente quatro cartas em DECK SELECTION.';
+  }
+  if (new Set(deck).size !== 4) {
+    return 'Seu deck precisa ter quatro cartas diferentes.';
+  }
+  const unsupported = deck.filter(id => !ENABLED_ONLINE_CARDS.has(id) || !getCardDefinition(id));
+  if (unsupported.length) {
+    return `Carta não habilitada neste Alpha: ${unsupported.join(', ')}. Volte à DECK SELECTION.`;
+  }
+  if (!ownedCards) {
+    return 'Inventário de cartas indisponível. Aguarde a sincronização do seu perfil.';
+  }
+  const notOwned = deck.filter(id => !ownedCards.includes(id));
+  if (notOwned.length) {
+    return `Cartas não encontradas no inventário: ${notOwned.join(', ')}. Confira a compra/sincronização.`;
+  }
+  return null;
+}
 
 // SDK v0.18.x fornece room.input(), room.onDrop() e room.onReconnect().
 type OnlineRoom = Awaited<ReturnType<Client['create']>>;
@@ -129,10 +157,8 @@ export default function WildOnlineLab() {
   const { selectedCar } = useCarSelection();
   const profile = usePlayerStore(state => state.profile);
   const equippedDeck = usePlayerStore(state => state.equippedDeck);
-  const deckReady = Array.isArray(equippedDeck) && equippedDeck.length === 4 &&
-    new Set(equippedDeck).size === 4 &&
-    equippedDeck.every(id => ENABLED_ONLINE_CARDS.has(id) && !!getCardDefinition(id) &&
-      profile?.unlocks?.cards?.includes(id));
+  const deckValidationError = validateOnlineDeck(equippedDeck, profile?.unlocks?.cards);
+  const deckReady = deckValidationError === null;
   // Fonte única para o veículo: garagem / CarSelection.
   // O fallback aqui serve APENAS para renderizar dados na prévia offline.
   // Sem seleção válida, o comando de criar/entrar em sala fica bloqueado.
@@ -367,7 +393,7 @@ export default function WildOnlineLab() {
       return;
     }
     if (!deckReady) {
-      setDetail('Deck inválido ou com carta ainda não habilitada online. Escolha quatro cartas em DECK SELECTION.');
+      setDetail(deckValidationError ?? 'Deck inválido. Volte à DECK SELECTION.');
       return;
     }
     if (getWildAlpha9Room()) {
@@ -406,7 +432,7 @@ export default function WildOnlineLab() {
     } finally {
       if (mounted.current) setBusy(false);
     }
-  }, [attachRoom, busy, carId, deckReady, equippedDeck, profile, hasGarageCar, roomCode]);
+  }, [attachRoom, busy, carId, deckReady, deckValidationError, equippedDeck, profile, hasGarageCar, roomCode]);
 
   // ALPHA 9: transfer the very same room to /Mapa. No JOIN, no new sessionId.
   // The LAB stops its own 30Hz sender BEFORE the online map starts another one.
@@ -519,7 +545,7 @@ export default function WildOnlineLab() {
             <View style={styles.brandMark}><Text style={styles.brandMarkText}>WF</Text></View>
             <View style={styles.brandTextBlock}>
               <Text style={styles.brandTitle}>WILD <Text style={styles.brandAccent}>ONLINE</Text></Text>
-              <Text style={styles.brandSub}>SALA MULTIPLAYER  /  PRÉ-ALPHA 12</Text>
+              <Text style={styles.brandSub}>SALA MULTIPLAYER  /  ALPHA 15</Text>
             </View>
             <View style={styles.topFill} />
             <View style={styles.connectionBadge}>
@@ -774,13 +800,15 @@ export default function WildOnlineLab() {
                     );
                   })}
                 </View>
-                <Text style={styles.deckNote} numberOfLines={compact ? 1 : 2}>Deck salvo em DECK SELECTION. A AWS valida custos e recargas; posse Firestore será verificada antes da produção.</Text>
+                <Text style={[styles.deckNote, !deckReady && styles.deckError]} numberOfLines={compact ? 1 : 2}>
+                  {deckValidationError ?? 'Deck salvo em DECK SELECTION. A AWS valida custos e recargas; posse Firestore será verificada antes da produção.'}
+                </Text>
               </View>
             </View>
           </View>
           <View style={styles.footer}>
             <Text style={styles.footerBrand}>WF SOFT  /  WILD RUNNERS</Text>
-            <Text style={styles.footerInfo}>LOBBY PRIVADO • 2 JOGADORES • PRÉ-ALPHA 12</Text>
+            <Text style={styles.footerInfo}>LOBBY PRIVADO • 2 JOGADORES • ALPHA 15</Text>
           </View>
         </View>
       )}
@@ -966,6 +994,7 @@ const styles = StyleSheet.create({
   deckSlotIcon: { color: '#8694AA', fontWeight: '900', fontSize: 14 },
   deckSlotLabel: { color: '#ACBAD0', fontSize: 9, fontWeight: '900' },
   deckNote: { color: '#97A8C0', fontSize: 9, lineHeight: 12 },
+  deckError: { color: '#FFB4A7' },
   footer: { height: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4 },
   footerBrand: { color: '#647892', fontSize: 8, fontWeight: '900', letterSpacing: 1 },
   footerInfo: { color: '#647892', fontSize: 8, fontWeight: '800' },
