@@ -5248,6 +5248,12 @@ type Alpha9Player = {
   rank: number;
   speed: number;
   x: number;
+  y: number;                     // deslocamento vertical NEGATIVO = no ar; vem da AWS
+  verticalVelocity: number;
+  grounded: boolean;
+  hitStunRemaining: number;
+  nitroCharge: number;           // vácuo 0..100%
+  perfectStartHits: number;
   maxSpeed: number;
   acceleration: number;
   nitroCharges: number;
@@ -5283,6 +5289,13 @@ type Alpha15VisualState = {
   magnetRemaining: number; chipsCollected: number;
 };
 type Alpha12Hazard = { id: string; kind: string; x: number; ownerId: string };
+type WildLootType = 'motor' | 'spray' | 'engrenagem' | 'chips';
+type WildLootDrop = {id: string; x: number; type: WildLootType; fromSessionId: string};
+type WildLootWallet = Record<WildLootType, number>;
+const EMPTY_WILD_LOOT: WildLootWallet = {motor: 0, spray: 0, engrenagem: 0, chips: 0};
+const WILD_LOOT_ICONS: Record<WildLootType, string> = {
+  motor: '🔧', spray: '🎨', engrenagem: '⚙️', chips: '🟣',
+};
 // Efeitos efêmeros são somente animações: nunca produzem dano no dispositivo.
 type Alpha12VisualImpact = { id: number; kind: 'bullet' | 'tnt'; x: number };
 function parseAlpha12Json<T>(text: unknown, fallback: T): T {
@@ -5330,6 +5343,12 @@ function alpha9ReadRace(room: Alpha9Room): Alpha9Race {
       rank: Number(player.rank ?? 0),
       speed: Number(player.speed ?? 0),
       x: Number(player.x ?? 0),
+      y: Number(player.y ?? 0),
+      verticalVelocity: Number(player.verticalVelocity ?? 0),
+      grounded: player.grounded !== false,
+      hitStunRemaining: Number(player.hitStunRemaining ?? 0),
+      nitroCharge: Number(player.nitroCharge ?? 0),
+      perfectStartHits: Number(player.perfectStartHits ?? 0),
       maxSpeed: Number(player.maxSpeed ?? 0),
       acceleration: Number(player.acceleration ?? 0),
       nitroCharges: Number(player.nitroCharges ?? 0),
@@ -5419,6 +5438,8 @@ type Alpha153SwapHold = {beforeX: number; afterX: number; released: boolean};
 
 const ALPHA153_CARD_GLYPHS: Record<string, {icon: string; tint: string}> = {
   swap: {icon: '🔄', tint: '#FF5DA2'}, chains: {icon: '⛓️', tint: '#C0C8D4'},
+  motor: {icon: '🔧', tint: '#ACD9F9'}, spray: {icon: '🎨', tint: '#FF9FC8'},
+  engrenagem: {icon: '⚙️', tint: '#F0D96B'},
   bullet: {icon: '🚀', tint: '#FF754D'}, tnt: {icon: '💥', tint: '#FF623D'},
   oil_spit: {icon: '🛢️', tint: '#535353'}, slow_slow: {icon: '🐌', tint: '#E9D56A'},
   nitro_power: {icon: '⚡', tint: '#36E6FF'}, shield: {icon: '🛡️', tint: '#62BFFF'},
@@ -5510,6 +5531,9 @@ function OnlineAlpha9Mapa() {
   const [serverPhysicsWarnings, setServerPhysicsWarnings] = useState(0);
   const [serverBuild, setServerBuild] = useState<string | null>(null);
   const [alpha15Visual, setAlpha15Visual] = useState<Record<string, Alpha15VisualState>>({});
+  // Recursos do Alpha 15.3.2, enviados pela AWS (não representam saldo Firebase).
+  const [wildLootDrops, setWildLootDrops] = useState<WildLootDrop[]>([]);
+  const [wildLootWallets, setWildLootWallets] = useState<Record<string, WildLootWallet>>({});
   const swapVisualResetRef = useRef(false);
   // Mantém os carros na posição anterior até encolherem: não adia a física da AWS.
   const swapVisualHoldRef = useRef(new Map<string, Alpha153SwapHold>());
@@ -5561,6 +5585,10 @@ function OnlineAlpha9Mapa() {
   const stickXRef = useRef(0);
   const stickX = useRef(new Animated.Value(0)).current;
   const positionsRef = useRef<Record<string, Animated.Value>>({});
+  const verticalPositionsRef = useRef<Record<string, Animated.Value>>({});
+  // Os raios da largada são disparados pela AWS, nunca pela animação do semáforo.
+  const [onlineTappedSteps, setOnlineTappedSteps] = useState<number[]>([]);
+  const onlineTapRequestsRef = useRef(new Set<number>());
   const startXRef = useRef<Record<string, number>>({});
   const relativeXRef = useRef<Record<string, ReturnType<typeof Animated.multiply>>>({});
   const lastRosterLogRef = useRef('');
@@ -5587,6 +5615,13 @@ function OnlineAlpha9Mapa() {
   };
 
   // Cache do Animated.Node: não recriar a árvore de animações a cada snapshot.
+  const verticalPositionValue = (sessionId: string, serverY = 0) => {
+    if (!verticalPositionsRef.current[sessionId]) {
+      verticalPositionsRef.current[sessionId] = new Animated.Value(Number.isFinite(serverY) ? serverY : 0);
+    }
+    return verticalPositionsRef.current[sessionId];
+  };
+
   const relativePositionValue = (sessionId: string, sessionX: number) => {
     if (!relativeXRef.current[sessionId]) {
       relativeXRef.current[sessionId] = Animated.multiply(
@@ -5684,45 +5719,24 @@ function OnlineAlpha9Mapa() {
       ]).start();
       return;
     }
-    if (kind === 'tornado' || kind === 'bubble_lift') {
+    if (kind === 'bubble_lift') return; // Bubble física (Y) só do Schema da AWS.
+    if (kind === 'tornado') {
       const now = Date.now();
       if (now - (alpha153LiftAtRef.current.get(sessionId) ?? 0) < 1250) return;
       alpha153LiftAtRef.current.set(sessionId, now);
-      visual.lift.stopAnimation();
       visual.rotate.stopAnimation();
-      visual.lift.setValue(0);
       visual.rotate.setValue(0);
-      // Somente reação VISUAL. Y, velocidade e gravidade oficiais virão na Alpha 16.
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(visual.lift, {toValue: kind === 'tornado' ? -98 : -86,
-            duration: 310, useNativeDriver: true}),
-          Animated.delay(kind === 'tornado' ? 600 : 1500),
-          Animated.timing(visual.lift, {toValue: 0,
-            duration: kind === 'tornado' ? 520 : 670, useNativeDriver: true}),
-        ]),
-        Animated.timing(visual.rotate, {
-          toValue: kind === 'tornado' ? 720 : 0,
-          duration: kind === 'tornado' ? 1430 : 2500, useNativeDriver: true,
-        }),
-      ]).start();
+      Animated.timing(visual.rotate, {toValue: 720, duration: 1250,
+        useNativeDriver: true}).start();
       return;
     }
     if (kind !== 'bullet' && kind !== 'tnt') return;
-    // A animação em Y/rotação acompanha o mesmo hit comunicado a ambos os clientes.
-    // A física real de velocidade/colisão NÃO depende deste Animated.View.
-    visual.lift.stopAnimation();
+    // Bullet/TNT recebem altura e queda do servidor. Apenas leve rotação de impacto.
     visual.rotate.stopAnimation();
-    visual.lift.setValue(0);
     visual.rotate.setValue(0);
-    Animated.parallel([
-      Animated.sequence([
-        Animated.timing(visual.lift, {toValue: -63, duration: 210, useNativeDriver: true}),
-        Animated.timing(visual.lift, {toValue: -72, duration: 120, useNativeDriver: true}),
-        Animated.timing(visual.lift, {toValue: 0, duration: 410, useNativeDriver: true}),
-      ]),
-      Animated.timing(visual.rotate, {toValue: kind === 'tnt' ? 720 : 360,
-        duration: 740, useNativeDriver: true}),
+    Animated.sequence([
+      Animated.timing(visual.rotate, {toValue: 25, duration: 160, useNativeDriver:true}),
+      Animated.timing(visual.rotate, {toValue: 0, duration: 420, useNativeDriver:true}),
     ]).start();
   };
 
@@ -5858,6 +5872,8 @@ function OnlineAlpha9Mapa() {
         alpha153TornadoAtRef.current.clear();
         alpha153TornadoHitIdsRef.current.clear();
         alpha153BubbleAtRef.current.clear();
+        onlineTapRequestsRef.current.clear();
+        setOnlineTappedSteps([]);
         swapVisualHoldRef.current.clear();
         setAlpha153BubbleInFlight([]);
         setAlpha153Cues([]);
@@ -5894,6 +5910,8 @@ function OnlineAlpha9Mapa() {
         }
         player.x = Number.isFinite(rawX) ? rawX : (last?.x ?? player.startX);
         player.speed = Number.isFinite(rawSpeed) ? Math.max(0, rawSpeed) : (last?.speed ?? 0);
+        player.y = Number.isFinite(player.y) ? Math.max(-1100, Math.min(0, player.y)) : 0;
+        verticalPositionValue(player.sessionId, player.y).setValue(player.y);
         // Uma posição abaixo do grid inicial pode zerar o parallax do player.
         // Não alterar x/startX aqui: corrigir isto SOMENTE no servidor autoritativo.
         if (snapshot.phase === 'racing' && player.x + 0.5 < player.startX) {
@@ -6027,8 +6045,8 @@ function OnlineAlpha9Mapa() {
       setProblem('');
       setPing(null);
       applySnapshot(true);
-      try { room.send('wild-build-check', {}); }
-      catch (error) { console.warn('[WILD MAP] Build check após reconexão falhou', error); }
+      try { room.send('wild-build-check', {}); room.send('wild-loot-request-sync', {}); }
+      catch (error) { console.warn('[WILD MAP] Re-sync após reconexão falhou', error); }
       startSenders();
     }));
     collectCleanup(room.onLeave((code: number) => {
@@ -6092,12 +6110,40 @@ function OnlineAlpha9Mapa() {
         event.casterX, event.targetX, event.sourceBeforeX, event.targetBeforeX);
       console.log('[WILD ALPHA 15.3] Swap confirmado pela AWS:', event);
     }));
-    collectCleanup(room.onMessage('alpha15-loot', (event: {sessionId:string;gained:number;chipsCollected:number}) => {
-      if (roomRef.current === room && mountedRef.current) {
-        console.log('[WILD ALPHA 15.3] CHIPs da partida:', event);
-        if (event.gained > 0) queueAlpha153Cue(event.sessionId, 'chips');
-      }
+    // ALPHA 15.3.2: não usar mais alpha15-loot (prêmio automático por distância).
+    // Spawn/pickup/removal são eventos exclusivamente autoritativos da AWS.
+    collectCleanup(room.onMessage('wild-loot-sync', (payload: {
+      drops?: WildLootDrop[]; wallets?: Record<string, WildLootWallet>;
+    }) => {
+      if (!mountedRef.current || roomRef.current !== room) return;
+      setWildLootDrops(Array.isArray(payload?.drops) ? payload.drops.filter(drop =>
+        drop && typeof drop.id === 'string' && Number.isFinite(drop.x) &&
+        Object.prototype.hasOwnProperty.call(WILD_LOOT_ICONS, drop.type)).slice(0, 90) : []);
+      setWildLootWallets(payload?.wallets ?? {});
     }));
+    collectCleanup(room.onMessage('wild-loot-spawn', (event: {drops?: WildLootDrop[]}) => {
+      if (!mountedRef.current || roomRef.current !== room || !Array.isArray(event?.drops)) return;
+      setWildLootDrops(current => {
+        const incoming = event.drops!.filter(drop => drop && Number.isFinite(drop.x) &&
+          Object.prototype.hasOwnProperty.call(WILD_LOOT_ICONS, drop.type));
+        const known = new Set(current.map(drop => drop.id));
+        return [...current, ...incoming.filter(drop => !known.has(drop.id))].slice(-90);
+      });
+    }));
+    collectCleanup(room.onMessage('wild-loot-pickup', (event: {
+      id:string; sessionId:string; type:WildLootType; wallet:WildLootWallet;
+    }) => {
+      if (!mountedRef.current || roomRef.current !== room) return;
+      setWildLootDrops(current => current.filter(drop => drop.id !== event.id));
+      setWildLootWallets(current => ({...current, [event.sessionId]: event.wallet}));
+      queueAlpha153Cue(event.sessionId, event.type === 'chips' ? 'chips' : event.type);
+    }));
+    collectCleanup(room.onMessage('wild-loot-expire', (event: {ids?: string[]}) => {
+      if (!mountedRef.current || roomRef.current !== room || !Array.isArray(event?.ids)) return;
+      const gone = new Set(event.ids);
+      setWildLootDrops(current => current.filter(drop => !gone.has(drop.id)));
+    }));
+    try { room.send('wild-loot-request-sync', {}); } catch { /* build mais antiga */ }
     collectCleanup(room.onMessage('alpha15-revive', (event: {targetSessionId:string}) => {
       if (!mountedRef.current || roomRef.current !== room) return;
       setOnlineDefenseVisuals(current => ({...current, [event.targetSessionId]: {
@@ -6105,6 +6151,20 @@ function OnlineAlpha9Mapa() {
       }}));
     }));
     try { room.send('alpha15-request-sync', {}); } catch { /* Versão anterior */ }
+    collectCleanup(room.onMessage('alpha16-tap-result', (message: {ok:boolean; step?:number; hits:number}) => {
+      if (!mountedRef.current || roomRef.current !== room) return;
+      if (!message?.ok) {
+        console.log('[WILD ALPHA16] Toque de largada rejeitado pela AWS.', message.step);
+        if (typeof message.step === 'number') {
+          onlineTapRequestsRef.current.delete(message.step);
+          setOnlineTappedSteps(previous => previous.filter(step => step !== message.step));
+        }
+      }
+    }));
+    collectCleanup(room.onMessage('alpha16-perfect-start', (event: {sessionId:string}) => {
+      if (!mountedRef.current || roomRef.current !== room) return;
+      console.log('[WILD ALPHA16] LARGADA PERFEITA', event.sessionId);
+    }));
     collectCleanup(room.onMessage('nitro-result', (message: { ok: boolean; message: string }) => {
       if (mountedRef.current && roomRef.current === room && !message.ok) setProblem(message.message);
     }));
@@ -6235,6 +6295,7 @@ function OnlineAlpha9Mapa() {
       swapVisualHoldRef.current.clear();
       alpha153TornadoHitIdsRef.current.clear();
       alpha153BubbleAtRef.current.clear();
+      onlineTapRequestsRef.current.clear();
       if (onlineGoHideTimerRef.current) {
         clearTimeout(onlineGoHideTimerRef.current);
         onlineGoHideTimerRef.current = null;
@@ -6256,7 +6317,7 @@ function OnlineAlpha9Mapa() {
   }, []);
 
   // A sala pode estar em countdown/finished; comandos são aprovados pela AWS.
-  const sendCommand = (name: 'ready' | 'nitro-activate', payload: boolean | Record<string, never>) => {
+  const sendCommand = (name: 'ready' | 'nitro-activate' | 'alpha16-jump', payload: boolean | Record<string, never>) => {
     const room = roomRef.current;
     if (!room || droppedRef.current) return;
     try { room.send(name, payload); }
@@ -6307,11 +6368,14 @@ function OnlineAlpha9Mapa() {
   const phase = race?.phase ?? 'waiting';
   const racePlayers = race?.players ?? [];
   const canDrive = Boolean(room && me?.connected && !dropped && phase === 'racing');
-  const canNitro = canDrive && Boolean(me && me.nitroCharges > 0 &&
-    me.nitroCooldown <= 0 && me.nitroRemaining <= 0);
+  const canNitro = canDrive && Boolean(me && me.nitroCharge >= 99.99 &&
+    me.nitroCooldown <= 0 && me.nitroRemaining <= 0 && me.hitStunRemaining <= 0);
+  const canJump = canDrive && Boolean(me && me.grounded && me.hitStunRemaining <= 0 &&
+    (alpha15Visual[mySessionId]?.bubbleRemaining ?? 0) <= 0);
   const rival = racePlayers.find(player => player.sessionId !== mySessionId);
   const deck = me ? [me.deckSlot0, me.deckSlot1, me.deckSlot2, me.deckSlot3] : ALPHA12_TEST_DECK;
   const myAlpha15 = alpha15Visual[mySessionId];
+  const myLoot = wildLootWallets[mySessionId] ?? EMPTY_WILD_LOOT;
   const rivalAlpha15 = rival ? alpha15Visual[rival.sessionId] : undefined;
   const cardCooldown = (id: string) => id === 'slow_slow' ? (me?.slowCooldown ?? 0) :
     id === 'nitro_power' ? (me?.nitroPowerCooldown ?? 0) :
@@ -6322,7 +6386,7 @@ function OnlineAlpha9Mapa() {
     if (!ALPHA12_ENABLED.has(id)) return 'Carta ainda nao habilitada online.';
     // Não liberar cartas Alpha 15 conectadas acidentalmente a um PM2 Alpha 14.
     if (['swap','magnet','blind','tornado','bubble_lift','armor','ghost','second_chance'].includes(id)
-        && !serverBuild?.startsWith('ALPHA15-')) return 'Aguardando servidor Alpha 15 confirmado.';
+        && !serverBuild?.startsWith('ALPHA15-') && !serverBuild?.startsWith('ALPHA16.')) return 'Aguardando servidor Alpha 15 confirmado.';
     if (!room || !me) return 'Aguardando dados do jogador enviados pela AWS.';
     if (!me.battleSyncReady) return 'Estado Alpha 12 ausente. Confirme o deploy do Schema e WildRaceRoom na AWS.';
     if (dropped || !me.connected) return 'Conexao interrompida. Aguarde a reconexao.';
@@ -6355,8 +6419,9 @@ function OnlineAlpha9Mapa() {
       if (!rival?.connected) return 'Adversario desconectado.';
       if (rival.slowRemaining > 0) return 'Adversario ja esta sob o efeito Slow Slow.';
     }
-    if (id === 'chains' && (!rival?.connected || rival.x <= me.x || rival.x - me.x > 420))
-      return 'Chains exige rival a frente em ate 420 unidades.';
+    if (id === 'chains' && (!rival?.connected || rival.lives <= 0 ||
+        rival.x - rival.startX <= me.x - me.startX))
+      return 'Chains exige adversario a frente no progresso da corrida.';
     if (['bullet', 'tnt', 'oil_spit', 'chains'].includes(id) && !rival?.connected)
       return 'Adversario desconectado.';
     if (id === 'nitro_power' && me.nitroPowerRemaining > 0) return 'Nitro Power ja esta ativo.';
@@ -6390,10 +6455,31 @@ function OnlineAlpha9Mapa() {
   // Não executamos startRaceSequence() aqui: ela contém sleep, focusOn,
   // largada de bots e setStarted(), que romperiam a sincronização online.
   // O semáforo acompanha APENAS o contador do servidor. O GO aparece quando
-  // a fase realmente muda para racing. Sem zoom e sem minigame.
+  // a fase realmente muda para racing. O minigame de toques não inicia a corrida.
   const rawOnlineCountdown = Number(race?.countdown ?? 0);
   const onlineTrafficStep = phase === 'countdown' && Number.isFinite(rawOnlineCountdown)
     ? Math.max(1, Math.ceil(rawOnlineCountdown)) : null;
+  const canPerfectTap = phase === 'countdown' && !dropped && me?.ready &&
+    onlineTrafficStep !== null && onlineTrafficStep >= 1 && onlineTrafficStep <= 3 &&
+    !onlineTappedSteps.includes(onlineTrafficStep) &&
+    !onlineTapRequestsRef.current.has(onlineTrafficStep);
+  // Mesmas três posições de largada usadas no tutorial offline, sem cobrir HUD.
+  const onlineTapPositions = [
+    {left: screenWidth * .76, top: screenHeight * .20}, // luz 3
+    {left: screenWidth * .48, top: screenHeight * .28}, // luz 2
+    {left: screenWidth * .20, top: screenHeight * .20}, // luz 1
+  ];
+  const onlineTapPosition = onlineTrafficStep === null ? onlineTapPositions[0] :
+    onlineTapPositions[3 - Math.max(1, Math.min(3, onlineTrafficStep))];
+  const tapPerfectStart = () => {
+    const currentStep = onlineTrafficStep;
+    const active = roomRef.current;
+    if (!canPerfectTap || !active || currentStep === null) return;
+    onlineTapRequestsRef.current.add(currentStep);
+    setOnlineTappedSteps(prev => [...prev, currentStep]);
+    try { active.send('perfect-start-tap', {step: currentStep}); }
+    catch (error) {console.warn('[ALPHA16] Falha no minigame', error);}
+  };
 
   useEffect(() => {
     const previousPhase = lastOnlineStartPhaseRef.current;
@@ -6416,6 +6502,8 @@ function OnlineAlpha9Mapa() {
 
     if (phase === 'countdown') {
       if (previousPhase !== 'countdown') {
+        onlineTapRequestsRef.current.clear();
+        setOnlineTappedSteps([]);
         lastOnlineTrafficStepRef.current = null;
         if (onlineGoHideTimerRef.current) {
           clearTimeout(onlineGoHideTimerRef.current);
@@ -6558,6 +6646,11 @@ function OnlineAlpha9Mapa() {
       </View>
 
       <View style={styles.rightHud}>
+        <View pointerEvents="none" style={onlineMapStyles.lootScore}>
+          <Text style={onlineMapStyles.lootScoreText}>
+            ⚙️{myLoot.engrenagem}  🔧{myLoot.motor}  🎨{myLoot.spray}  🟣{myLoot.chips}
+          </Text>
+        </View>
         <View style={styles.timerBadge} pointerEvents="none">
           <Text style={styles.scoreText}>
             ⏱ {Math.floor((race?.raceTime ?? 0) / 60)}:{Math.floor((race?.raceTime ?? 0) % 60).toString().padStart(2, '0')}
@@ -6577,6 +6670,19 @@ function OnlineAlpha9Mapa() {
         </View>
       </View>
 
+      {/* Recursos só existem depois de drop causado por dano confirmado pela AWS.
+          A coleta é exclusivamente calculada no WildRaceRoom. */}
+      {wildLootDrops.map(drop => {
+        const x = screenWidth * 0.42 + (drop.x - (me?.x ?? 0)) * ALPHA9_PIXELS_PER_SERVER_UNIT;
+        if (x < -55 || x > screenWidth + 55) return null;
+        return (
+          <View key={`wild-loot-${drop.id}`} pointerEvents="none" style={[
+            onlineMapStyles.lootDrop, {left: x, top: groundY - 24},
+          ]}>
+            <Text style={onlineMapStyles.lootDropText}>{WILD_LOOT_ICONS[drop.type]}</Text>
+          </View>
+        );
+      })}
       {/* Alpha 11.2: reutiliza artes já existentes no jogo.
           Os objetos seguem coordenadas autoritativas dos hazards na AWS.
           Nenhum destes componentes aplica dano, física ou colisão local. */}
@@ -6632,6 +6738,7 @@ function OnlineAlpha9Mapa() {
                 {player.sessionId === mySessionId ? 'VOCÊ' : `RIVAL ${player.slot}`} · {player.carId.toUpperCase()}
               </Text>
               {player.nitroRemaining > 0 && <Text style={onlineMapStyles.nitroFlag}>⚡ NITRO</Text>}
+              {!player.grounded && <Text style={onlineMapStyles.nitroFlag}>🪽 NO AR</Text>}
               {player.slowRemaining > 0 && <Text style={onlineMapStyles.slowFlag}>
                 🐌 SLOW {player.slowRemaining.toFixed(1)}s
               </Text>}
@@ -6653,7 +6760,7 @@ function OnlineAlpha9Mapa() {
               width: PLAYER_SIZE, height: PLAYER_SIZE,
               justifyContent: 'flex-end', alignItems: 'center',
               transform: [
-                {translateY: getHitVisual(player.sessionId).lift},
+                {translateY: verticalPositionValue(player.sessionId, player.y)},
                 {translateX: getHitVisual(player.sessionId).sway.interpolate({
                   inputRange: [-1, 0, 1], outputRange: [-11, 0, 11],
                 })},
@@ -6775,9 +6882,16 @@ function OnlineAlpha9Mapa() {
       {phase === 'racing' && (myAlpha15?.blindRemaining ?? 0) > 0 && (
         <View pointerEvents="none" style={styles.blindEffect} />
       )}
-      {/* Semáforo da largada offline, dirigido exclusivamente pelo countdown da AWS.
-          Sem câmera aproximando os carros, sem minigame e sem setStarted local. */}
-      {((phase === 'countdown' && !dropped) || onlineStartGoVisible) && (
+      {/* Semáforo da largada offline; física e validação dos toques permanecem na AWS. */}
+      {canPerfectTap && (
+        <TouchableOpacity activeOpacity={0.75} onPress={tapPerfectStart}
+          style={[styles.miniGameBtn, {position:'absolute', zIndex: 100, elevation: 30,
+            left: Math.min(screenWidth - 76, onlineTapPosition.left),
+            top: Math.min(screenHeight - 140, onlineTapPosition.top)}]}>
+          <Text style={styles.miniGameBtnText}>⚡</Text>
+        </TouchableOpacity>
+      )}
+            {((phase === 'countdown' && !dropped) || onlineStartGoVisible) && (
         <View pointerEvents="none" style={[styles.overlay, onlineMapStyles.onlineStartOverlay]}>
           {phase === 'countdown' ? (
             onlineTrafficStep !== null && onlineTrafficStep > 3 ? (
@@ -6876,7 +6990,8 @@ function OnlineAlpha9Mapa() {
                             (me?.boost ?? 0) < (ALPHA13_COST[cardId] ?? card?.cost ?? 0) ? '💧' :
                             cardId === 'shield' && (me?.shieldCharges ?? 0) > 0 ? '🛡️' :
                             cardId === 'nitro_power' && (me?.nitroPowerRemaining ?? 0) > 0 ? '⚡' :
-                            cardId === 'slow_slow' && (rival?.slowRemaining ?? 0) > 0 ? '🐌' : '⏳'}
+                            cardId === 'slow_slow' && (rival?.slowRemaining ?? 0) > 0 ? '🐌' :
+                            cardId === 'chains' ? '↗' : '⏳'}
                         </Text>
                       </View>
                     ) : null}
@@ -6908,13 +7023,20 @@ function OnlineAlpha9Mapa() {
               <Text style={styles.nitroBtnText}>NITRO</Text>
             </TouchableOpacity>
             <View style={[styles.vacuumRing, {
-              borderColor: (me?.nitroCharges ?? 0) > 0 ? '#00F0FF' : 'rgba(255,255,255,0.16)',
+              borderColor: (me?.nitroCharge ?? 0) >= 100 ? '#00F0FF' :
+                (me?.nitroCharge ?? 0) > 0 ? '#FFD60A' : 'rgba(255,255,255,0.16)',
             }]}>
               <View style={styles.vacuumRingInner}>
-                <Text style={styles.vacuumPercent}>{me?.nitroCharges ?? 0}×</Text>
-                <Text style={styles.vacuumLabel}>CARGAS</Text>
+                <Text style={styles.vacuumPercent}>{Math.round(me?.nitroCharge ?? 0)}%</Text>
+                <Text style={styles.vacuumLabel}>VÁCUO</Text>
               </View>
             </View>
+            <TouchableOpacity activeOpacity={canJump ? .7 : 1} disabled={!canJump}
+              onPress={() => sendCommand('alpha16-jump', {})}
+              style={[styles.nitroBtn, !canJump && styles.nitroBtnDisabled]}>
+              <Text style={styles.nitroBtnIcon}>🪽</Text>
+              <Text style={styles.nitroBtnText}>PULAR</Text>
+            </TouchableOpacity>
             <View style={styles.speedometer}>
               <Text style={[styles.speedometerValue, (me?.nitroRemaining ?? 0) > 0 && styles.speedometerValueNitro]}>
                 {Math.max(0, Math.round(me?.speed ?? 0))}
@@ -6951,6 +7073,13 @@ export default function Mapa(props: MapaProps) {
 }
 
 const onlineMapStyles = StyleSheet.create({
+  lootScore: {alignSelf: 'flex-end', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 4,
+    backgroundColor: 'rgba(10,13,25,0.85)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)'},
+  lootScoreText: {fontSize: 11, fontWeight: '800', color: '#FFFFFF'},
+  lootDrop: {position: 'absolute', zIndex: 12, width: 27, height: 27, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(25,22,33,0.75)',
+    borderColor: 'rgba(255,255,255,0.75)', borderWidth: 1},
+  lootDropText: {fontSize: 15},
   // Acima dos HUDs online; a apresentação usa trafficLightContainer/light
   // originais do OfflineMapa para manter o mesmo visual de largada.
   onlineStartOverlay: {zIndex: 80, elevation: 80},
