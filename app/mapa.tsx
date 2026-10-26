@@ -5254,6 +5254,11 @@ type Alpha9Player = {
   hitStunRemaining: number;
   nitroCharge: number;           // vácuo 0..100%
   perfectStartHits: number;
+  speedLevel: number;
+  accelerationLevel: number;
+  jumpPowerLevel: number;
+  defenseLevel: number;
+  maxLives: number;
   maxSpeed: number;
   acceleration: number;
   nitroCharges: number;
@@ -5349,6 +5354,11 @@ function alpha9ReadRace(room: Alpha9Room): Alpha9Race {
       hitStunRemaining: Number(player.hitStunRemaining ?? 0),
       nitroCharge: Number(player.nitroCharge ?? 0),
       perfectStartHits: Number(player.perfectStartHits ?? 0),
+      speedLevel: Number(player.speedLevel ?? 1),
+      accelerationLevel: Number(player.accelerationLevel ?? 1),
+      jumpPowerLevel: Number(player.jumpPowerLevel ?? 1),
+      defenseLevel: Number(player.defenseLevel ?? 1),
+      maxLives: Number(player.maxLives ?? 5),
       maxSpeed: Number(player.maxSpeed ?? 0),
       acceleration: Number(player.acceleration ?? 0),
       nitroCharges: Number(player.nitroCharges ?? 0),

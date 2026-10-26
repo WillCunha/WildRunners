@@ -6,27 +6,28 @@
 import { useCarSelection } from '@/context/CarContext';
 import { clearWildAlpha9Room, getWildAlpha9Room, handoffWildAlpha9Room } from '@/src/online/wildOnlineAlpha9Session';
 import {
-  getWildLocalMotorStats,
   WILD_CAR_IDS,
   type WildCarId,
 } from '@/src/online/wildOnlineCarStats';
 import { WildPositionSmoother } from '@/src/online/wildOnlineSmoothing';
+import { auth } from '@/src/services/firebaseClient';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { getCardDefinition } from '@/src/utils/cardMap';
+import { carMaps } from '@/src/utils/carMaps';
 import { Client } from '@colyseus/sdk';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Modal,
   Pressable,
   SafeAreaView,
-  Modal,
-  useWindowDimensions,
   Share,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 
@@ -81,6 +82,13 @@ type PlayerView = {
   startX: number;
   maxSpeed: number;
   acceleration: number;
+  speedLevel: number;
+  accelerationLevel: number;
+  jumpPowerLevel: number;
+  defenseLevel: number;
+  maxLives: number;
+  // Schema Alpha 16.3: servidor entregou atributos da Oficina confirmados.
+  garageVerified: boolean;
   nitroCharges: number;
   nitroRemaining: number;
   nitroCooldown: number;
@@ -123,6 +131,14 @@ function extractRace(room: OnlineRoom): RaceView {
       startX: Number(player.startX ?? 0),
       maxSpeed: Number(player.maxSpeed ?? 0),
       acceleration: Number(player.acceleration ?? 0),
+      speedLevel: Number(player.speedLevel ?? 1),
+      accelerationLevel: Number(player.accelerationLevel ?? 1),
+      jumpPowerLevel: Number(player.jumpPowerLevel ?? 1),
+      defenseLevel: Number(player.defenseLevel ?? 1),
+      maxLives: Number(player.maxLives ?? 5),
+      garageVerified: [player.speedLevel, player.accelerationLevel,
+        player.jumpPowerLevel, player.defenseLevel, player.maxLives]
+        .every(value => typeof value === 'number' && Number.isFinite(value)),
       nitroCharges: Number(player.nitroCharges ?? 0),
       nitroRemaining: Number(player.nitroRemaining ?? 0),
       nitroCooldown: Number(player.nitroCooldown ?? 0),
@@ -162,7 +178,8 @@ export default function WildOnlineLab() {
   // Fonte única para o veículo: garagem / CarSelection.
   // O fallback aqui serve APENAS para renderizar dados na prévia offline.
   // Sem seleção válida, o comando de criar/entrar em sala fica bloqueado.
-  const hasGarageCar = WILD_CAR_IDS.includes(selectedCar as WildCarId);
+  const hasGarageCar = WILD_CAR_IDS.includes(selectedCar as WildCarId) &&
+    Boolean(profile?.garage?.[selectedCar]);
   const carId: WildCarId = hasGarageCar ? (selectedCar as WildCarId) : 'fusca';
   const [roomCode, setRoomCode] = useState('');
   const [sessionId, setSessionId] = useState('');
@@ -406,9 +423,19 @@ export default function WildOnlineLab() {
       return;
     }
     setBusy(true);
-    setDetail('Conectando ao AWS...');
+    setDetail('Validando conta Firebase e conectando à AWS...');
     try {
+      // Alpha 16.3: aguarda a restauração da sessão Firebase. Os upgrades
+      // NUNCA são enviados por este lobby; a AWS busca playerSaves/{uid}.
+      await auth.authStateReady();
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error('Sessão Firebase não encontrada. Faça login novamente antes de correr online.');
+      }
+      const idToken = await currentUser.getIdToken();
+      // Não registrar nem persistir o ID token em logs, Zustand ou parâmetros de rota.
       const client = new Client(SERVER_URL);
+      client.auth.token = idToken;
       const cosmetics = profile?.garage?.[carId]?.customization;
       const joinPayload = {
         name: 'Mobile Test', carId, deck: equippedDeck,
@@ -428,7 +455,21 @@ export default function WildOnlineLab() {
     } catch (error) {
       if (!mounted.current) return;
       setStatus('DESCONECTADO');
-      setDetail('Erro de conexão: ' + String(error));
+      // A AWS retorna erros de validação do perfil. Mostramos o motivo sem
+      // expor token, documento completo ou credenciais do Firebase.
+      const message = String(error);
+      const readable = message.includes('WILD_CAR_NOT_OWNED')
+        ? 'O carro selecionado não está na garagem confirmada no Firestore.'
+        : message.includes('WILD_CLOUD_SAVE_NOT_FOUND')
+          ? 'Seu save não foi encontrado no Firebase. Sincronize o perfil antes de entrar.'
+          : message.includes('WILD_INVALID_GARAGE_LEVEL')
+            ? 'Os níveis da Oficina salvos no Firebase são inválidos.'
+            : message.includes('WILD_GARAGE_OWNER_MISMATCH')
+              ? 'O save remoto não pertence à conta Firebase conectada.'
+              : message.includes('WILD_AUTH_REQUIRED') || message.includes('auth/user-token-expired')
+                ? 'Autenticação Firebase necessária. Faça login novamente.'
+                : 'Erro de conexão: ' + message;
+      setDetail(readable);
     } finally {
       if (mounted.current) setBusy(false);
     }
@@ -491,14 +532,20 @@ export default function WildOnlineLab() {
     catch (error) { if (mounted.current) setDetail('Comando não enviado: ' + String(error)); }
   };
 
-  const garage = profile?.garage as Record<string, {
-    motor?: {speedLevel?: number; accelerationLevel?: number};
-  }> | undefined;
-  const localMotor = garage?.[carId]?.motor;
-  const localStats = getWildLocalMotorStats(
-    carId, localMotor?.speedLevel ?? 1, localMotor?.accelerationLevel ?? 1,
-  );
+  // Prévia local apenas para exibição ANTES da conexão. Nunca enviada como física.
+  const localCar = profile?.garage?.[carId];
+  const localMotor = localCar?.motor;
+  const rawSpeedLevel = Number(localMotor?.speedLevel ?? 1);
+  const safeSpeedLevel = Number.isFinite(rawSpeedLevel)
+    ? Math.max(1, Math.min(10, Math.floor(rawSpeedLevel))) : 1;
+  const localCarDefinition = carMaps[carId as keyof typeof carMaps] ?? carMaps.fusca;
+  const localTopSpeedKmh = localCarDefinition.stats.speed.base +
+    (localCarDefinition.stats.speed.maxUpgrade - localCarDefinition.stats.speed.base) *
+    ((safeSpeedLevel - 1) / 9);
   const myPlayer = race?.players.find(p => p.sessionId === sessionId);
+  const hasOfficialStats = myPlayer?.garageVerified === true;
+  const displayedTopSpeedKmh = hasOfficialStats ? myPlayer.maxSpeed : localTopSpeedKmh;
+  const displayedSpeedLevel = hasOfficialStats ? myPlayer.speedLevel : safeSpeedLevel;
   const canReady = Boolean(roomRef.current && !droppedRef.current && (
     race?.phase === 'finished' || (race?.phase === 'waiting' && !myPlayer?.ready)
   ));
@@ -545,7 +592,7 @@ export default function WildOnlineLab() {
             <View style={styles.brandMark}><Text style={styles.brandMarkText}>WF</Text></View>
             <View style={styles.brandTextBlock}>
               <Text style={styles.brandTitle}>WILD <Text style={styles.brandAccent}>ONLINE</Text></Text>
-              <Text style={styles.brandSub}>SALA MULTIPLAYER  /  ALPHA 15</Text>
+              <Text style={styles.brandSub}>SALA MULTIPLAYER  /  ALPHA 16.3</Text>
             </View>
             <View style={styles.topFill} />
             <View style={styles.connectionBadge}>
@@ -770,16 +817,20 @@ export default function WildOnlineLab() {
                 </View>
                 <View style={styles.carSpecs}>
                   <View style={styles.specCol}>
-                    <Text style={styles.specLabel}>VELOCIDADE</Text>
-                    <Text style={styles.specNumber}>{localStats.topSpeedKmh.toFixed(0)} <Text style={styles.specUnit}>km/h</Text></Text>
+                    <Text style={styles.specLabel}>{hasOfficialStats ? 'VELOCIDADE AWS' : 'VELOCIDADE PREVISTA'}</Text>
+                    <Text style={styles.specNumber}>{displayedTopSpeedKmh.toFixed(0)} <Text style={styles.specUnit}>km/h</Text></Text>
                   </View>
                   <View style={styles.specDivider} />
                   <View style={styles.specCol}>
-                    <Text style={styles.specLabel}>MOTOR</Text>
-                    <Text style={styles.specNumber}>NV. {localMotor?.speedLevel ?? 1}</Text>
+                    <Text style={styles.specLabel}>MOTOR · VELOCIDADE</Text>
+                    <Text style={styles.specNumber}>NV. {displayedSpeedLevel}</Text>
                   </View>
                 </View>
-                <Text style={styles.sideCaveat} numberOfLines={compact ? 1 : 2}>Dados da garagem. A física da corrida online ainda usa os atributos definidos pela AWS.</Text>
+                <Text style={styles.sideCaveat} numberOfLines={compact ? 2 : 3}>
+                  {hasOfficialStats
+                    ? `✓ AWS / Firestore: Acel. NV.${myPlayer.accelerationLevel} · Salto NV.${myPlayer.jumpPowerLevel} · Defesa NV.${myPlayer.defenseLevel} · ${myPlayer.maxLives} vidas`
+                    : 'Prévia do perfil local. Ao entrar na sala, a AWS verificará a Oficina no Firestore.'}
+                </Text>
               </View>
 
               <View style={[styles.deckPanel, compact && styles.compactSidePanel]}>
@@ -808,7 +859,7 @@ export default function WildOnlineLab() {
           </View>
           <View style={styles.footer}>
             <Text style={styles.footerBrand}>WF SOFT  /  WILD RUNNERS</Text>
-            <Text style={styles.footerInfo}>LOBBY PRIVADO • 2 JOGADORES • ALPHA 15</Text>
+            <Text style={styles.footerInfo}>LOBBY PRIVADO • 2 JOGADORES • ALPHA 16.3</Text>
           </View>
         </View>
       )}
@@ -837,7 +888,10 @@ export default function WildOnlineLab() {
                     <View key={player.sessionId} style={styles.telemetryCard}>
                       <Text style={styles.telemetryName}>{player.sessionId === sessionId ? 'VOCÊ' : 'RIVAL'} · {player.carId.toUpperCase()} · {player.rank}º</Text>
                       <View style={styles.telemetryTrack}><View style={[styles.telemetryFill, { width: `${progress}%` as `${number}%` }]} /></View>
-                      <Text style={styles.telemetryData}>{progress.toFixed(0)}% · {player.speed.toFixed(0)} u/s · {player.connected ? 'CONECTADO' : 'RECONEXÃO'}</Text>
+                      <Text style={styles.telemetryData}>
+                        {progress.toFixed(0)}% · {player.speed.toFixed(0)} u/s · {player.connected ? 'CONECTADO' : 'RECONEXÃO'}
+                        {player.garageVerified ? ` · MAX ${player.maxSpeed.toFixed(0)} · MOTOR NV.${player.speedLevel} · ACEL. NV.${player.accelerationLevel}` : ''}
+                      </Text>
                     </View>
                   );
                 })}
