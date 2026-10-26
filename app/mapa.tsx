@@ -5288,7 +5288,7 @@ type Alpha15VisualState = {
   blindRemaining: number; tornadoRemaining: number; bubbleRemaining: number;
   magnetRemaining: number; chipsCollected: number;
 };
-type Alpha12Hazard = { id: string; kind: string; x: number; ownerId: string };
+type Alpha12Hazard = { id: string; kind: string; x: number; y: number; targetId: string; ownerId: string };
 type WildLootType = 'motor' | 'spray' | 'engrenagem' | 'chips';
 type WildLootDrop = {id: string; x: number; type: WildLootType; fromSessionId: string};
 type WildLootWallet = Record<WildLootType, number>;
@@ -5326,7 +5326,7 @@ type Alpha9ServerState = {
   players?: {
     forEach(callback: (player: Alpha9ServerPlayer, sessionId: string) => void): void;
   };
-  hazards?: { forEach(callback: (hazard: {kind?: string; x?: number; ownerId?: string}, id: string) => void): void };
+  hazards?: { forEach(callback: (hazard: {kind?: string; x?: number; y?: number; targetId?: string; ownerId?: string}, id: string) => void): void };
 };
 
 function alpha9ReadRace(room: Alpha9Room): Alpha9Race {
@@ -5384,6 +5384,7 @@ function alpha9ReadRace(room: Alpha9Room): Alpha9Race {
   const hazards: Alpha12Hazard[] = [];
   state?.hazards?.forEach((hazard, id) => {
     hazards.push({id, kind: String(hazard.kind ?? ''), x: Number(hazard.x ?? 0),
+      y: Number(hazard.y ?? 0), targetId: String(hazard.targetId ?? ''),
       ownerId: String(hazard.ownerId ?? '')});
   });
   // Slot identifica o jogador; a pista online tem uma única altura para todos.
@@ -5586,6 +5587,7 @@ function OnlineAlpha9Mapa() {
   const stickX = useRef(new Animated.Value(0)).current;
   const positionsRef = useRef<Record<string, Animated.Value>>({});
   const verticalPositionsRef = useRef<Record<string, Animated.Value>>({});
+  const onlineAirborneRef = useRef(new Map<string, boolean>());
   // Os raios da largada são disparados pela AWS, nunca pela animação do semáforo.
   const [onlineTappedSteps, setOnlineTappedSteps] = useState<number[]>([]);
   const onlineTapRequestsRef = useRef(new Set<number>());
@@ -5720,24 +5722,18 @@ function OnlineAlpha9Mapa() {
       return;
     }
     if (kind === 'bubble_lift') return; // Bubble física (Y) só do Schema da AWS.
-    if (kind === 'tornado') {
-      const now = Date.now();
-      if (now - (alpha153LiftAtRef.current.get(sessionId) ?? 0) < 1250) return;
-      alpha153LiftAtRef.current.set(sessionId, now);
-      visual.rotate.stopAnimation();
-      visual.rotate.setValue(0);
-      Animated.timing(visual.rotate, {toValue: 720, duration: 1250,
-        useNativeDriver: true}).start();
-      return;
-    }
-    if (kind !== 'bullet' && kind !== 'tnt') return;
-    // Bullet/TNT recebem altura e queda do servidor. Apenas leve rotação de impacto.
+    if (kind !== 'tornado' && kind !== 'bullet' && kind !== 'tnt') return;
+    // A altura é SEMPRE player.y da AWS. Somente ângulo replica o offline:
+    // isStunned gira 35 graus/frame (~2100 graus/s a 60fps).
+    const now = Date.now();
+    if (now - (alpha153LiftAtRef.current.get(sessionId) ?? 0) < 180) return;
+    alpha153LiftAtRef.current.set(sessionId, now);
     visual.rotate.stopAnimation();
     visual.rotate.setValue(0);
-    Animated.sequence([
-      Animated.timing(visual.rotate, {toValue: 25, duration: 160, useNativeDriver:true}),
-      Animated.timing(visual.rotate, {toValue: 0, duration: 420, useNativeDriver:true}),
-    ]).start();
+    const angle = kind === 'tornado' ? 1080 : kind === 'tnt' ? 1440 : 900;
+    const duration = kind === 'tornado' ? 1050 : kind === 'tnt' ? 1280 : 850;
+    Animated.timing(visual.rotate, {toValue: angle, duration,
+      useNativeDriver: true}).start();
   };
 
   const animateAlpha153Swap = (sourceSessionId: string, targetSessionId: string,
@@ -5869,6 +5865,7 @@ function OnlineAlpha9Mapa() {
         setAlpha15Visual({});
         alpha153StatesRef.current = {};
         alpha153LiftAtRef.current.clear();
+        onlineAirborneRef.current.clear();
         alpha153TornadoAtRef.current.clear();
         alpha153TornadoHitIdsRef.current.clear();
         alpha153BubbleAtRef.current.clear();
@@ -5912,6 +5909,14 @@ function OnlineAlpha9Mapa() {
         player.speed = Number.isFinite(rawSpeed) ? Math.max(0, rawSpeed) : (last?.speed ?? 0);
         player.y = Number.isFinite(player.y) ? Math.max(-1100, Math.min(0, player.y)) : 0;
         verticalPositionValue(player.sessionId, player.y).setValue(player.y);
+        const wasAirborne = onlineAirborneRef.current.get(player.sessionId) === true;
+        const isAirborne = !player.grounded;
+        if (wasAirborne && !isAirborne) {
+          const v = getHitVisual(player.sessionId);
+          v.rotate.stopAnimation();
+          v.rotate.setValue(0);
+        }
+        onlineAirborneRef.current.set(player.sessionId, isAirborne);
         // Uma posição abaixo do grid inicial pode zerar o parallax do player.
         // Não alterar x/startX aqui: corrigir isto SOMENTE no servidor autoritativo.
         if (snapshot.phase === 'racing' && player.x + 0.5 < player.startX) {
@@ -6254,6 +6259,17 @@ function OnlineAlpha9Mapa() {
       }
     }));
 
+    collectCleanup(room.onMessage('alpha16-launch', (event: {
+      targetSessionId:string; kind:'tornado'|'bullet'|'tnt';
+      verticalVelocity:number; y:number; raceTime?:number;
+    }) => {
+      if (!mountedRef.current || roomRef.current !== room) return;
+      if (!event?.targetSessionId || !['tornado','bullet','tnt'].includes(event.kind)) return;
+      // Disparo comprovado pelo servidor; nenhum Y/impulso é aplicado no celular.
+      animateHit(event.targetSessionId, event.kind);
+      console.log('[WILD ALPHA16.2] PHYSICS IMPACT AWS', event.kind,
+        event.targetSessionId, event.verticalVelocity);
+    }));
     collectCleanup(room.onMessage('battle-hit', (event: {
       targetSessionId: string; kind: string; blocked?: boolean; lives?: number;
       defense?: 'shield' | 'armor' | 'ghost' | 'second_chance' | string;
@@ -6262,7 +6278,9 @@ function OnlineAlpha9Mapa() {
       const target = raceSnapshotRef.current?.players.find(p => p.sessionId === event.targetSessionId);
       // Armor absorve a perda de vida, mas conserva o impacto físico/visual.
       if (!event.blocked || event.defense === 'armor') {
-        animateHit(event.targetSessionId, event.kind);
+        // Impactos com salto/giro são disparados APENAS por alpha16-launch.
+        // battle-hit informa dano/defesa mas não concede física.
+        if (event.kind === 'oil_spit') animateHit(event.targetSessionId, event.kind);
       }
       if (target && (event.kind === 'tnt' || event.kind === 'bullet')) {
         showVisualImpact(event.kind, target.x);
@@ -6293,6 +6311,7 @@ function OnlineAlpha9Mapa() {
       alpha153Timers.current.forEach(clearTimeout);
       alpha153Timers.current.clear();
       swapVisualHoldRef.current.clear();
+      onlineAirborneRef.current.clear();
       alpha153TornadoHitIdsRef.current.clear();
       alpha153BubbleAtRef.current.clear();
       onlineTapRequestsRef.current.clear();
@@ -6399,33 +6418,10 @@ function OnlineAlpha9Mapa() {
     const officialCost = ALPHA13_COST[id] ?? definition.cost;
     if (me.boost < officialCost) return 'BOOST insuficiente: ' + me.boost + '/' +
       officialCost + ' gotas. AWS recupera 1 gota a cada 2s de corrida.';
-    if (id === 'quick_repair' && me.lives >= 5) return 'Vida completa.';
-    if (['blind','tornado','bubble_lift','swap'].includes(id) && (!rival?.connected || rival.lives <= 0))
-      return 'Rival indisponivel.';
-    if (id === 'swap' && (!rival || rival.x - rival.startX <= me.x - me.startX + 20))
-      return 'Swap exige rival a frente.';
-    if (['tornado','bubble_lift'].includes(id) && (!rival || rival.x - rival.startX <= me.x - me.startX + 20))
-      return 'Requer rival a frente.';
-    if (id === 'armor' && (myAlpha15?.armorCharges ?? 0) > 0) return 'Armor ainda ativa.';
-    if (id === 'ghost' && (myAlpha15?.ghostRemaining ?? 0) > 0) return 'Ghost ainda ativo.';
-    if (id === 'second_chance' && myAlpha15?.secondChanceReady) return 'Segunda chance ja armada.';
-    if (id === 'magnet' && (myAlpha15?.magnetRemaining ?? 0) > 0) return 'Magnet ainda ativo.';
-    if (id === 'blind' && (rivalAlpha15?.blindRemaining ?? 0) > 0) return 'Blind ja ativo no rival.';
-    if (id === 'tornado' && (rivalAlpha15?.tornadoRemaining ?? 0) > 0) return 'Tornado ja ativo no rival.';
-    if (id === 'bubble_lift' && (rivalAlpha15?.bubbleRemaining ?? 0) > 0) return 'Bubble Lift ja ativo no rival.';
-    if (id === 'emp_pulse' && (!rival?.connected || rival.x <= me.x))
-      return 'EMP Pulse exige um rival conectado a frente.';
-    if (id === 'slow_slow') {
-      if (!rival?.connected) return 'Adversario desconectado.';
-      if (rival.slowRemaining > 0) return 'Adversario ja esta sob o efeito Slow Slow.';
-    }
-    if (id === 'chains' && (!rival?.connected || rival.lives <= 0 ||
-        rival.x - rival.startX <= me.x - me.startX))
-      return 'Chains exige adversario a frente no progresso da corrida.';
-    if (['bullet', 'tnt', 'oil_spit', 'chains'].includes(id) && !rival?.connected)
-      return 'Adversario desconectado.';
-    if (id === 'nitro_power' && me.nitroPowerRemaining > 0) return 'Nitro Power ja esta ativo.';
-    if (id === 'shield' && me.shieldCharges > 0) return 'Escudo ja esta ativo.';
+    // Alpha 16.1: a posição do adversário NÃO determina disponibilidade.
+    // Shield/Ghost/Armor já ativos, vida cheia, status do alvo etc. são
+    // verificações do servidor na execução, não cadeados do HUD.
+    // A carta continua exigindo conexão, fase válida, BOOST e cooldown zerado.
     return null;
   };
   const cardAvailable = (id: string) => cardBlockReason(id) === null;
@@ -6689,11 +6685,12 @@ function OnlineAlpha9Mapa() {
       {(race?.hazards ?? []).map(hazard => {
         const x = screenWidth * 0.42 + (hazard.x - (me?.x ?? 0)) * ALPHA9_PIXELS_PER_SERVER_UNIT;
         if (hazard.kind === 'bullet') {
-          const intended = racePlayers.find(player => player.sessionId !== hazard.ownerId && player.connected);
+          const intended = racePlayers.find(player => player.sessionId === hazard.targetId);
           const targetScreenX = intended ? screenWidth * 0.42 +
             (intended.x - (me?.x ?? 0)) * ALPHA9_PIXELS_PER_SERVER_UNIT : undefined;
           return <Alpha153BulletFlight key={`hazard-${hazard.id}`}
-            x={x} y={groundY - PLAYER_SIZE * 0.65} targetX={targetScreenX} />;
+            x={x} y={groundY - PLAYER_SIZE * 0.65 + hazard.y}
+            targetX={targetScreenX} />;
         }
         if (hazard.kind === 'oil_spit') {
           return <OilSpitVisual key={`hazard-${hazard.id}`} x={x} groundY={groundY} />;
@@ -6844,24 +6841,16 @@ function OnlineAlpha9Mapa() {
           callerY={groundY - PLAYER_SIZE}
           victims={[{
             id: effect.targetSessionId,
-            x: screenWidth * 0.42 + (effect.targetX - (me?.x ?? 0)) * ALPHA9_PIXELS_PER_SERVER_UNIT,
-            y: groundY - PLAYER_SIZE,
+            x: screenWidth * 0.42 +
+              ((racePlayers.find(p => p.sessionId === effect.targetSessionId)?.x ?? effect.targetX) - (me?.x ?? 0)) * ALPHA9_PIXELS_PER_SERVER_UNIT,
+            y: groundY - PLAYER_SIZE +
+              (racePlayers.find(p => p.sessionId === effect.targetSessionId)?.y ?? 0),
           }]}
-          onHitVictim={(victimId) => {
-            if (victimId === effect.targetSessionId &&
-                !alpha153TornadoHitIdsRef.current.has(effect.id)) {
-              alpha153TornadoHitIdsRef.current.add(effect.id);
-              animateHit(victimId, 'tornado');
-            }
+          onHitVictim={() => {
+            // Não decidir impacto pela posição/interpolação do componente visual.
+            // alpha16-launch da AWS é o único evento que inicia salto/giro.
           }}
           onComplete={() => {
-            // Fallback só se ainda houver debuff real, caso a colisão COSMÉTICA
-            // do TornadoVisual não detecte o carro por atraso/interpolação.
-            if (!alpha153TornadoHitIdsRef.current.has(effect.id) &&
-                (alpha153StatesRef.current[effect.targetSessionId]?.tornadoRemaining ?? 0) > 0) {
-              animateHit(effect.targetSessionId, 'tornado');
-            }
-            alpha153TornadoHitIdsRef.current.delete(effect.id);
             setAlpha153Tornados(prev => prev.filter(fx => fx.id !== effect.id));
           }}
         />
@@ -6988,10 +6977,7 @@ function OnlineAlpha9Mapa() {
                             !canDrive ? '⏳' : cardPending ? '...' :
                             cooldown > 0 ? `${Math.ceil(cooldown)}s` :
                             (me?.boost ?? 0) < (ALPHA13_COST[cardId] ?? card?.cost ?? 0) ? '💧' :
-                            cardId === 'shield' && (me?.shieldCharges ?? 0) > 0 ? '🛡️' :
-                            cardId === 'nitro_power' && (me?.nitroPowerRemaining ?? 0) > 0 ? '⚡' :
-                            cardId === 'slow_slow' && (rival?.slowRemaining ?? 0) > 0 ? '🐌' :
-                            cardId === 'chains' ? '↗' : '⏳'}
+                            '⏳'}
                         </Text>
                       </View>
                     ) : null}
