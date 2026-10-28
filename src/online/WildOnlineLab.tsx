@@ -1,8 +1,3 @@
-/**
- * Wild Online Alpha 9 — laboratório + transição para o Mapa (não é o multiplayer completo do Mapa).
- * Controles de direção, nitro e visualização suavizada com física da AWS.
- * Nenhuma variável de física offline é alterada por esta tela.
- */
 import { useCarSelection } from '@/context/CarContext';
 import { clearWildAlpha9Room, getWildAlpha9Room, handoffWildAlpha9Room } from '@/src/online/wildOnlineAlpha9Session';
 import {
@@ -10,12 +5,12 @@ import {
   type WildCarId,
 } from '@/src/online/wildOnlineCarStats';
 import { WildPositionSmoother } from '@/src/online/wildOnlineSmoothing';
-import { auth } from '@/src/services/firebaseClient';
+import { auth } from '@/src/services/firebase/firebaseClient';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { getCardDefinition } from '@/src/utils/cardMap';
 import { carMaps } from '@/src/utils/carMaps';
 import { Client } from '@colyseus/sdk';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -167,6 +162,7 @@ const phaseText: Record<Phase, string> = {
 
 export default function WildOnlineLab() {
   const router = useRouter();
+  const route = useLocalSearchParams<{fromRaceResult?: string}>();
   const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
   const compact = viewportHeight < 440;
   const portrait = viewportHeight > viewportWidth;
@@ -493,6 +489,15 @@ export default function WildOnlineLab() {
   const resumeTransferred = () => {
     const transferred = getWildAlpha9Room();
     if (!transferred) return;
+    if (route.fromRaceResult === '1') {
+      // O clique explícito em VOLTAR À SALA confirma READY para a próxima rodada.
+      // O servidor faz resetRace() e decide quando os pilotos podem largar.
+      const state = transferred.state as {racePhase?: string} | undefined;
+      if (state?.racePhase === 'finished') {
+        try { transferred.send('ready', true); }
+        catch (error) { setDetail('Não foi possível preparar nova corrida: ' + String(error)); return; }
+      }
+    }
     router.push({ pathname: '/mapa', params: { mode: 'onlineAlpha9' } });
   };
   const endTransferred = async () => {
@@ -592,7 +597,7 @@ export default function WildOnlineLab() {
             <View style={styles.brandMark}><Text style={styles.brandMarkText}>WF</Text></View>
             <View style={styles.brandTextBlock}>
               <Text style={styles.brandTitle}>WILD <Text style={styles.brandAccent}>ONLINE</Text></Text>
-              <Text style={styles.brandSub}>SALA MULTIPLAYER  /  ALPHA 16.3</Text>
+              <Text style={styles.brandSub}>SALA MULTIPLAYER  /  ALPHA 17</Text>
             </View>
             <View style={styles.topFill} />
             <View style={styles.connectionBadge}>
@@ -620,15 +625,21 @@ export default function WildOnlineLab() {
             <View style={styles.leftColumn}>
               {!connectedRoomId && hasTransferredRoom ? (
                 <View style={[styles.mainPanel, compact && styles.compactMainPanel]}>
-                  <Text style={styles.sectionKicker}>SESSÃO EM ANDAMENTO</Text>
-                  <Text style={styles.mainTitle}>Sua corrida continua ativa</Text>
+                  <Text style={styles.sectionKicker}>
+                    {route.fromRaceResult === '1' ? 'PRÓXIMA CORRIDA · MESMA SALA' : 'SESSÃO EM ANDAMENTO'}
+                  </Text>
+                  <Text style={styles.mainTitle}>
+                    {route.fromRaceResult === '1' ? 'Pronto para correr de novo?' : 'Sua corrida continua ativa'}
+                  </Text>
                   <Text style={styles.desc} numberOfLines={2}>
-                    Retome a mesma conexão sem criar um jogador duplicado na AWS.
+                    {route.fromRaceResult === '1'
+                      ? 'Seu relatório foi salvo. Volte ao mapa da mesma sala e pressione READY quando quiser.'
+                      : 'Retome a mesma conexão sem criar um jogador duplicado na AWS.'}
                   </Text>
                   <View style={styles.filler} />
                   <View style={styles.actionsRow}>
                     <Pressable style={[styles.mainAction, styles.flexGrow]} onPress={resumeTransferred}>
-                      <Text style={styles.mainActionText}>🏎️  RETOMAR CORRIDA →</Text>
+                      <Text style={styles.mainActionText}>🏎️  {route.fromRaceResult === '1' ? 'VOLTAR À SALA' : 'RETOMAR CORRIDA'} →</Text>
                     </Pressable>
                     <Pressable style={styles.secondaryAction} onPress={() => void endTransferred()}>
                       <Text style={styles.secondaryActionText}>ENCERRAR SESSÃO</Text>

@@ -107,6 +107,11 @@ const EMP_DURATION_FRAMES = 60 * 2;
 // Distância visual do cenário por unidade de velocidade física/tick.
 // Um único Animated.Value alimenta as três camadas do parallax.
 const SCENARIO_TRAVEL_SCALE = 0.35;
+// ALPHA 16.3.3: parallax ONLINE na mesma escala visual do OFFLINE.
+// Offline: playerSpeed (km/h / 18) somado por tick ~60 Hz.
+// Online: player.x da AWS já é acumulado por segundo em unidades de velocidade.
+// Este fator afeta SOMENTE o fundo: nunca x, speed, ranking ou colisões da AWS.
+const ONLINE_SCENARIO_TRAVEL_SCALE = SCENARIO_TRAVEL_SCALE * (60 / KMH_PER_PHYSICS_UNIT);
 
 // Constantes legadas mantidas apenas para efeitos/compatibilidade ainda existentes.
 const MAX_SPEED = 12
@@ -297,10 +302,16 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
     0.02 + Math.min(1, DYNAMIC_ACCELERATION_STAT / 220) * 0.06;
 
   const DYNAMIC_JUMP_FORCE = JUMP_FORCE - ((carStats.motor.jumpPowerLevel - 1) * 0.6);
-  // Nível 1 = 5 Vidas, Nível 2 = 6 Vidas...
+  // Alpha 16.4.1: mesma curva de defesa da AWS (WildGarageRules.ts).
+  // Níveis 1–3=5 vidas; 4–6=6; 7–9=7; 10=8.
+  const balancedMaxLives = (defenseLevel: number) =>
+    5 + Math.floor((clampUpgradeLevel(defenseLevel) - 1) / 3);
+  // Proteção pós-hit em frames (60 Hz): +0,03s a cada nível.
+  const defenseGraceFrames = (defenseLevel: number) =>
+    Math.round((clampUpgradeLevel(defenseLevel) - 1) * 0.03 * 60);
   const INITIAL_LIVES = isTutorial
     ? 8
-    : 4 + carStats.engrenagem.defenseLevel;
+    : balancedMaxLives(carStats.engrenagem.defenseLevel);
 
   const BASE_PLAYER_X = SCREEN_WIDTH * 0.4;
   const GAP_BETWEEN_RACERS = 130;
@@ -1059,7 +1070,8 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
       minSpeed: maxSpeed * BRAKE_MIN_SPEED_RATIO,
       accelerationPerTick,
       jumpForce: JUMP_FORCE - ((botJumpLevel - 1) * 0.6),
-      maxLives: 4 + botDefenseLevel,
+      maxLives: balancedMaxLives(botDefenseLevel),
+      defenseLevel: botDefenseLevel,
       cruiseMinRatio: difficulty === 'easy' ? 0.82 : difficulty === 'rival' ? 0.94 : 0.88,
     };
   }
@@ -3241,7 +3253,7 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
       if (status.armorCharges > 0) {
         registerSuccessfulDefense('player', sourceId);
         status.armorCharges -= 1;
-        status.invincibleTimer = 90;
+        status.invincibleTimer = 90 + defenseGraceFrames(carStats.engrenagem.defenseLevel);
         syncPlayerProtectionHud();
         triggerDefenseVisual('player', 'armor_hit');
         return true;
@@ -3249,7 +3261,7 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
 
       playerLivesRef.current -= 1;
       racePerformanceRef.current.livesLost += 1;
-      status.invincibleTimer = 90;
+      status.invincibleTimer = 90 + defenseGraceFrames(carStats.engrenagem.defenseLevel);
 
       spawnPieces(playerXRef.current, y.current, 3);
       const types: PartType[] = ['motor', 'spray', 'engrenagem'];
@@ -3298,13 +3310,13 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
 
     if (status.armorCharges > 0) {
       status.armorCharges -= 1;
-      status.invincibleTimer = 90;
+      status.invincibleTimer = 90 + defenseGraceFrames(bot.stats.defenseLevel);
       triggerDefenseVisual(bot.id, 'armor_hit');
       return true;
     }
 
     bot.lives -= 1;
-    status.invincibleTimer = 90;
+    status.invincibleTimer = 90 + defenseGraceFrames(bot.stats.defenseLevel);
     spawnPieces(bot.x, bot.y, 2, true);
 
     if (bot.lives <= 0 && status.secondChanceReady) {
@@ -5230,7 +5242,7 @@ const styles = StyleSheet.create({
 /* ===========================================================================
  * ALPHA 9.1 — MAPA ONLINE (mesmo arquivo; o Mapa offline permanece isolado)
  * A AWS é a única fonte de: carros, pilotos, fase, cronômetro, física e ranking.
- * Não há bots, física local nem recompensas offline neste modo.
+ * Não há bots nem física local; o Alpha 17 encaminha um relatório não verificado ao Firebase.
  * Cartas e colisões pertencem à AWS; animações são executadas localmente.
  * =========================================================================== */
 
@@ -5298,6 +5310,52 @@ type WildLootType = 'motor' | 'spray' | 'engrenagem' | 'chips';
 type WildLootDrop = {id: string; x: number; type: WildLootType; fromSessionId: string};
 type WildLootWallet = Record<WildLootType, number>;
 const EMPTY_WILD_LOOT: WildLootWallet = {motor: 0, spray: 0, engrenagem: 0, chips: 0};
+
+/** Alpha 17: um ID único por rodada/sala, preservado ao trocar de tela.
+ * É uma chave local de deduplicação do relatório; a AWS/Firebase ainda precisa
+ * validar a concessão definitiva contra um recibo de partida do servidor.
+ */
+type Alpha17Round = {sequence: number; raceId: string; lastPhase: Alpha9Phase | null; reported: boolean};
+const alpha17Rounds = new WeakMap<object, Alpha17Round>();
+function alpha17Round(room: Alpha9Room, phase: Alpha9Phase): Alpha17Round {
+  let current = alpha17Rounds.get(room);
+  if (!current) {
+    current = {sequence: 0, raceId: '', lastPhase: null, reported: false};
+    alpha17Rounds.set(room, current);
+  }
+  const previous = current.lastPhase;
+  const newCountdown = phase === 'countdown' && previous !== 'countdown' && previous !== 'racing';
+  const newRacing = phase === 'racing' && (previous === 'waiting' || previous === 'finished');
+  if (newCountdown || newRacing || (phase === 'finished' && !current.raceId)) {
+    current.sequence += 1;
+    // Não guardar/tokenizar credenciais: roomId + sessionId + rodada só identificam o relatório.
+    current.raceId = `race-online-${room.roomId}-${room.sessionId}-${current.sequence}`;
+    current.reported = false;
+  }
+  current.lastPhase = phase;
+  return current;
+}
+
+type Alpha17Performance = {
+  perfectStart: boolean;
+  bestRank: number;
+  worstRank: number;
+  overtakes: number;
+  lastRank: number;
+  cardsUsed: number;
+  offensiveCardsUsed: number;
+  defensiveCardsUsed: number;
+  uniqueCardsUsed: string[];
+  uniqueOffensiveCardsUsed: string[];
+  defenses: number;
+};
+function alpha17EmptyPerformance(): Alpha17Performance {
+  return {perfectStart: false, bestRank: 999, worstRank: 1, overtakes: 0, lastRank: 0,
+    cardsUsed: 0, offensiveCardsUsed: 0, defensiveCardsUsed: 0,
+    uniqueCardsUsed: [], uniqueOffensiveCardsUsed: [], defenses: 0};
+}
+
+
 const WILD_LOOT_ICONS: Record<WildLootType, string> = {
   motor: '🔧', spray: '🎨', engrenagem: '⚙️', chips: '🟣',
 };
@@ -5442,8 +5500,17 @@ type Alpha153Cue = { id: number; sessionId: string; cardId: string; blocked?: bo
 type Alpha153Tornado = {
   id: number; callerX: number; targetX: number; targetSessionId: string;
 };
-type Alpha153BubbleShot = {id: number; callerX: number; targetX: number; targetSessionId: string};
+type Alpha153BubbleShot = {
+  id: number; callerX: number; targetX: number; callerY: number; targetY: number;
+  targetSessionId: string;
+};
 const ALPHA153_BUBBLE_TRAVEL_MS = 680;
+// ALPHA 16.4 — uma única faixa visual compartilhada pelo carro e projéteis.
+// O box do carro termina em groundY e tem PLAYER_SIZE de altura. O meio da
+// carroceria fica a meia altura, sem tocar no chão. Apenas VISUAL; a AWS
+// determina a trajetória, os alvos, os hits e o efeito físico.
+const ONLINE_PROJECTILE_CENTER_ABOVE_GROUND = PLAYER_SIZE / 2;
+const ONLINE_BUBBLE_VISUAL_SIZE = 42;
 const ALPHA153_EMP_VISUAL_MS = 2000; // 120 frames / 60 FPS no offline.
 type Alpha153SwapHold = {beforeX: number; afterX: number; released: boolean};
 
@@ -5486,15 +5553,21 @@ function Alpha153CardBurst({cardId, blocked = false}: {cardId: string; blocked?:
   );
 }
 
-function Alpha153BubbleTravel({distance}: {distance: number}) {
+function Alpha153BubbleTravel({distance, heightDifference}: {distance: number; heightDifference: number}) {
   const travel = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(travel, {toValue: 1, duration: ALPHA153_BUBBLE_TRAVEL_MS, useNativeDriver: true}).start();
     return () => travel.stopAnimation();
   }, [travel]);
   return (
-    <Animated.View pointerEvents="none" style={{position: 'absolute', width: 42, height: 42,
-      transform: [{translateX: travel.interpolate({inputRange: [0, 1], outputRange: [0, distance]})}]}}>
+    <Animated.View pointerEvents="none" style={{position: 'absolute',
+      width: ONLINE_BUBBLE_VISUAL_SIZE, height: ONLINE_BUBBLE_VISUAL_SIZE,
+      transform: [
+        {translateX: travel.interpolate({inputRange: [0, 1], outputRange: [0, distance]})},
+        // Se o rival estava saltando ao disparar, a bolha procura a altura dele.
+        // Não muda a colisão nem inicia o efeito de levitação localmente.
+        {translateY: travel.interpolate({inputRange: [0, 1], outputRange: [0, heightDifference]})},
+      ]}}>
       <BubbleLiftVisual variant="travel" x={0} y={0} size={40} />
     </Animated.View>
   );
@@ -5505,21 +5578,13 @@ function Alpha153BubbleTravel({distance}: {distance: number}) {
 // apresentação (o GuidedBulletEffect offline controla alvos e não pode rodar
 // como simulador paralelo dentro do multiplayer).
 function Alpha153BulletFlight({x, y, targetX}: {x: number; y: number; targetX?: number}) {
-  const wobble = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const animation = Animated.loop(Animated.sequence([
-      Animated.timing(wobble, {toValue: 1, duration: 240, useNativeDriver: true}),
-      Animated.timing(wobble, {toValue: 0, duration: 240, useNativeDriver: true}),
-    ]));
-    animation.start();
-    return () => {animation.stop(); wobble.stopAnimation();};
-  }, [wobble]);
   const angle = typeof targetX === 'number' ? (targetX >= x ? -8 : 8) : 0;
-  return <Animated.View pointerEvents="none" style={{position: 'absolute', zIndex: 12,
-    left: x, top: y - 8,
-    transform: [{translateY: wobble.interpolate({inputRange: [0, 1], outputRange: [0, -17]})}]}}>
+  // A posição Y da AWS já segue o alvo; não acrescentar os antigos -17px
+  // de oscilação, que faziam o míssil passar por cima da carroceria.
+  return <View pointerEvents="none" style={{position: 'absolute', zIndex: 12,
+    left: x, top: y - 8}}>
     <GuidedBulletVisual x={0} y={0} angle={angle} />
-  </Animated.View>;
+  </View>;
 }
 
 function OnlineAlpha9Mapa() {
@@ -5545,6 +5610,14 @@ function OnlineAlpha9Mapa() {
   // Recursos do Alpha 15.3.2, enviados pela AWS (não representam saldo Firebase).
   const [wildLootDrops, setWildLootDrops] = useState<WildLootDrop[]>([]);
   const [wildLootWallets, setWildLootWallets] = useState<Record<string, WildLootWallet>>({});
+
+// As carteiras são confirmadas pelo servidor e congeladas no fim da corrida.
+const alpha17PerformanceRef = useRef<Alpha17Performance>(alpha17EmptyPerformance());
+const alpha17LastRaceIdRef = useRef('');
+const alpha17FinishLockRef = useRef(false);
+const [alpha17FinishStatus, setAlpha17FinishStatus] = useState('');
+const [alpha17Retry, setAlpha17Retry] = useState(0);
+
   const swapVisualResetRef = useRef(false);
   // Mantém os carros na posição anterior até encolherem: não adia a física da AWS.
   const swapVisualHoldRef = useRef(new Map<string, Alpha153SwapHold>());
@@ -5681,11 +5754,11 @@ function OnlineAlpha9Mapa() {
     queueAlpha153Timer(() => setAlpha153Cues(prev => prev.filter(fx => fx.id !== id)), 900);
   };
   const queueAlpha153Bubble = (callerX: number, targetX: number,
-    targetSessionId: string, onArrival: () => void) => {
-    if (!Number.isFinite(callerX) || !Number.isFinite(targetX) || !targetSessionId) return;
+    callerY: number, targetY: number, targetSessionId: string, onArrival: () => void) => {
+    if (![callerX, targetX, callerY, targetY].every(Number.isFinite) || !targetSessionId) return;
     alpha153BubbleAtRef.current.set(targetSessionId, Date.now());
     const id = ++alpha153Seq.current;
-    setAlpha153Bubbles(prev => [...prev.slice(-5), {id, callerX, targetX, targetSessionId}]);
+    setAlpha153Bubbles(prev => [...prev.slice(-5), {id, callerX, targetX, callerY, targetY, targetSessionId}]);
     // O efeito de aprisionamento/levitação só começa quando a arte chega ao alvo.
     setAlpha153BubbleInFlight(prev => [...new Set([...prev, targetSessionId])]);
     queueAlpha153Timer(() => {
@@ -5890,6 +5963,28 @@ function OnlineAlpha9Mapa() {
         mapWarningAtRef.current.clear();
       }
       lastSnapshotPhaseRef.current = snapshot.phase;
+
+const round = alpha17Round(room, snapshot.phase);
+if (newRace || (round.raceId && alpha17LastRaceIdRef.current !== round.raceId)) {
+  alpha17PerformanceRef.current = alpha17EmptyPerformance();
+  alpha17FinishLockRef.current = false;
+  alpha17LastRaceIdRef.current = round.raceId;
+  setAlpha17FinishStatus('');
+  setWildLootWallets({});
+}
+const self = snapshot.players.find(p => p.sessionId === room.sessionId);
+if (self && (snapshot.phase === 'countdown' || snapshot.phase === 'racing' || snapshot.phase === 'finished')) {
+  const rank = self.rank;
+  if (Number.isInteger(rank) && rank >= 1 && rank <= snapshot.players.length) {
+    const perf = alpha17PerformanceRef.current;
+    perf.bestRank = Math.min(perf.bestRank, rank);
+    perf.worstRank = Math.max(perf.worstRank, rank);
+    if (perf.lastRank > 0 && rank < perf.lastRank && snapshot.phase === 'racing') {
+      perf.overtakes += perf.lastRank - rank;
+    }
+    perf.lastRank = rank;
+  }
+}
       const visualHardReset = hardReset || newRace || swapVisualResetRef.current;
       if (swapVisualResetRef.current) {
         lastFinitePlayersRef.current.clear();
@@ -5960,6 +6055,14 @@ function OnlineAlpha9Mapa() {
             carId: player.carId,
             startX: player.startX,
             local: player.sessionId === room.sessionId,
+            // ALPHA 16.4: medição da garagem validada pela AWS, sem dados pessoais.
+            speedLevel: player.speedLevel,
+            accelerationLevel: player.accelerationLevel,
+            jumpPowerLevel: player.jumpPowerLevel,
+            defenseLevel: player.defenseLevel,
+            maxSpeed: player.maxSpeed,
+            acceleration: player.acceleration,
+            maxLives: player.maxLives,
           })),
         );
       }
@@ -6016,7 +6119,7 @@ function OnlineAlpha9Mapa() {
         const me = ownHold ? (ownHold.released ? ownHold.afterX : ownHold.beforeX) : frame[room.sessionId];
         if (Number.isFinite(me)) {
           const myStartX = startXRef.current[room.sessionId] ?? 0;
-          sceneryTravel.setValue(Math.max(0, me - myStartX) * SCENARIO_TRAVEL_SCALE);
+          sceneryTravel.setValue(Math.max(0, me - myStartX) * ONLINE_SCENARIO_TRAVEL_SCALE);
         }
       }, 1000 / 30);
 
@@ -6178,6 +6281,7 @@ function OnlineAlpha9Mapa() {
     }));
     collectCleanup(room.onMessage('alpha16-perfect-start', (event: {sessionId:string}) => {
       if (!mountedRef.current || roomRef.current !== room) return;
+      if (event.sessionId === room.sessionId) alpha17PerformanceRef.current.perfectStart = true;
       console.log('[WILD ALPHA16] LARGADA PERFEITA', event.sessionId);
     }));
     collectCleanup(room.onMessage('nitro-result', (message: { ok: boolean; message: string }) => {
@@ -6194,6 +6298,21 @@ function OnlineAlpha9Mapa() {
       healedLives?: number; durationSeconds?: number;
     }) => {
       if (!mountedRef.current || roomRef.current !== room) return;
+
+if (message.sourceSessionId === room.sessionId) {
+  const stats = alpha17PerformanceRef.current;
+  stats.cardsUsed += 1;
+  if (!stats.uniqueCardsUsed.includes(message.cardId)) stats.uniqueCardsUsed.push(message.cardId);
+  const category = getCardDefinition(message.cardId)?.category;
+  if (category === 'attack') {
+    stats.offensiveCardsUsed += 1;
+    if (!stats.uniqueOffensiveCardsUsed.includes(message.cardId)) {
+      stats.uniqueOffensiveCardsUsed.push(message.cardId);
+    }
+  } else if (category === 'defense') {
+    stats.defensiveCardsUsed += 1;
+  }
+}
       // VFX apenas para ativações aceitas pela AWS. O targetId sempre vem dela:
       // nunca escolhemos ou alteramos vítimas pelo celular.
       queueAlpha153Cue(message.sourceSessionId, message.cardId);
@@ -6211,7 +6330,7 @@ function OnlineAlpha9Mapa() {
       const victim = visualSnapshot?.players.find(p => p.sessionId === message.targetSessionId);
       if (!message.blocked && caster && victim && caster.sessionId !== victim.sessionId) {
         if (message.cardId === 'bubble_lift') {
-          queueAlpha153Bubble(caster.x, victim.x, victim.sessionId,
+          queueAlpha153Bubble(caster.x, victim.x, caster.y, victim.y, victim.sessionId,
             () => animateHit(victim.sessionId, 'bubble_lift'));
         }
         if (message.cardId === 'tornado') {
@@ -6285,6 +6404,9 @@ function OnlineAlpha9Mapa() {
       defense?: 'shield' | 'armor' | 'ghost' | 'second_chance' | string;
     }) => {
       if (!mountedRef.current || roomRef.current !== room) return;
+      if (event.targetSessionId === room.sessionId && event.blocked) {
+        alpha17PerformanceRef.current.defenses += 1;
+      }
       const target = raceSnapshotRef.current?.players.find(p => p.sessionId === event.targetSessionId);
       // Armor absorve a perda de vida, mas conserva o impacto físico/visual.
       if (!event.blocked || event.defense === 'armor') {
@@ -6406,6 +6528,133 @@ function OnlineAlpha9Mapa() {
   const myAlpha15 = alpha15Visual[mySessionId];
   const myLoot = wildLootWallets[mySessionId] ?? EMPTY_WILD_LOOT;
   const rivalAlpha15 = rival ? alpha15Visual[rival.sessionId] : undefined;
+
+
+// O servidor já fornece rank, vidas e carteira da rodada.
+// Esperamos um wild-loot-sync FINAL antes de persistir o relatório na fila Firebase.
+// O serviço de recompensa ainda exige um grant confiável do backend para creditar saldo.
+useEffect(() => {
+  const currentRoom = roomRef.current;
+  if (!currentRoom || !race || race.phase !== 'finished' || !me || dropped ||
+      alpha17FinishLockRef.current) return;
+  const round = alpha17Round(currentRoom, 'finished');
+  if (!round.raceId) return;
+  if (round.reported) {
+    setAlpha17FinishStatus('Relatório desta rodada já salvo. Aguardando a próxima corrida...');
+    return;
+  }
+  alpha17FinishLockRef.current = true;
+  setAlpha17FinishStatus('Confirmando itens e resultado com a AWS...');
+
+  void (async () => {
+    // O callback temporário é registrado ANTES do request para não perder o ACK.
+    let unsubscribe: (() => void) | undefined;
+    let syncTimeout: ReturnType<typeof setTimeout> | undefined;
+    const latestWallet = await new Promise<WildLootWallet | null>(resolve => {
+      let settled = false;
+      const finish = (wallet: WildLootWallet | null) => {
+        if (settled) return;
+        settled = true;
+        if (syncTimeout) clearTimeout(syncTimeout);
+        if (unsubscribe) unsubscribe();
+        resolve(wallet);
+      };
+      const off: unknown = currentRoom.onMessage('wild-loot-sync', (payload: {
+        wallets?: Record<string, WildLootWallet>;
+      }) => {
+        const wallet = payload?.wallets?.[currentRoom.sessionId];
+        if (wallet) finish(wallet);
+      });
+      if (typeof off === 'function') unsubscribe = off as () => void;
+      else if (off && typeof (off as {remove?: () => void}).remove === 'function') {
+        unsubscribe = () => (off as {remove: () => void}).remove();
+      }
+      syncTimeout = setTimeout(() => finish(null), 4000);
+      try { currentRoom.send('wild-loot-request-sync', {}); }
+      catch { finish(null); }
+    });
+    if (!mountedRef.current || roomRef.current !== currentRoom) return;
+    if (alpha9ReadRace(currentRoom).phase !== 'finished') {
+      setAlpha17FinishStatus('A sala reiniciou antes da confirmação do resultado.');
+      return;
+    }
+    if (!latestWallet) {
+      setAlpha17FinishStatus('A AWS não confirmou a carteira final. Tente sincronizar novamente.');
+      return;
+    }
+    const validCount = (value: number): boolean => Number.isSafeInteger(value) && value >= 0;
+    if (![latestWallet.motor, latestWallet.spray, latestWallet.engrenagem, latestWallet.chips].every(validCount)) {
+      setAlpha17FinishStatus('A AWS enviou itens inválidos. Tente sincronizar novamente.');
+      return;
+    }
+    const wallet = {
+      motor: latestWallet.motor,
+      spray: latestWallet.spray,
+      engrenagem: latestWallet.engrenagem,
+      chips: latestWallet.chips,
+    };
+    // Somente a classificação oficial; sem estimar quem ganhou usando o visual.
+    const position = Number(me.rank);
+    const totalRacers = Math.max(2, race.players.length); // Forfeit pode remover o rival antes do finish.
+    if (!Number.isInteger(position) || position < 1 || position > totalRacers) {
+      setAlpha17FinishStatus('Classificação final ainda não confirmada pela AWS. Tente novamente.');
+      return;
+    }
+    const survived = me.lives > 0;
+    const stats = alpha17PerformanceRef.current;
+    const performance: RacePerformanceStats = {
+      perfectStart: stats.perfectStart,
+      successfulAttacks: 0, // A AWS ainda não envia atacante no battle-hit.
+      successfulDefenses: stats.defenses,
+      overtakes: stats.overtakes,
+      livesLost: Math.max(0, me.maxLives - me.lives),
+      worstPosition: Math.max(position, stats.worstRank),
+      bestPosition: Math.min(position, stats.bestRank === 999 ? position : stats.bestRank),
+      survived,
+      cardsUsed: stats.cardsUsed,
+      offensiveCardsUsed: stats.offensiveCardsUsed,
+      defensiveCardsUsed: stats.defensiveCardsUsed,
+      uniqueCardsUsed: [...stats.uniqueCardsUsed],
+      uniqueOffensiveCardsUsed: [...stats.uniqueOffensiveCardsUsed],
+      collectedMotor: wallet.motor,
+      collectedSpray: wallet.spray,
+      collectedGears: wallet.engrenagem,
+      collectedTotal: wallet.motor + wallet.spray + wallet.engrenagem + wallet.chips,
+    };
+    setAlpha17FinishStatus('Salvando relatório da corrida...');
+    try {
+      const completion = await raceRewardsService.completeRace({
+        raceId: round.raceId,
+        position,
+        totalRacers,
+        carId: me.carId,
+        mapId: params.mapId || 'sao_paulo',
+        carVisual: {colorFront: me.colorFront, colorBack: me.colorBack},
+        rewards: {...wallet, trophies: position === 1 && survived ? 1 : 0},
+        performance,
+        unlocks: [],
+        finishedAt: Date.now(),
+        isNewRecord: false,
+      });
+      if (!mountedRef.current || roomRef.current !== currentRoom) return;
+      if (!completion.result) {
+        setAlpha17FinishStatus(`Relatório não salvo (${completion.status}). Tente novamente.`);
+        return;
+      }
+      console.log('[WILD ALPHA17] Relatório na fila Firebase', {
+        raceId: round.raceId, status: completion.status, position, wallet,
+      });
+      round.reported = true;
+      pauseMusic();
+      router.replace({pathname: '/RaceResultScreen' as any, params: {
+        source: 'online', chips: String(wallet.chips),
+      }});
+    } catch (error) {
+      if (mountedRef.current) setAlpha17FinishStatus('Erro ao salvar relatório: ' + String(error));
+    }
+  })();
+}, [race?.phase, alpha17Retry, dropped, me?.sessionId, router, pauseMusic]);
+
   const cardCooldown = (id: string) => id === 'slow_slow' ? (me?.slowCooldown ?? 0) :
     id === 'nitro_power' ? (me?.nitroPowerCooldown ?? 0) :
     id === 'shield' ? (me?.shieldCooldown ?? 0) : (me?.cardCooldowns?.[id] ?? 0);
@@ -6699,7 +6948,9 @@ function OnlineAlpha9Mapa() {
           const targetScreenX = intended ? screenWidth * 0.42 +
             (intended.x - (me?.x ?? 0)) * ALPHA9_PIXELS_PER_SERVER_UNIT : undefined;
           return <Alpha153BulletFlight key={`hazard-${hazard.id}`}
-            x={x} y={groundY - PLAYER_SIZE * 0.65 + hazard.y}
+            // hazard.y é relativo ao solo e vem da AWS; manter a mesma faixa
+            // vertical da carroceria, sem inventar uma segunda trajetória.
+            x={x} y={groundY - ONLINE_PROJECTILE_CENTER_ABOVE_GROUND + hazard.y}
             targetX={targetScreenX} />;
         }
         if (hazard.kind === 'oil_spit') {
@@ -6749,7 +7000,7 @@ function OnlineAlpha9Mapa() {
               {player.slowRemaining > 0 && <Text style={onlineMapStyles.slowFlag}>
                 🐌 SLOW {player.slowRemaining.toFixed(1)}s
               </Text>}
-              <Text style={onlineMapStyles.shieldFlag}>❤️ {player.lives}/5</Text>
+              <Text style={onlineMapStyles.shieldFlag}>❤️ {player.lives}/{player.maxLives}</Text>
               {player.chainsRemaining > 0 && <Text style={onlineMapStyles.slowFlag}>⛓️ CHAINS</Text>}
               {player.oilRemaining > 0 && <Text style={onlineMapStyles.slowFlag}>🛢️ OIL</Text>}
               {player.shieldCharges > 0 && <Text style={onlineMapStyles.shieldFlag}>🛡️ SHIELD</Text>}
@@ -6838,10 +7089,13 @@ function OnlineAlpha9Mapa() {
       {alpha153Bubbles.map(effect => (
         <View key={`alpha153-bubble-${effect.id}`} pointerEvents="none"
           style={{position: 'absolute', zIndex: 13,
-            left: screenWidth * 0.42 + (effect.callerX - (me?.x ?? 0)) * ALPHA9_PIXELS_PER_SERVER_UNIT,
-            top: groundY - PLAYER_SIZE - 8}}>
+            left: screenWidth * 0.42 + (effect.callerX - (me?.x ?? 0)) * ALPHA9_PIXELS_PER_SERVER_UNIT
+              + (PLAYER_SIZE - ONLINE_BUBBLE_VISUAL_SIZE) / 2,
+            top: groundY - ONLINE_PROJECTILE_CENTER_ABOVE_GROUND
+              - ONLINE_BUBBLE_VISUAL_SIZE / 2 + effect.callerY}}>
           <Alpha153BubbleTravel
-            distance={(effect.targetX - effect.callerX) * ALPHA9_PIXELS_PER_SERVER_UNIT} />
+            distance={(effect.targetX - effect.callerX) * ALPHA9_PIXELS_PER_SERVER_UNIT}
+            heightDifference={effect.targetY - effect.callerY} />
         </View>
       ))}
       {/* TornadoVisual do OFFLINE: somente desenho, sem chamar handleTornadoHit. */}
@@ -6930,9 +7184,15 @@ function OnlineAlpha9Mapa() {
         <View style={onlineMapStyles.centerNotice}>
           <Text style={onlineMapStyles.finishTitle}>{finishState}</Text>
           <Text style={onlineMapStyles.noticeDetail}>{race?.finishReason || 'Resultado confirmado pelo servidor'}</Text>
-          {canReady && (
-            <TouchableOpacity style={onlineMapStyles.readyButton} onPress={() => sendCommand('ready', true)}>
-              <Text style={onlineMapStyles.readyText}>REVANCHE · READY</Text>
+          <Text style={onlineMapStyles.noticeDetail}>
+            {alpha17FinishStatus || 'Preparando relatório e tela de recompensas...'}
+          </Text>
+          {/(Tente|Erro)/.test(alpha17FinishStatus) && (
+            <TouchableOpacity style={onlineMapStyles.readyButton} onPress={() => {
+              alpha17FinishLockRef.current = false;
+              setAlpha17Retry(value => value + 1);
+            }}>
+              <Text style={onlineMapStyles.readyText}>REPETIR SINCRONIZAÇÃO</Text>
             </TouchableOpacity>
           )}
         </View>

@@ -13,7 +13,8 @@ import {
     normalizeLegacyLevelRequirement,
 } from '@/src/utils/progression';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { clearWildAlpha9Room, getWildAlpha9Room } from '@/src/online/wildOnlineAlpha9Session';
 import React, { useEffect, useMemo, useRef, useState, } from 'react';
 import { Animated, ImageSourcePropType, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, } from 'react-native';
 
@@ -779,7 +780,11 @@ const XpProgressPanel = ({
 };
 
 export default function RaceResultScreen() {
-    const { t, language, } = useLanguage();
+    const { t, language, } = useLanguage();    const route = useLocalSearchParams<{source?: string; chips?: string}>();
+    const isOnlineResult = route.source === 'online';
+    const rawChips = Number(route.chips ?? 0);
+    const onlineChips = Number.isSafeInteger(rawChips) && rawChips > 0 ? rawChips : 0;
+
 
     const {
         selectedFinishId,
@@ -1208,28 +1213,28 @@ export default function RaceResultScreen() {
             ],
         });
 
-    const handleContinue =
-        () => {
-            clearResult();
+    const handleContinue = () => {
+        if (isOnlineResult) {
+            const room = getWildAlpha9Room();
+            if (room) {
+                clearWildAlpha9Room(room);
+                void room.leave().catch(() => {});
+            }
+        }
+        clearResult();
+        router.replace('/CarSelectionScreen');
+    };
 
-            router.replace(
-                '/CarSelectionScreen'
-            );
-        };
-
-    const handleRaceAgain =
-        () => {
-            clearResult();
-
-            /**
-             * Ajustaremos esta rota
-             * quando conectarmos com
-             * o fluxo atual da corrida.
-             */
-            router.replace(
-                '/mapa' as any,
-            );
-        };
+    const handleRaceAgain = () => {
+        clearResult();
+        if (isOnlineResult) {
+            // A Room transferida continua viva: o laboratório oferece RETOMAR.
+            // READY é uma escolha explícita e continua validado pela AWS.
+            router.replace({pathname: '/WildOnlineLab' as any, params: {fromRaceResult: '1'}});
+            return;
+        }
+        router.replace('/mapa' as any);
+    };
 
     return (
         <LinearGradient
@@ -1364,6 +1369,12 @@ export default function RaceResultScreen() {
                             {t('raceResult.rewards')}
                         </Text>
 
+                        {isOnlineResult && (
+                            <Text style={styles.onlineRewardNotice}>
+                                ONLINE · PRÉVIA DE RECOMPENSAS. O crédito no Firebase
+                                depende da validação do relatório pelo servidor.
+                            </Text>
+                        )}
                         <View style={styles.rewardsGrid}>
                             <RewardCounter
                                 icon="⚙️"
@@ -1400,6 +1411,16 @@ export default function RaceResultScreen() {
                                 onTick={playRewardTick}
                                 onComplete={playRewardComplete}
                             />
+                            {isOnlineResult && (
+                                <RewardCounter
+                                    icon="🟣"
+                                    label="CHIPs"
+                                    amount={onlineChips}
+                                    delay={2700}
+                                    onTick={playRewardTick}
+                                    onComplete={playRewardComplete}
+                                />
+                            )}
                         </View>
 
                         {result.progress && result.xpBreakdown && (
@@ -1567,6 +1588,13 @@ const styles =
             fontWeight: '900',
             letterSpacing: 3,
             marginBottom: 12,
+        },
+        onlineRewardNotice: {
+            color: '#FFE1A1',
+            fontSize: 11,
+            lineHeight: 16,
+            marginBottom: 10,
+            fontWeight: '700',
         },
         rewardsGrid: {
             flexDirection: 'row',
