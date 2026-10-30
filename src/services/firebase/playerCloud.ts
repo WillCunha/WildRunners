@@ -12,6 +12,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { auth, db } from './firebaseClient';
+import { assertNoRemoteRaceHistoryLoss } from './raceHistoryGuard';
 
 export const PLAYER_SAVE_SCHEMA_VERSION = 1;
 
@@ -126,6 +127,12 @@ export async function saveCurrentPlayerCloudSnapshot(): Promise<PlayerSaveSnapsh
       typeof remote.profile?.updatedAt === 'number' && Number.isFinite(remote.profile.updatedAt)
         ? Math.floor(remote.profile.updatedAt)
         : 0;
+
+    // Alpha 17.3: a AWS pode creditar uma corrida ENTRE a leitura do save local
+    // e esta tentativa de escrita. Nunca apagar o receipt/id remoto com um save
+    // local mais antigo, mesmo se o timestamp do aparelho estiver adiantado.
+    // Não conciliamos saldos automaticamente: preservar a cópia local e o remoto.
+    assertNoRemoteRaceHistoryLoss(remote.processedRaceIds, snapshot.processedRaceIds);
 
     if (remoteProfileUpdatedAt > snapshot.profile.updatedAt) {
       throw new Error('WILD_SAVE_STALE_LOCAL');

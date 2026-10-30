@@ -20,6 +20,7 @@ import TornadoVisual from '@/components/ui/TornadoVisual';
 import { AudioContext } from '@/context/AudioContext';
 import { useCarSelection } from '@/context/CarContext';
 import { raceRewardsService } from '@/src/services/raceRewardsService';
+import { showConfirmedOnlineRace } from '@/src/services/firebase/cloudOnlineRaceRewards';
 import { useLoadingStore } from '@/src/store/LoadingStore';
 import { usePlayerStore } from '@/src/store/playerStore';
 import { useTutorialStore } from '@/src/store/tutorialStore';
@@ -5311,10 +5312,7 @@ type WildLootDrop = {id: string; x: number; type: WildLootType; fromSessionId: s
 type WildLootWallet = Record<WildLootType, number>;
 const EMPTY_WILD_LOOT: WildLootWallet = {motor: 0, spray: 0, engrenagem: 0, chips: 0};
 
-/** Alpha 17: um ID único por rodada/sala, preservado ao trocar de tela.
- * É uma chave local de deduplicação do relatório; a AWS/Firebase ainda precisa
- * validar a concessão definitiva contra um recibo de partida do servidor.
- */
+/** Alpha 17.1: deduplicação do cliente por rodada; O ID OFICIAL vem da AWS. */
 type Alpha17Round = {sequence: number; raceId: string; lastPhase: Alpha9Phase | null; reported: boolean};
 const alpha17Rounds = new WeakMap<object, Alpha17Round>();
 function alpha17Round(room: Alpha9Room, phase: Alpha9Phase): Alpha17Round {
@@ -5328,8 +5326,8 @@ function alpha17Round(room: Alpha9Room, phase: Alpha9Phase): Alpha17Round {
   const newRacing = phase === 'racing' && (previous === 'waiting' || previous === 'finished');
   if (newCountdown || newRacing || (phase === 'finished' && !current.raceId)) {
     current.sequence += 1;
-    // Não guardar/tokenizar credenciais: roomId + sessionId + rodada só identificam o relatório.
-    current.raceId = `race-online-${room.roomId}-${room.sessionId}-${current.sequence}`;
+    // Nunca criar ID de resultado no aparelho. Espera o recibo persistido da AWS.
+    current.raceId = '';
     current.reported = false;
   }
   current.lastPhase = phase;
@@ -6538,7 +6536,6 @@ useEffect(() => {
   if (!currentRoom || !race || race.phase !== 'finished' || !me || dropped ||
       alpha17FinishLockRef.current) return;
   const round = alpha17Round(currentRoom, 'finished');
-  if (!round.raceId) return;
   if (round.reported) {
     setAlpha17FinishStatus('Relatório desta rodada já salvo. Aguardando a próxima corrida...');
     return;
@@ -6547,110 +6544,82 @@ useEffect(() => {
   setAlpha17FinishStatus('Confirmando itens e resultado com a AWS...');
 
   void (async () => {
-    // O callback temporário é registrado ANTES do request para não perder o ACK.
+    // Solicita o recibo congelado da partida, já CONFIRMADO no Firestore pela AWS.
+    // Recibos 'pending'/'error' não podem ser enviados como resultado final.
+    type OfficialReceipt = {
+      raceId:string; roomId:string; status:string; position:number; totalRacers:number;
+      carId:string; survived:boolean; perfectStartHits:number; wallet:WildLootWallet;
+      finishedAt:number; finishReason:string;
+    };
     let unsubscribe: (() => void) | undefined;
     let syncTimeout: ReturnType<typeof setTimeout> | undefined;
-    const latestWallet = await new Promise<WildLootWallet | null>(resolve => {
+    const receipt = await new Promise<OfficialReceipt | null>(resolve => {
       let settled = false;
-      const finish = (wallet: WildLootWallet | null) => {
+      const finish = (value: OfficialReceipt | null) => {
         if (settled) return;
         settled = true;
         if (syncTimeout) clearTimeout(syncTimeout);
-        if (unsubscribe) unsubscribe();
-        resolve(wallet);
+        unsubscribe?.();
+        resolve(value);
       };
-      const off: unknown = currentRoom.onMessage('wild-loot-sync', (payload: {
-        wallets?: Record<string, WildLootWallet>;
-      }) => {
-        const wallet = payload?.wallets?.[currentRoom.sessionId];
-        if (wallet) finish(wallet);
+      const off: unknown = currentRoom.onMessage('wild-race-receipt', (payload: OfficialReceipt) => {
+        if (payload?.roomId !== currentRoom.roomId || payload.status !== 'stored') return;
+        if (!/^race-[A-Za-z0-9_-]{8,80}$/.test(payload.raceId)) return;
+        finish(payload);
       });
       if (typeof off === 'function') unsubscribe = off as () => void;
-      else if (off && typeof (off as {remove?: () => void}).remove === 'function') {
+      else if (off && typeof (off as {remove?: () => void}).remove === 'function')
         unsubscribe = () => (off as {remove: () => void}).remove();
-      }
-      syncTimeout = setTimeout(() => finish(null), 4000);
-      try { currentRoom.send('wild-loot-request-sync', {}); }
+      syncTimeout = setTimeout(() => finish(null), 9500);
+      try { currentRoom.send('wild-race-receipt-request', {}); }
       catch { finish(null); }
     });
     if (!mountedRef.current || roomRef.current !== currentRoom) return;
-    if (alpha9ReadRace(currentRoom).phase !== 'finished') {
-      setAlpha17FinishStatus('A sala reiniciou antes da confirmação do resultado.');
+    if (!receipt) {
+      setAlpha17FinishStatus('A AWS ainda não confirmou o recibo no Firestore. Tente sincronizar novamente.');
       return;
     }
-    if (!latestWallet) {
-      setAlpha17FinishStatus('A AWS não confirmou a carteira final. Tente sincronizar novamente.');
+    if (alpha9ReadRace(currentRoom).phase !== 'finished') {
+      setAlpha17FinishStatus('A sala reiniciou antes do resultado oficial. Tente novamente.');
       return;
     }
     const validCount = (value: number): boolean => Number.isSafeInteger(value) && value >= 0;
-    if (![latestWallet.motor, latestWallet.spray, latestWallet.engrenagem, latestWallet.chips].every(validCount)) {
-      setAlpha17FinishStatus('A AWS enviou itens inválidos. Tente sincronizar novamente.');
+    const latestWallet = receipt.wallet;
+    if (!latestWallet || ![latestWallet.motor, latestWallet.spray, latestWallet.engrenagem, latestWallet.chips].every(validCount)) {
+      setAlpha17FinishStatus('Recibo da AWS com itens inválidos. Tente novamente.');
       return;
     }
-    const wallet = {
-      motor: latestWallet.motor,
-      spray: latestWallet.spray,
-      engrenagem: latestWallet.engrenagem,
-      chips: latestWallet.chips,
-    };
-    // Somente a classificação oficial; sem estimar quem ganhou usando o visual.
-    const position = Number(me.rank);
-    const totalRacers = Math.max(2, race.players.length); // Forfeit pode remover o rival antes do finish.
-    if (!Number.isInteger(position) || position < 1 || position > totalRacers) {
-      setAlpha17FinishStatus('Classificação final ainda não confirmada pela AWS. Tente novamente.');
+    const position = Number(receipt.position);
+    const totalRacers = Number(receipt.totalRacers);
+    if (!Number.isInteger(position) || !Number.isInteger(totalRacers) || totalRacers < 2 || position < 1 || position > totalRacers) {
+      setAlpha17FinishStatus('Classificação oficial inválida. Tente novamente.');
       return;
     }
-    const survived = me.lives > 0;
-    const stats = alpha17PerformanceRef.current;
-    const performance: RacePerformanceStats = {
-      perfectStart: stats.perfectStart,
-      successfulAttacks: 0, // A AWS ainda não envia atacante no battle-hit.
-      successfulDefenses: stats.defenses,
-      overtakes: stats.overtakes,
-      livesLost: Math.max(0, me.maxLives - me.lives),
-      worstPosition: Math.max(position, stats.worstRank),
-      bestPosition: Math.min(position, stats.bestRank === 999 ? position : stats.bestRank),
-      survived,
-      cardsUsed: stats.cardsUsed,
-      offensiveCardsUsed: stats.offensiveCardsUsed,
-      defensiveCardsUsed: stats.defensiveCardsUsed,
-      uniqueCardsUsed: [...stats.uniqueCardsUsed],
-      uniqueOffensiveCardsUsed: [...stats.uniqueOffensiveCardsUsed],
-      collectedMotor: wallet.motor,
-      collectedSpray: wallet.spray,
-      collectedGears: wallet.engrenagem,
-      collectedTotal: wallet.motor + wallet.spray + wallet.engrenagem + wallet.chips,
-    };
-    setAlpha17FinishStatus('Salvando relatório da corrida...');
+    const wallet = {...latestWallet};
+    const survived = receipt.survived;
+    round.raceId = receipt.raceId;
+    alpha17LastRaceIdRef.current = receipt.raceId;
+    setAlpha17FinishStatus('Conferindo recompensa CREDITADA pela AWS no Firebase...');
     try {
-      const completion = await raceRewardsService.completeRace({
-        raceId: round.raceId,
-        position,
-        totalRacers,
-        carId: me.carId,
-        mapId: params.mapId || 'sao_paulo',
-        carVisual: {colorFront: me.colorFront, colorBack: me.colorBack},
-        rewards: {...wallet, trophies: position === 1 && survived ? 1 : 0},
-        performance,
-        unlocks: [],
-        finishedAt: Date.now(),
-        isNewRecord: false,
+      const confirmed=await showConfirmedOnlineRace({
+        raceId:receipt.raceId,roomId:receipt.roomId,position,totalRacers,
+        carId:receipt.carId,finishedAt:receipt.finishedAt,wallet,
+      },{
+        mapId:params.mapId || 'sao_paulo',
+        colorFront:me.colorFront,colorBack:me.colorBack,
       });
       if (!mountedRef.current || roomRef.current !== currentRoom) return;
-      if (!completion.result) {
-        setAlpha17FinishStatus(`Relatório não salvo (${completion.status}). Tente novamente.`);
-        return;
-      }
-      console.log('[WILD ALPHA17] Relatório na fila Firebase', {
-        raceId: round.raceId, status: completion.status, position, wallet,
+      console.log('[WILD ALPHA17.2] Firebase pago pela AWS',{
+        raceId:receipt.raceId,status:confirmed.status,position,
       });
       round.reported = true;
       pauseMusic();
-      router.replace({pathname: '/RaceResultScreen' as any, params: {
-        source: 'online', chips: String(wallet.chips),
+      router.replace({pathname:'/RaceResultScreen' as any,params:{
+        source:'online',chips:String(confirmed.chips),
+        sync:confirmed.status==='confirmed_refresh_deferred'?'deferred':'ok',
       }});
     } catch (error) {
-      if (mountedRef.current) setAlpha17FinishStatus('Erro ao salvar relatório: ' + String(error));
+      if (mountedRef.current) setAlpha17FinishStatus('Pagamento ainda não confirmado. Tente sincronizar novamente: ' + String(error));
     }
   })();
 }, [race?.phase, alpha17Retry, dropped, me?.sessionId, router, pauseMusic]);
@@ -6664,7 +6633,7 @@ useEffect(() => {
     if (!ALPHA12_ENABLED.has(id)) return 'Carta ainda nao habilitada online.';
     // Não liberar cartas Alpha 15 conectadas acidentalmente a um PM2 Alpha 14.
     if (['swap','magnet','blind','tornado','bubble_lift','armor','ghost','second_chance'].includes(id)
-        && !serverBuild?.startsWith('ALPHA15-') && !serverBuild?.startsWith('ALPHA16.')) return 'Aguardando servidor Alpha 15 confirmado.';
+        && !serverBuild?.startsWith('ALPHA15-') && !serverBuild?.startsWith('ALPHA16.') && !serverBuild?.startsWith('ALPHA17.')) return 'Aguardando servidor Alpha 15 confirmado.';
     if (!room || !me) return 'Aguardando dados do jogador enviados pela AWS.';
     if (!me.battleSyncReady) return 'Estado Alpha 12 ausente. Confirme o deploy do Schema e WildRaceRoom na AWS.';
     if (dropped || !me.connected) return 'Conexao interrompida. Aguarde a reconexao.';
@@ -7185,7 +7154,7 @@ useEffect(() => {
           <Text style={onlineMapStyles.finishTitle}>{finishState}</Text>
           <Text style={onlineMapStyles.noticeDetail}>{race?.finishReason || 'Resultado confirmado pelo servidor'}</Text>
           <Text style={onlineMapStyles.noticeDetail}>
-            {alpha17FinishStatus || 'Preparando relatório e tela de recompensas...'}
+            {alpha17FinishStatus || 'Aguardando crédito oficial AWS/Firebase...'}
           </Text>
           {/(Tente|Erro)/.test(alpha17FinishStatus) && (
             <TouchableOpacity style={onlineMapStyles.readyButton} onPress={() => {

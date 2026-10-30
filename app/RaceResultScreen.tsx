@@ -780,8 +780,9 @@ const XpProgressPanel = ({
 };
 
 export default function RaceResultScreen() {
-    const { t, language, } = useLanguage();    const route = useLocalSearchParams<{source?: string; chips?: string}>();
+    const { t, language, } = useLanguage();    const route = useLocalSearchParams<{source?: string; chips?: string; sync?: string}>();
     const isOnlineResult = route.source === 'online';
+    const onlineSyncDeferred = route.sync === 'deferred';
     const rawChips = Number(route.chips ?? 0);
     const onlineChips = Number.isSafeInteger(rawChips) && rawChips > 0 ? rawChips : 0;
 
@@ -1371,8 +1372,9 @@ export default function RaceResultScreen() {
 
                         {isOnlineResult && (
                             <Text style={styles.onlineRewardNotice}>
-                                ONLINE · PRÉVIA DE RECOMPENSAS. O crédito no Firebase
-                                depende da validação do relatório pelo servidor.
+                                {onlineSyncDeferred
+                                    ? 'ONLINE · RECOMPENSAS CONFIRMADAS NA NUVEM. ATUALIZAÇÃO LOCAL PENDENTE: NÃO APAGUE OS DADOS DO APP.'
+                                    : 'ONLINE · RECOMPENSAS CONFIRMADAS NO FIREBASE PELA AWS.'}
                             </Text>
                         )}
                         <View style={styles.rewardsGrid}>
