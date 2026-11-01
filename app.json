@@ -4,7 +4,7 @@
     "slug": "wild-runners",
     "version": "1.8.2",
     "orientation": "landscape",
-    "icon": "./assets/images/icon512px.png",
+    "icon": "./assets/images/iconeGame.png",
     "scheme": "runnergame",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -15,9 +15,9 @@
       "package": "com.wfsoft.wildrunners",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/icon512px.png",
-        "backgroundImage": "./assets/images/icon512px.png",
-        "monochromeImage": "./assets/images/icon512px.png"
+        "foregroundImage": "./assets/images/iconeGame.png",
+        "backgroundImage": "./assets/images/iconeGame.png",
+        "monochromeImage": "./assets/images/iconeGame.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
