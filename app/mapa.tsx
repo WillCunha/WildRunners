@@ -1,4 +1,4 @@
-// PARA TESTES REMOVA SEMPRE O "USE EFFECT DE PREPARAÇÃO DO INICIO"
+// OFFLINE E TUTORIAL: preservar o effect de inicialização para montar bots, cronômetro e largada.
 import Carro from '@/components/Carro';
 import CenarioBackground, { CenarioId, SkyTheme, } from '@/components/Cenarios/CenarioBackground';
 import BubbleLiftVisual from '@/components/Decks/BubbleLiftVisual';
@@ -19,6 +19,7 @@ import RaceTutorialOverlay, { type TutorialStep } from '@/components/ui/RaceTuto
 import TornadoVisual from '@/components/ui/TornadoVisual';
 import { AudioContext } from '@/context/AudioContext';
 import { useCarSelection } from '@/context/CarContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { raceRewardsService } from '@/src/services/raceRewardsService';
 import { showConfirmedOnlineRace } from '@/src/services/firebase/cloudOnlineRaceRewards';
 import { useLoadingStore } from '@/src/store/LoadingStore';
@@ -257,7 +258,16 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
   } = useCarSelection();
 
   const fallbackDeck = ['swap', 'bullet', 'chains', 'tnt'];
-  const finalDeck = params.deck ? JSON.parse(params.deck as string) : fallbackDeck;
+  // Um parâmetro de rota corrompido não deve derrubar o tutorial ou o modo offline.
+  const finalDeck: string[] = (() => {
+    if (!params.deck) return fallbackDeck;
+    try {
+      const parsed: unknown = JSON.parse(params.deck as string);
+      return Array.isArray(parsed) && parsed.length === 4 &&
+        parsed.every((id): id is string => typeof id === 'string' && Boolean(getCardDefinition(id)))
+        ? parsed : fallbackDeck;
+    } catch { return fallbackDeck; }
+  })();
 
   const profile = usePlayerStore((state) => state.profile);
 
@@ -1237,8 +1247,13 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
 
 
   /* ================= USE EFFECT DE PREPARAÇÃO DO INICIO ================= */
+  const hasPreparedOfflineRef = useRef(false);
   useEffect(() => {
-    if (!started && !isCountingRef.current && !gameOver) {
+    // React pode repetir setup/cleanup dos effects em desenvolvimento.
+    // A corrida deve ser preparada uma vez, mas o timeout de entrada precisa
+    // ser recriado se o primeiro effect tiver sido limpo antes de disparar.
+    if (!hasPreparedOfflineRef.current && !started && !isCountingRef.current && !gameOver) {
+      hasPreparedOfflineRef.current = true;
       sessionPartsRef.current = { motor: 0, spray: 0, engrenagem: 0, chips: 0 };
       setSessionPartsHud({ motor: 0, spray: 0, engrenagem: 0, chips: 0 });
       gameOverHandledRef.current = false;
@@ -1249,25 +1264,25 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
           .toString(36)
           .slice(2, 10)}`;
 
-
       const startY = GROUND_Y - PLAYER_SIZE;
-
       y.current = startY;
       playerYAnim.setValue(y.current);
-
       setupPositions();
-
-      setTimeout(() => {
-        hideLoading();
-
-        // Na primeira corrida, a largada só começa depois que o jogador
-        // ler a primeira dica e tocar CONTINUAR.
-        if (!isTutorial) {
-          startRaceSequence();
-        }
-      }, 2000);
     }
-  }, [SCREEN_HEIGHT, SCREEN_WIDTH]);
+
+    const startDelay = setTimeout(() => {
+      hideLoading();
+      // Tutorial: o primeiro CONTINUAR aciona a largada.
+      // Offline: largada automática depois da preparação.
+      if (!isTutorial && !isCountingRef.current && !gameOver) {
+        void startRaceSequence();
+      }
+    }, 2000);
+
+    return () => clearTimeout(startDelay);
+    // setupPositions e startRaceSequence usam o estado inicial desta montagem.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* ================= FINALIZAÇÃO ÚNICA DA PARTIDA ================= */
 
@@ -1365,6 +1380,7 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
     ================================ */
 
     void (async () => {
+      try {
       const completion =
         await raceRewardsService.completeRace({
           raceId:
@@ -1412,8 +1428,11 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
           completion.status,
         );
 
+        // O onboarding não deve virar um ciclo infinito se o crédito da
+        // corrida falhar. Não fingimos prêmio: só liberamos a navegação.
+        if (isTutorial) finishTutorial();
         router.replace(
-          '/SelectionCar' as any,
+          '/CarSelectionScreen' as any,
         );
 
         return;
@@ -1432,6 +1451,12 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
       ================================ */
 
       setShowFinishTransition(true);
+      } catch (error) {
+        // Evita deixar offline/tutorial presos no mapa se o serviço lançar erro.
+        console.error('[WILD OFFLINE] Falha ao registrar resultado:', error);
+        if (isTutorial) finishTutorial();
+        router.replace('/CarSelectionScreen' as any);
+      }
     })();
 
   }, [
@@ -5587,6 +5612,7 @@ function Alpha153BulletFlight({x, y, targetX}: {x: number; y: number; targetX?: 
 
 function OnlineAlpha9Mapa() {
   const router = useRouter();
+  const {t}=useLanguage();
   const params = useLocalSearchParams<{ mapId?: string; skyTheme?: string }>();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const groundY = screenHeight - (BOTTOM_HUD_HEIGHT + BOTTOM_HUD_BOTTOM + TRACK_TO_HUD_GAP);
@@ -5614,6 +5640,7 @@ const alpha17PerformanceRef = useRef<Alpha17Performance>(alpha17EmptyPerformance
 const alpha17LastRaceIdRef = useRef('');
 const alpha17FinishLockRef = useRef(false);
 const [alpha17FinishStatus, setAlpha17FinishStatus] = useState('');
+const [alpha17SyncFailed, setAlpha17SyncFailed] = useState(false);
 const [alpha17Retry, setAlpha17Retry] = useState(0);
 
   const swapVisualResetRef = useRef(false);
@@ -5923,7 +5950,7 @@ const [alpha17Retry, setAlpha17Retry] = useState(0);
     mountedRef.current = true;
     const room = roomRef.current;
     if (!room) {
-      setProblem('Nenhuma sessão Alpha 9 foi transferida. Entre no WildOnlineLab primeiro.');
+      setProblem(t('onlineMap.notTransferred'));
       return () => { mountedRef.current = false; };
     }
 
@@ -6082,10 +6109,10 @@ if (self && (snapshot.phase === 'countdown' || snapshot.phase === 'racing' || sn
       stopSenders();
       try {
         const input = room.input();
-        if (!input) throw new Error('defineInput() não está disponível na sala.');
+        if (!input) throw new Error(t('onlineMap.inputMissing'));
         inputRef.current = input;
       } catch (error) {
-        if (mountedRef.current) setProblem('Erro ao preparar a pilotagem: ' + String(error));
+        if (mountedRef.current) setProblem(t('onlineMap.inputError',{error:String(error)}));
         return;
       }
 
@@ -6152,7 +6179,7 @@ if (self && (snapshot.phase === 'countdown' || snapshot.phase === 'racing' || sn
       stopSenders();
       setDropped(true);
       setPing(null);
-      setProblem('Conexão interrompida. Tentando recuperar a sessão com a AWS...');
+      setProblem(t('onlineMap.connectionLost'));
     }));
     collectCleanup(room.onReconnect(() => {
       if (!mountedRef.current || roomRef.current !== room) return;
@@ -6170,7 +6197,7 @@ if (self && (snapshot.phase === 'countdown' || snapshot.phase === 'racing' || sn
       stopSenders();
       clearWildAlpha9Room(room);
       roomRef.current = null;
-      setProblem(`Sala encerrada pela AWS (código ${code}).`);
+      setProblem(t('onlineMap.sessionClosed',{code}));
     }));
     collectCleanup(room.onError((code: number, message: string) => {
       if (mountedRef.current && roomRef.current === room) {
@@ -6470,7 +6497,7 @@ if (message.sourceSessionId === room.sessionId) {
     const room = roomRef.current;
     if (!room || droppedRef.current) return;
     try { room.send(name, payload); }
-    catch (error) { setProblem('Comando não enviado: ' + String(error)); }
+    catch (error) { setProblem(t('onlineMap.commandFailed',{error:String(error)})); }
   };
 
   const castOnlineCard = (cardId: string) => {
@@ -6486,7 +6513,7 @@ if (message.sourceSessionId === room.sessionId) {
       cardAckTimerRef.current = setTimeout(() => {
         if (mountedRef.current && cardPendingRef.current) {
           clearCardPending();
-          showCardFeedback('Sem confirmação da AWS. Verifique sua conexão.');
+          showCardFeedback(t('onlineMap.inputNoConfirm'));
         }
       }, 5000);
     } catch (error) {
@@ -6537,11 +6564,12 @@ useEffect(() => {
       alpha17FinishLockRef.current) return;
   const round = alpha17Round(currentRoom, 'finished');
   if (round.reported) {
-    setAlpha17FinishStatus('Relatório desta rodada já salvo. Aguardando a próxima corrida...');
+    setAlpha17FinishStatus(t('onlineMap.sameRound'));
     return;
   }
   alpha17FinishLockRef.current = true;
-  setAlpha17FinishStatus('Confirmando itens e resultado com a AWS...');
+  setAlpha17SyncFailed(false);
+  setAlpha17FinishStatus(t('onlineMap.confirming'));
 
   void (async () => {
     // Solicita o recibo congelado da partida, já CONFIRMADO no Firestore pela AWS.
@@ -6576,30 +6604,34 @@ useEffect(() => {
     });
     if (!mountedRef.current || roomRef.current !== currentRoom) return;
     if (!receipt) {
-      setAlpha17FinishStatus('A AWS ainda não confirmou o recibo no Firestore. Tente sincronizar novamente.');
+      setAlpha17SyncFailed(true);
+      setAlpha17FinishStatus(t('onlineMap.receiptMissing'));
       return;
     }
     if (alpha9ReadRace(currentRoom).phase !== 'finished') {
-      setAlpha17FinishStatus('A sala reiniciou antes do resultado oficial. Tente novamente.');
+      setAlpha17SyncFailed(true);
+      setAlpha17FinishStatus(t('onlineMap.roundRestart'));
       return;
     }
     const validCount = (value: number): boolean => Number.isSafeInteger(value) && value >= 0;
     const latestWallet = receipt.wallet;
     if (!latestWallet || ![latestWallet.motor, latestWallet.spray, latestWallet.engrenagem, latestWallet.chips].every(validCount)) {
-      setAlpha17FinishStatus('Recibo da AWS com itens inválidos. Tente novamente.');
+      setAlpha17SyncFailed(true);
+      setAlpha17FinishStatus(t('onlineMap.invalidWallet'));
       return;
     }
     const position = Number(receipt.position);
     const totalRacers = Number(receipt.totalRacers);
     if (!Number.isInteger(position) || !Number.isInteger(totalRacers) || totalRacers < 2 || position < 1 || position > totalRacers) {
-      setAlpha17FinishStatus('Classificação oficial inválida. Tente novamente.');
+      setAlpha17SyncFailed(true);
+      setAlpha17FinishStatus(t('onlineMap.invalidRank'));
       return;
     }
     const wallet = {...latestWallet};
     const survived = receipt.survived;
     round.raceId = receipt.raceId;
     alpha17LastRaceIdRef.current = receipt.raceId;
-    setAlpha17FinishStatus('Conferindo recompensa CREDITADA pela AWS no Firebase...');
+    setAlpha17FinishStatus(t('onlineMap.checkingCredit'));
     try {
       const confirmed=await showConfirmedOnlineRace({
         raceId:receipt.raceId,roomId:receipt.roomId,position,totalRacers,
@@ -6619,10 +6651,10 @@ useEffect(() => {
         sync:confirmed.status==='confirmed_refresh_deferred'?'deferred':'ok',
       }});
     } catch (error) {
-      if (mountedRef.current) setAlpha17FinishStatus('Pagamento ainda não confirmado. Tente sincronizar novamente: ' + String(error));
+      if (mountedRef.current) {setAlpha17SyncFailed(true);setAlpha17FinishStatus(t('onlineMap.creditError',{error:String(error)}));}
     }
   })();
-}, [race?.phase, alpha17Retry, dropped, me?.sessionId, router, pauseMusic]);
+}, [race?.phase, alpha17Retry, dropped, me?.sessionId, router, pauseMusic,t]);
 
   const cardCooldown = (id: string) => id === 'slow_slow' ? (me?.slowCooldown ?? 0) :
     id === 'nitro_power' ? (me?.nitroPowerCooldown ?? 0) :
@@ -6630,22 +6662,21 @@ useEffect(() => {
   // Diagnostico Alpha 12.0: nenhum custo/efeito e calculado no celular.
   // A lista de motivos reflete exclusivamente o snapshot recebido da AWS.
   const cardBlockReason = (id: string): string | null => {
-    if (!ALPHA12_ENABLED.has(id)) return 'Carta ainda nao habilitada online.';
+    if (!ALPHA12_ENABLED.has(id)) return t('onlineMap.cardDisabled');
     // Não liberar cartas Alpha 15 conectadas acidentalmente a um PM2 Alpha 14.
     if (['swap','magnet','blind','tornado','bubble_lift','armor','ghost','second_chance'].includes(id)
-        && !serverBuild?.startsWith('ALPHA15-') && !serverBuild?.startsWith('ALPHA16.') && !serverBuild?.startsWith('ALPHA17.')) return 'Aguardando servidor Alpha 15 confirmado.';
-    if (!room || !me) return 'Aguardando dados do jogador enviados pela AWS.';
-    if (!me.battleSyncReady) return 'Estado Alpha 12 ausente. Confirme o deploy do Schema e WildRaceRoom na AWS.';
-    if (dropped || !me.connected) return 'Conexao interrompida. Aguarde a reconexao.';
-    if (phase !== 'racing') return 'Disponivel somente depois do GO (fase atual: ' + phase + ').';
-    if (cardPending) return 'Aguardando confirmacao da carta anterior pela AWS.';
+        && !serverBuild?.startsWith('ALPHA15-') && !serverBuild?.startsWith('ALPHA16.') && !serverBuild?.startsWith('ALPHA17.')) return t('onlineMap.cardAwaitBuild');
+    if (!room || !me) return t('onlineMap.cardAwaitPlayer');
+    if (!me.battleSyncReady) return t('onlineMap.cardSchemaMissing');
+    if (dropped || !me.connected) return t('onlineMap.disconnectCard');
+    if (phase !== 'racing') return t('onlineMap.beforeStart',{phase:t(`onlineMap.phase.${phase}`)});
+    if (cardPending) return t('onlineMap.waitCard');
     const definition = getCardDefinition(id);
-    if (!definition) return 'Carta desconhecida pelo catalogo.';
+    if (!definition) return t('onlineMap.unknownCard');
     const remaining = cardCooldown(id);
-    if (remaining > 0) return 'Cooldown: ' + Math.ceil(remaining) + ' segundo(s).';
+    if (remaining > 0) return t('onlineMap.cooldown',{seconds:Math.ceil(remaining)});
     const officialCost = ALPHA13_COST[id] ?? definition.cost;
-    if (me.boost < officialCost) return 'BOOST insuficiente: ' + me.boost + '/' +
-      officialCost + ' gotas. AWS recupera 1 gota a cada 2s de corrida.';
+    if (me.boost < officialCost) return t('onlineMap.boostCost',{current:me.boost,cost:officialCost});
     // Alpha 16.1: a posição do adversário NÃO determina disponibilidade.
     // Shield/Ghost/Armor já ativos, vida cheia, status do alvo etc. são
     // verificações do servidor na execução, não cadeados do HUD.
@@ -6671,8 +6702,8 @@ useEffect(() => {
   const progressOf = (player: Alpha9Player) => Math.max(0,
     Math.min(100, 100 * distanceRun(player) / Math.max(1, race?.finishDistance ?? 6000)));
   const finishState = phase === 'finished' ? (
-    race?.winnerSessionId === mySessionId ? '🏆 VITÓRIA!' :
-    race?.winnerSessionId ? '🏁 DERROTA' : '🏁 EMPATE'
+    race?.winnerSessionId === mySessionId ? t('onlineMap.win') :
+    race?.winnerSessionId ? t('onlineMap.loss') : t('onlineMap.draw')
   ) : '';
 
   // ALPHA 15.3 — reuso da apresentação de startRaceSequence() do offline.
@@ -6824,21 +6855,21 @@ useEffect(() => {
               <Text numberOfLines={1} style={[
                 styles.racerHudName,
                 player.sessionId === mySessionId && styles.racerHudNamePlayer,
-              ]}>{player.sessionId === mySessionId ? 'VOCÊ' : 'RIVAL'} · {player.carId.toUpperCase()}</Text>
+              ]}>{player.sessionId === mySessionId ? t('onlineMap.you') : t('onlineMap.rival')} · {player.carId.toUpperCase()}</Text>
               <Text style={onlineMapStyles.racerHudMetres}>{Math.round(distanceRun(player))}u</Text>
             </View>
           ))}
-          {leadPlayer.length === 0 && <Text style={onlineMapStyles.smallHint}>Recebendo corredores...</Text>}
+          {leadPlayer.length === 0 && <Text style={onlineMapStyles.smallHint}>{t('onlineMap.receivingRacers')}</Text>}
         </View>
         <View style={onlineMapStyles.connectionPill}>
           <Text numberOfLines={1} style={onlineMapStyles.smallHint}>
-            {!room ? '● SEM SESSÃO' : dropped ? '● RECONECTANDO' : '● ONLINE'} · {ping === null ? 'PING —' : `${ping}ms`}
+            {!room ? `● ${t('onlineMap.noSession')}` : dropped ? `● ${t('onlineMap.reconnecting')}` : '● ONLINE'} · {ping === null ? 'PING —' : `${ping}ms`}
           </Text>
           {myAlpha15 && <Text style={onlineMapStyles.smallHint}>
-            🧲 CHIPs da corrida: {myAlpha15.chipsCollected} · 🛡️ ARMOR: {myAlpha15.armorCharges}
+            🧲 {t('onlineMap.raceChips')}: {myAlpha15.chipsCollected} · 🛡️ ARMOR: {myAlpha15.armorCharges}
           </Text>}
           <Text numberOfLines={1} style={[onlineMapStyles.smallHint, {color: serverBuild ? '#8DFBB3' : '#FFCA7D'}]}>
-            AWS BUILD: {serverBuild ?? 'NÃO CONFIRMADA'}
+            AWS BUILD: {serverBuild ?? t('onlineMap.unconfirmed')}
           </Text>
           {serverPhysicsWarnings > 0 && (
             <Text style={onlineMapStyles.physicsWarningLabel}>
@@ -6881,7 +6912,7 @@ useEffect(() => {
           </Text>
         </View>
         <View style={onlineMapStyles.phaseChip} pointerEvents="none">
-          <Text style={onlineMapStyles.phaseChipTitle}>{ALPHA9_PHASE_TEXT[phase]}</Text>
+          <Text style={onlineMapStyles.phaseChipTitle}>{t(`onlineMap.phase.${phase}`)}</Text>
           {/* A contagem agora fica no semáforo central, não em números no HUD. */}
         </View>
         <View style={onlineMapStyles.sessionActions}>
@@ -6889,7 +6920,7 @@ useEffect(() => {
             <Text style={onlineMapStyles.sessionButtonText}>LAB</Text>
           </TouchableOpacity>
           <TouchableOpacity disabled={isLeaving} style={[onlineMapStyles.sessionButton, onlineMapStyles.sessionButtonLeave]} onPress={() => void abandonRoom()}>
-            <Text style={onlineMapStyles.sessionButtonText}>SAIR</Text>
+            <Text style={onlineMapStyles.sessionButtonText}>{t('onlineMap.leave')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -6962,10 +6993,10 @@ useEffect(() => {
           >
             <View style={onlineMapStyles.carTag}>
               <Text style={onlineMapStyles.carTagText} numberOfLines={1}>
-                {player.sessionId === mySessionId ? 'VOCÊ' : `RIVAL ${player.slot}`} · {player.carId.toUpperCase()}
+                {player.sessionId === mySessionId ? t('onlineMap.you') : `${t('onlineMap.rival')} ${player.slot}`} · {player.carId.toUpperCase()}
               </Text>
               {player.nitroRemaining > 0 && <Text style={onlineMapStyles.nitroFlag}>⚡ NITRO</Text>}
-              {!player.grounded && <Text style={onlineMapStyles.nitroFlag}>🪽 NO AR</Text>}
+              {!player.grounded && <Text style={onlineMapStyles.nitroFlag}>🪽 {t('onlineMap.inAir')}</Text>}
               {player.slowRemaining > 0 && <Text style={onlineMapStyles.slowFlag}>
                 🐌 SLOW {player.slowRemaining.toFixed(1)}s
               </Text>}
@@ -7040,7 +7071,7 @@ useEffect(() => {
               </DefenseCardVisual>
             ) : (
               <View style={onlineMapStyles.unsupportedCar}>
-                <Text style={onlineMapStyles.unsupportedText}>CARRO NÃO RECONHECIDO: {player.carId || 'SEM ID'}</Text>
+                <Text style={onlineMapStyles.unsupportedText}>{t('onlineMap.unknownCar')}: {player.carId || t('onlineMap.noId')}</Text>
               </View>
             )}
             </Animated.View>
@@ -7117,7 +7148,7 @@ useEffect(() => {
         <View pointerEvents="none" style={[styles.overlay, onlineMapStyles.onlineStartOverlay]}>
           {phase === 'countdown' ? (
             onlineTrafficStep !== null && onlineTrafficStep > 3 ? (
-              <Text style={styles.titleText}>PREPARANDO...</Text>
+              <Text style={styles.titleText}>{t('onlineMap.preparing')}</Text>
             ) : (
               <View style={styles.trafficLightContainer}>
                 <View style={[styles.light, {
@@ -7132,7 +7163,7 @@ useEffect(() => {
               </View>
             )
           ) : (
-            <Text style={[styles.titleText, {color: '#00D084'}]}>JÁ!</Text>
+            <Text style={[styles.titleText, {color: '#00D084'}]}>{t('onlineMap.go')}</Text>
           )}
         </View>
       )}
@@ -7145,38 +7176,38 @@ useEffect(() => {
 
       {(phase === 'paused' || dropped) && (
         <View style={onlineMapStyles.centerNotice} pointerEvents="none">
-          <Text style={onlineMapStyles.noticeText}>⏸️ AGUARDANDO RECONEXÃO</Text>
-          <Text style={onlineMapStyles.noticeDetail}>Nenhum movimento local é calculado.</Text>
+          <Text style={onlineMapStyles.noticeText}>⏸️ {t('onlineMap.waitingReconnect')}</Text>
+          <Text style={onlineMapStyles.noticeDetail}>{t('onlineMap.noLocalMovement')}</Text>
         </View>
       )}
       {phase === 'finished' && (
         <View style={onlineMapStyles.centerNotice}>
           <Text style={onlineMapStyles.finishTitle}>{finishState}</Text>
-          <Text style={onlineMapStyles.noticeDetail}>{race?.finishReason || 'Resultado confirmado pelo servidor'}</Text>
+          <Text style={onlineMapStyles.noticeDetail}>{race?.finishReason || t('onlineMap.confirmedResult')}</Text>
           <Text style={onlineMapStyles.noticeDetail}>
-            {alpha17FinishStatus || 'Aguardando crédito oficial AWS/Firebase...'}
+            {alpha17FinishStatus || t('onlineMap.pendingCredit')}
           </Text>
-          {/(Tente|Erro)/.test(alpha17FinishStatus) && (
+          {alpha17SyncFailed && (
             <TouchableOpacity style={onlineMapStyles.readyButton} onPress={() => {
               alpha17FinishLockRef.current = false;
               setAlpha17Retry(value => value + 1);
             }}>
-              <Text style={onlineMapStyles.readyText}>REPETIR SINCRONIZAÇÃO</Text>
+              <Text style={onlineMapStyles.readyText}>{t('onlineMap.syncAgain')}</Text>
             </TouchableOpacity>
           )}
         </View>
       )}
       {phase === 'waiting' && canReady && (
         <View style={onlineMapStyles.centerNotice}>
-          <Text style={onlineMapStyles.noticeText}>PRONTO PARA CORRER?</Text>
+          <Text style={onlineMapStyles.noticeText}>{t('onlineMap.readyQuestion')}</Text>
           <TouchableOpacity style={onlineMapStyles.readyButton} onPress={() => sendCommand('ready', true)}>
-            <Text style={onlineMapStyles.readyText}>ESTOU PRONTO · READY</Text>
+            <Text style={onlineMapStyles.readyText}>{t('onlineMap.imReady')}</Text>
           </TouchableOpacity>
         </View>
       )}
       {phase === 'waiting' && me?.ready && (
         <View style={onlineMapStyles.centerNotice} pointerEvents="none">
-          <Text style={onlineMapStyles.noticeText}>AGUARDANDO O OUTRO PILOTO...</Text>
+          <Text style={onlineMapStyles.noticeText}>{t('onlineMap.waitingDriver')}</Text>
         </View>
       )}
 
@@ -7232,7 +7263,7 @@ useEffect(() => {
               <Text style={styles.boostBarText}>💧 {me?.boost ?? 0}/10 · ❤️ {me?.lives ?? 5}</Text>
             </View>
             {me && !me.battleSyncReady && (
-              <Text style={onlineMapStyles.schemaMissingLabel}>⚠️ STATE ALPHA 12 NAO RECEBIDO DA AWS</Text>
+              <Text style={onlineMapStyles.schemaMissingLabel}>{t('onlineMap.schemaMissing')}</Text>
             )}
           </View>
         </View>
@@ -7253,24 +7284,24 @@ useEffect(() => {
             }]}>
               <View style={styles.vacuumRingInner}>
                 <Text style={styles.vacuumPercent}>{Math.round(me?.nitroCharge ?? 0)}%</Text>
-                <Text style={styles.vacuumLabel}>VÁCUO</Text>
+                <Text style={styles.vacuumLabel}>{t('onlineMap.vacuum')}</Text>
               </View>
             </View>
             <TouchableOpacity activeOpacity={canJump ? .7 : 1} disabled={!canJump}
               onPress={() => sendCommand('alpha16-jump', {})}
               style={[styles.nitroBtn, !canJump && styles.nitroBtnDisabled]}>
               <Text style={styles.nitroBtnIcon}>🪽</Text>
-              <Text style={styles.nitroBtnText}>PULAR</Text>
+              <Text style={styles.nitroBtnText}>{t('onlineMap.jump')}</Text>
             </TouchableOpacity>
             <View style={styles.speedometer}>
               <Text style={[styles.speedometerValue, (me?.nitroRemaining ?? 0) > 0 && styles.speedometerValueNitro]}>
                 {Math.max(0, Math.round(me?.speed ?? 0))}
               </Text>
-              <Text style={styles.speedometerUnit}>VEL. AWS</Text>
+              <Text style={styles.speedometerUnit}>{t('onlineMap.awsSpeed')}</Text>
             </View>
           </View>
           <View style={[styles.analogPanel, !canDrive && onlineMapStyles.disabledAnalog]}>
-            <Text style={[styles.analogSideLabel, styles.analogBrakeLabel]}>FREIO</Text>
+            <Text style={[styles.analogSideLabel, styles.analogBrakeLabel]}>{t('onlineMap.brake')}</Text>
             <View {...stickResponder.panHandlers} style={styles.analogTrack}
               onLayout={e => { stickWidthRef.current = e.nativeEvent.layout.width; }}>
               <View style={styles.analogBrakeZone}/>
@@ -7280,7 +7311,7 @@ useEffect(() => {
                 <View style={styles.analogKnobInner}/>
               </Animated.View>
             </View>
-            <Text style={[styles.analogSideLabel, styles.analogThrottleLabel]}>ACELERA</Text>
+            <Text style={[styles.analogSideLabel, styles.analogThrottleLabel]}>{t('onlineMap.accelerate')}</Text>
           </View>
         </View>
       </View>

@@ -6,7 +6,8 @@ import {
   validAccountEmail,
   validAccountPassword,
 } from '@/src/services/firebase/firebaseAuth';
-import { createNewPlayerCloudSave } from '@/src/services/firebase/playerCloud';
+import { createNewPlayerCloudSave, loadCurrentPlayerCloudSave } from '@/src/services/firebase/playerCloud';
+import { auth } from '@/src/services/firebase/firebaseClient';
 import { useTutorialStore } from '@/src/store/tutorialStore';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useRef, useState } from 'react';
@@ -167,6 +168,9 @@ export default function RegistrationScreen() {
   const { width, height } = useWindowDimensions();
   const { t, language } = useLanguage();
   const registeringRef = useRef(false);
+  // Se Auth criar o UID e o Firestore falhar, reintenta SOMENTE o save
+  // associado à mesma conta recém-criada nesta sessão. Nunca sobrescreve saves.
+  const pendingRegistrationRef = useRef<{uid:string;username:string;email:string}|null>(null);
   const loginBusyRef = useRef(false);
   const [mode, setMode] = useState<AuthMode>('login');
   const [loginBusy, setLoginBusy] = useState(false);
@@ -311,18 +315,47 @@ export default function RegistrationScreen() {
     setRegistering(true);
 
     try {
-      // Auth creates (or resumes) the UID. Firestore then creates exactly one
-      // playerSaves/{uid}. No queue, migration or automatic overwrite here.
-      await createAccountWithEmailPassword(safeEmail, password);
-      await createNewPlayerCloudSave(safeUsername, safeEmail);
+      const pending = pendingRegistrationRef.current;
+      if (pending) {
+        // Nunca executar o retry para outra conta ou outro formulário.
+        if (pending.uid !== auth.currentUser?.uid ||
+            pending.email !== safeEmail || pending.username !== safeUsername) {
+          throw new Error('WILD_PENDING_REGISTRATION_MISMATCH');
+        }
+      } else {
+        await createAccountWithEmailPassword(safeEmail, password);
+        const uid = auth.currentUser?.uid;
+        if (!uid) throw new Error('WILD_NEW_AUTH_UID_UNAVAILABLE');
+        pendingRegistrationRef.current = { uid, username: safeUsername, email: safeEmail };
+      }
 
+      try {
+        // Operação create-only: o Firestore não é sobrescrito se já houver save.
+        await createNewPlayerCloudSave(safeUsername, safeEmail);
+      } catch (saveError) {
+        // Ex.: Firestore comitou mas a resposta se perdeu na rede.
+        // Só aceitamos um save que o serviço oficial consiga validar e instalar.
+        const recovered = await loadCurrentPlayerCloudSave().catch(() => null);
+        if (recovered?.status !== 'loaded') throw saveError;
+      }
+
+      pendingRegistrationRef.current = null;
       setPassword('');
       setConfirmPassword('');
       resetTutorial();
       router.replace('/LoadingScreen');
     } catch (error) {
       console.warn('[Wild Firebase] Cadastro não concluído:', error);
-      setRegisterError(t(getFirebaseAuthErrorKey(error)));
+      if (pendingRegistrationRef.current?.uid === auth.currentUser?.uid) {
+        const lang = String(language);
+        setRegisterError(lang.startsWith('en')
+          ? 'Account created, but your save is not confirmed. Keep the same details and tap CREATE ACCOUNT again to retry safely.'
+          : lang.startsWith('es')
+            ? 'La cuenta se creó, pero no se confirmó la partida. Mantén los mismos datos y pulsa CREAR CUENTA de nuevo para reintentar.'
+            : 'Conta criada, mas o save ainda não foi confirmado. Mantenha os mesmos dados e toque em CRIAR CONTA novamente para tentar de forma segura.');
+      } else {
+        setRegisterError(t(getFirebaseAuthErrorKey(error)));
+      }
     } finally {
       registeringRef.current = false;
       setRegistering(false);
@@ -335,6 +368,12 @@ export default function RegistrationScreen() {
     setUsernameTouched(true);
     setEmailTouched(true);
     if (!formIsValid) return;
+    // A conta Firebase já existe: repetir o passo de criação do save,
+    // sem abrir a confirmação de criar um segundo UID.
+    if (pendingRegistrationRef.current) {
+      void createConfirmedProfile();
+      return;
+    }
     Alert.alert('NOVO PILOTO — WILD',
       'Vamos criar uma conta Firebase e um save novo para este piloto. ' +
       'Se você já possui uma conta Wild, use ENTRAR para carregar o save existente.', [

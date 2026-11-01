@@ -15,6 +15,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { clearWildAlpha9Room, getWildAlpha9Room } from '@/src/online/wildOnlineAlpha9Session';
+import { prepareWildChests } from '@/src/services/firebase/wildChestService';
 import React, { useEffect, useMemo, useRef, useState, } from 'react';
 import { Animated, ImageSourcePropType, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, } from 'react-native';
 
@@ -795,6 +796,9 @@ export default function RaceResultScreen() {
     const { playCarArrival, playRewardTick, playRewardComplete, playRareUnlock, playVictory } = useRaceResultSfx();
 
     const [showUnlocks, setShowUnlocks] = useState(false);
+    const [chestEventRaceId, setChestEventRaceId] = useState<string | null>(null);
+    const [chestEventStatus, setChestEventStatus] = useState<'checking'|'ready'|'none'>('checking');
+    const chestNavigationPending = useRef(false);
 
     const result =
         useRaceResultStore(
@@ -807,6 +811,46 @@ export default function RaceResultScreen() {
             state =>
                 state.clearResult,
         );
+
+    // A AWS decide uma vez por corrida se houve evento surpresa.
+    // Jamais mostre o botão para corridas que não ganharam baú.
+    useEffect(() => {
+        let alive = true;
+        setChestEventRaceId(null);
+        setChestEventStatus('checking');
+        chestNavigationPending.current = false;
+        if (!isOnlineResult || !result?.raceId) {
+            setChestEventStatus('none');
+            return () => { alive = false; };
+        }
+        void prepareWildChests(result.raceId).then(outcome => {
+            if (!alive) return;
+            if (outcome.state === 'ready') {
+                setChestEventRaceId(outcome.raceId);
+                setChestEventStatus('ready');
+            } else {
+                setChestEventStatus('none');
+            }
+        }).catch(error => {
+            // Falha de rede não é 'sem prêmio': uma nova visita ao resultado
+            // ou próxima corrida vai consultar a elegibilidade na AWS.
+            console.warn('[WILD CHEST] Sorteio não confirmado:', error);
+            if (alive) setChestEventStatus('none');
+        });
+        return () => {alive = false;};
+    }, [isOnlineResult, result?.raceId]);
+
+    useEffect(() => {
+        if (chestEventStatus !== 'ready' || !chestEventRaceId) return;
+        // Deixa os contadores das recompensas da corrida aparecerem primeiro.
+        const timer = setTimeout(() => {
+            if (chestNavigationPending.current) return;
+            chestNavigationPending.current = true;
+            router.push({pathname:'/ChestScreen' as any,params:{raceId:chestEventRaceId}});
+        }, 4000);
+        return () => clearTimeout(timer);
+    }, [chestEventRaceId, chestEventStatus]);
+
 
     const titleOpacity =
         useRef(
@@ -1227,13 +1271,19 @@ export default function RaceResultScreen() {
     };
 
     const handleRaceAgain = () => {
-        clearResult();
         if (isOnlineResult) {
-            // A Room transferida continua viva: o laboratório oferece RETOMAR.
-            // READY é uma escolha explícita e continua validado pela AWS.
-            router.replace({pathname: '/WildOnlineLab' as any, params: {fromRaceResult: '1'}});
+            // Alpha 17.3.4: o resultado já está confirmado no Firestore.
+            // NÃO sair da Room nem limpar o handoff: revanche usa o mesmo Room ID.
+            // O WildOnlineLab envia novo READY quando o jogador pedir revanche.
+            clearResult();
+            router.replace({
+                pathname: '/online-lab' as any,
+                params: { fromRaceResult: '1' },
+            });
             return;
         }
+        // Offline: comportamento original, independente de salas online.
+        clearResult();
         router.replace('/mapa' as any);
     };
 
@@ -1458,6 +1508,21 @@ export default function RaceResultScreen() {
                         </ScrollView>
 
                         <View style={styles.actions}>
+                            {isOnlineResult && chestEventStatus === 'ready' && chestEventRaceId && (
+                                <TouchableOpacity
+                                    style={[styles.continueButton, {backgroundColor: '#FFD05A'}]}
+                                    onPress={() => {
+                                        if (chestNavigationPending.current) return;
+                                        chestNavigationPending.current = true;
+                                        router.push({
+                                            pathname: '/ChestScreen' as any,
+                                            params: {raceId: chestEventRaceId},
+                                        });
+                                    }}
+                                >
+                                    <Text style={styles.buttonText}>{t('raceResult.surpriseChest')}</Text>
+                                </TouchableOpacity>
+                            )}
                             <TouchableOpacity
                                 style={styles.continueButton}
                                 onPress={handleRaceAgain}

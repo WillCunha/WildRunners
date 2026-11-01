@@ -1,4 +1,5 @@
 import { useCarSelection } from '@/context/CarContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { clearWildAlpha9Room, getWildAlpha9Room, handoffWildAlpha9Room } from '@/src/online/wildOnlineAlpha9Session';
 import {
   WILD_CAR_IDS,
@@ -28,6 +29,8 @@ import {
 
 const SERVER_URL = 'https://online.wfsoft.com.br';
 const ROOM_TYPE = 'wild_race';
+// Controle de prévia visível APENAS em desenvolvimento ou build de teste explicitamente habilitado.
+const CHEST_PREVIEW_ALLOWED = __DEV__ || process.env.EXPO_PUBLIC_WILD_CHEST_PREVIEW === '1';
 // ALPHA 15 — mesmo catálogo online usado pela DeckSelection e pela AWS.
 // O inventário do jogador é conferido separadamente: habilitada não significa comprada.
 const ENABLED_ONLINE_CARDS = new Set<string>([
@@ -40,23 +43,24 @@ const ENABLED_ONLINE_CARDS = new Set<string>([
 function validateOnlineDeck(
   deck: readonly string[] | null | undefined,
   ownedCards: readonly string[] | null | undefined,
+  t: ReturnType<typeof useLanguage>['t'],
 ): string | null {
   if (!Array.isArray(deck) || deck.length !== 4) {
-    return 'Escolha exatamente quatro cartas em DECK SELECTION.';
+    return t('onlineLab.deckExactly');
   }
   if (new Set(deck).size !== 4) {
-    return 'Seu deck precisa ter quatro cartas diferentes.';
+    return t('onlineLab.deckDifferent');
   }
   const unsupported = deck.filter(id => !ENABLED_ONLINE_CARDS.has(id) || !getCardDefinition(id));
   if (unsupported.length) {
-    return `Carta não habilitada neste Alpha: ${unsupported.join(', ')}. Volte à DECK SELECTION.`;
+    return t('onlineLab.deckUnsupported',{cards:unsupported.join(', ')});
   }
   if (!ownedCards) {
-    return 'Inventário de cartas indisponível. Aguarde a sincronização do seu perfil.';
+    return t('onlineLab.deckUnavailable');
   }
   const notOwned = deck.filter(id => !ownedCards.includes(id));
   if (notOwned.length) {
-    return `Cartas não encontradas no inventário: ${notOwned.join(', ')}. Confira a compra/sincronização.`;
+    return t('onlineLab.deckNotOwned',{cards:notOwned.join(', ')});
   }
   return null;
 }
@@ -152,16 +156,9 @@ function extractRace(room: OnlineRoom): RaceView {
   };
 }
 
-const phaseText: Record<Phase, string> = {
-  waiting: 'AGUARDANDO READY',
-  countdown: 'LARGADA',
-  racing: 'CORRIDA EM ANDAMENTO',
-  paused: 'PAUSADA — RECONEXÃO',
-  finished: 'CORRIDA FINALIZADA',
-};
-
 export default function WildOnlineLab() {
   const router = useRouter();
+  const {t}=useLanguage();
   const route = useLocalSearchParams<{fromRaceResult?: string}>();
   const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
   const compact = viewportHeight < 440;
@@ -169,7 +166,7 @@ export default function WildOnlineLab() {
   const { selectedCar } = useCarSelection();
   const profile = usePlayerStore(state => state.profile);
   const equippedDeck = usePlayerStore(state => state.equippedDeck);
-  const deckValidationError = validateOnlineDeck(equippedDeck, profile?.unlocks?.cards);
+  const deckValidationError = validateOnlineDeck(equippedDeck, profile?.unlocks?.cards,t);
   const deckReady = deckValidationError === null;
   // Fonte única para o veículo: garagem / CarSelection.
   // O fallback aqui serve APENAS para renderizar dados na prévia offline.
@@ -180,8 +177,8 @@ export default function WildOnlineLab() {
   const [roomCode, setRoomCode] = useState('');
   const [sessionId, setSessionId] = useState('');
   const [connectedRoomId, setConnectedRoomId] = useState('');
-  const [status, setStatus] = useState('DESCONECTADO');
-  const [detail, setDetail] = useState('Crie uma sala ou entre com o código de outro dispositivo.');
+  const [status, setStatus] = useState(t('onlineLab.disconnected'));
+  const [detail, setDetail] = useState(t('onlineLab.introDetail'));
   const [busy, setBusy] = useState(false);
   const [lobbyMode, setLobbyMode] = useState<'create' | 'join'>('create');
   const [previewLobby, setPreviewLobby] = useState(false);
@@ -226,7 +223,7 @@ export default function WildOnlineLab() {
     stopTimers();
     try {
       const input = room.input();
-      if (!input) throw new Error('A sala não disponibilizou defineInput().');
+      if (!input) throw new Error(t('onlineLab.inputMissing'));
       inputRef.current = input;
       let inputErrorLogged = false;
       let pingErrorLogged = false;
@@ -276,9 +273,9 @@ export default function WildOnlineLab() {
       }, 1000 / 30);
     } catch (error) {
       stopTimers();
-      if (mounted.current) setDetail('Falha ao preparar input: ' + String(error));
+      if (mounted.current) setDetail(t('onlineLab.inputFailure',{error:String(error)}));
     }
-  }, [stopTimers]);
+  }, [stopTimers,t]);
 
   const resetUI = useCallback(() => {
     roomRef.current = null;
@@ -295,7 +292,7 @@ export default function WildOnlineLab() {
     setSessionId('');
     setConnectedRoomId('');
     setBusy(false);
-    setStatus('DESCONECTADO');
+    setStatus(t('onlineLab.disconnected'));
     setShowDiagnostics(false);
   }, [stopTimers]);
 
@@ -318,10 +315,10 @@ export default function WildOnlineLab() {
     setConnectedRoomId(joined.roomId);
     setSessionId(joined.sessionId);
     setRoomCode(joined.roomId);
-    setStatus('CONECTADO');
+    setStatus(t('onlineLab.connected'));
     setPreviewLobby(false);
     setBusy(false);
-    setDetail('Sala conectada. Agora aguarde o segundo jogador e pressione READY.');
+    setDetail(t('onlineLab.joinedDetail'));
     const initialRace = extractRace(joined);
     phaseRef.current = initialRace.phase;
     smoothingRef.current.reset();
@@ -372,15 +369,15 @@ export default function WildOnlineLab() {
       // Segurança: reconexão nunca retoma aceleração automática ou botão segurado.
       autoDriveRef.current = false;
       setAutoDrive(false);
-      setStatus('RECONECTANDO...');
-      setDetail('Conexão perdida. O servidor reserva a vaga por até 10 segundos.');
+      setStatus(t('onlineLab.reconnecting'));
+      setDetail(t('onlineLab.lostDetail'));
       setPing(null);
     });
     joined.onReconnect(() => {
       if (!mounted.current || roomRef.current !== joined) return;
       droppedRef.current = false;
-      setStatus('CONECTADO');
-      setDetail('Sessão recuperada.');
+      setStatus(t('onlineLab.connected'));
+      setDetail(t('onlineLab.recovered'));
       const recovered = extractRace(joined);
       phaseRef.current = recovered.phase;
       smoothingRef.current.ingest(recovered.players, recovered.phase, true);
@@ -391,42 +388,42 @@ export default function WildOnlineLab() {
     joined.onLeave((code: number) => {
       if (!mounted.current || roomRef.current !== joined) return;
       resetUI();
-      setDetail(`Conexão encerrada (${code}).`);
+      setDetail(t('onlineLab.closedCode',{code}));
     });
     joined.onError((code: number, message: string) => {
-      if (mounted.current && roomRef.current === joined) setDetail(`Servidor ${code}: ${message}`);
+      if (mounted.current && roomRef.current === joined) setDetail(t('onlineLab.serverError',{code,message}));
     });
     startTimers(joined);
-  }, [resetUI, startTimers, stopTimers]);
+  }, [resetUI, startTimers, stopTimers,t]);
 
   const connect = useCallback(async (joinExisting: boolean) => {
     if (roomRef.current || busy) return;
     if (!hasGarageCar) {
-      setDetail('Nenhum carro válido selecionado. Volte a CAR SELECTION e escolha um veículo antes de correr online.');
+      setDetail(t('onlineLab.noCar'));
       return;
     }
     if (!deckReady) {
-      setDetail(deckValidationError ?? 'Deck inválido. Volte à DECK SELECTION.');
+      setDetail(deckValidationError ?? t('onlineLab.invalidDeck'));
       return;
     }
     if (getWildAlpha9Room()) {
-      setDetail('Já existe uma sessão no mapa online. Retome ou encerre antes de criar outra.');
+      setDetail(t('onlineLab.existingSession'));
       return;
     }
     const code = roomCode.trim();
     if (joinExisting && !code) {
-      setDetail('Digite o código da sala antes de entrar.');
+      setDetail(t('onlineLab.roomCodeMissing'));
       return;
     }
     setBusy(true);
-    setDetail('Validando conta Firebase e conectando à AWS...');
+    setDetail(t('onlineLab.connecting'));
     try {
       // Alpha 16.3: aguarda a restauração da sessão Firebase. Os upgrades
       // NUNCA são enviados por este lobby; a AWS busca playerSaves/{uid}.
       await auth.authStateReady();
       const currentUser = auth.currentUser;
       if (!currentUser) {
-        throw new Error('Sessão Firebase não encontrada. Faça login novamente antes de correr online.');
+        throw new Error(t('onlineLab.firebaseAuthMissing'));
       }
       const idToken = await currentUser.getIdToken();
       // Não registrar nem persistir o ID token em logs, Zustand ou parâmetros de rota.
@@ -434,7 +431,9 @@ export default function WildOnlineLab() {
       client.auth.token = idToken;
       const cosmetics = profile?.garage?.[carId]?.customization;
       const joinPayload = {
-        name: 'Mobile Test', carId, deck: equippedDeck,
+        // Envia o @ público da conta, não o antigo nome fixo de laboratório.
+        name: (profile?.username ?? '').trim().replace(/^@+/, '') || 'Player',
+        carId, deck: equippedDeck,
         colorFront: cosmetics?.paint?.primaryColor ?? '#FF3B30',
         colorBack: cosmetics?.paint?.secondaryColor ?? '#FF3B30',
         finishId: cosmetics?.paint?.finishId ?? 'solid',
@@ -450,26 +449,26 @@ export default function WildOnlineLab() {
       attachRoom(joined);
     } catch (error) {
       if (!mounted.current) return;
-      setStatus('DESCONECTADO');
+      setStatus(t('onlineLab.disconnected'));
       // A AWS retorna erros de validação do perfil. Mostramos o motivo sem
       // expor token, documento completo ou credenciais do Firebase.
       const message = String(error);
       const readable = message.includes('WILD_CAR_NOT_OWNED')
-        ? 'O carro selecionado não está na garagem confirmada no Firestore.'
+        ? t('onlineLab.garageNotOwned')
         : message.includes('WILD_CLOUD_SAVE_NOT_FOUND')
-          ? 'Seu save não foi encontrado no Firebase. Sincronize o perfil antes de entrar.'
+          ? t('onlineLab.cloudSaveMissing')
           : message.includes('WILD_INVALID_GARAGE_LEVEL')
-            ? 'Os níveis da Oficina salvos no Firebase são inválidos.'
+            ? t('onlineLab.invalidGarage')
             : message.includes('WILD_GARAGE_OWNER_MISMATCH')
-              ? 'O save remoto não pertence à conta Firebase conectada.'
+              ? t('onlineLab.garageMismatch')
               : message.includes('WILD_AUTH_REQUIRED') || message.includes('auth/user-token-expired')
-                ? 'Autenticação Firebase necessária. Faça login novamente.'
-                : 'Erro de conexão: ' + message;
+                ? t('onlineLab.loginRequired')
+                : t('onlineLab.connectionError',{error:message});
       setDetail(readable);
     } finally {
       if (mounted.current) setBusy(false);
     }
-  }, [attachRoom, busy, carId, deckReady, deckValidationError, equippedDeck, profile, hasGarageCar, roomCode]);
+  }, [attachRoom, busy, carId, deckReady, deckValidationError, equippedDeck, profile, hasGarageCar, roomCode,t]);
 
   // ALPHA 9: transfer the very same room to /Mapa. No JOIN, no new sessionId.
   // The LAB stops its own 30Hz sender BEFORE the online map starts another one.
@@ -488,16 +487,35 @@ export default function WildOnlineLab() {
 
   const resumeTransferred = () => {
     const transferred = getWildAlpha9Room();
-    if (!transferred) return;
+    if (!transferred) {
+      setDetail(t('onlineLab.transferUnavailable'));
+      return;
+    }
     if (route.fromRaceResult === '1') {
-      // O clique explícito em VOLTAR À SALA confirma READY para a próxima rodada.
-      // O servidor faz resetRace() e decide quando os pilotos podem largar.
-      const state = transferred.state as {racePhase?: string} | undefined;
-      if (state?.racePhase === 'finished') {
+      // Alpha 17.3.4: a primeira revanche muda FINISHED -> WAITING.
+      // Assim, o SEGUNDO piloto também deve enviar READY em WAITING.
+      // Não fazemos create/join/leave; reutilizamos a mesma Room da AWS.
+      const state = transferred.state as StateFromServer | undefined;
+      const phase = state?.racePhase ?? 'waiting';
+      let myReady = false;
+      state?.players?.forEach((player, sessionId) => {
+        if (sessionId === transferred.sessionId) myReady = player.ready === true;
+      });
+      // FINISHED: enviar sempre, pois ready pode ter sobrado da corrida anterior.
+      // WAITING: enviar somente se ainda não marcamos READY nesta revanche.
+      if (phase === 'finished' || (phase === 'waiting' && !myReady)) {
         try { transferred.send('ready', true); }
-        catch (error) { setDetail('Não foi possível preparar nova corrida: ' + String(error)); return; }
+        catch (error) {
+          setDetail(t('onlineLab.readyError',{error:String(error)}));
+          return;
+        }
+      } else if (phase === 'paused') {
+        setDetail(t('onlineLab.waitingReconnect'));
+        return;
       }
     }
+    // O mapa escuta o Schema autoritativo (WAITING/COUNTDOWN/RACING).
+    // A conexão transferida permanece ativa e o Room ID não muda.
     router.push({ pathname: '/mapa', params: { mode: 'onlineAlpha9' } });
   };
   const endTransferred = async () => {
@@ -505,7 +523,7 @@ export default function WildOnlineLab() {
     if (!transferred) return;
     clearWildAlpha9Room(transferred);
     try { await transferred.leave(); } catch { /* conexão já finalizada */ }
-    if (mounted.current) setDetail('Sessão transferida encerrada. Pode criar outra sala.');
+    if (mounted.current) setDetail(t('onlineLab.transferEnded'));
   };
 
   const leave = useCallback(async () => {
@@ -513,8 +531,8 @@ export default function WildOnlineLab() {
     if (!current) return;
     resetUI(); // fecha localmente mesmo se a conexão caiu
     try { await current.leave(); } catch { /* já desconectado */ }
-    if (mounted.current) setDetail('Você saiu da sala.');
-  }, [resetUI]);
+    if (mounted.current) setDetail(t('onlineLab.leftRoom'));
+  }, [resetUI,t]);
 
   const toggleAuto = () => {
     if (!roomRef.current || droppedRef.current || race?.phase !== 'racing') return;
@@ -534,7 +552,7 @@ export default function WildOnlineLab() {
     const room = roomRef.current;
     if (!room || droppedRef.current) return;
     try { room.send(type, payload); }
-    catch (error) { if (mounted.current) setDetail('Comando não enviado: ' + String(error)); }
+    catch (error) { if (mounted.current) setDetail(t('onlineLab.commandError',{error:String(error)})); }
   };
 
   // Prévia local apenas para exibição ANTES da conexão. Nunca enviada como física.
@@ -563,8 +581,8 @@ export default function WildOnlineLab() {
   const showingRoom = Boolean(connectedRoomId) || isPreview;
   const roomPlayers = isPreview ? (previewOpponent ? 2 : 1) : (race?.players.length ?? 0);
   const currentPhase: Phase = isPreview ? 'waiting' : (race?.phase ?? 'waiting');
-  const statusLabel = isPreview ? 'PRÉVIA OFFLINE' : status;
-  const isReconnecting = !isPreview && (droppedRef.current || status === 'RECONECTANDO...' || currentPhase === 'paused');
+  const statusLabel = isPreview ? t('onlineLab.previewOffline') : status;
+  const isReconnecting = !isPreview && (droppedRef.current || status === t('onlineLab.reconnecting') || currentPhase === 'paused');
   const pingIsHigh = ping !== null && ping >= 500;
   const roomShareCode = connectedRoomId;
 
@@ -572,10 +590,10 @@ export default function WildOnlineLab() {
     if (!roomShareCode || isPreview) return;
     try {
       await Share.share({
-        message: `🏎️ Bora correr no Wild Runners!\nEntre em uma sala privada com o código: ${roomShareCode}\nAbra o Wild Online e escolha ENTRAR EM SALA.`,
+        message: t('onlineLab.shareText',{code:roomShareCode}),
       });
     } catch (error) {
-      if (mounted.current) setDetail('Não foi possível abrir o compartilhamento: ' + String(error));
+      if (mounted.current) setDetail(t('onlineLab.shareError',{error:String(error)}));
     }
   };
 
@@ -584,10 +602,10 @@ export default function WildOnlineLab() {
       {portrait ? (
         <View style={styles.rotateScreen}>
           <Text style={styles.rotateIcon}>↻</Text>
-          <Text style={styles.rotateTitle}>GIRE PARA JOGAR</Text>
-          <Text style={styles.rotateText}>O lobby do Wild Online foi projetado para a tela horizontal.</Text>
+          <Text style={styles.rotateTitle}>{t('onlineLab.rotate')}</Text>
+          <Text style={styles.rotateText}>{t('onlineLab.rotateInfo')}</Text>
           <Pressable style={styles.rotateBack} onPress={() => router.back()}>
-            <Text style={styles.rotateBackText}>← VOLTAR</Text>
+            <Text style={styles.rotateBackText}>← {t('onlineLab.back')}</Text>
           </Pressable>
         </View>
       ) : (
@@ -597,7 +615,7 @@ export default function WildOnlineLab() {
             <View style={styles.brandMark}><Text style={styles.brandMarkText}>WF</Text></View>
             <View style={styles.brandTextBlock}>
               <Text style={styles.brandTitle}>WILD <Text style={styles.brandAccent}>ONLINE</Text></Text>
-              <Text style={styles.brandSub}>SALA MULTIPLAYER  /  ALPHA 17</Text>
+              <Text style={styles.brandSub}>{t('onlineLab.subtitle')}</Text>
             </View>
             <View style={styles.topFill} />
             <View style={styles.connectionBadge}>
@@ -616,7 +634,7 @@ export default function WildOnlineLab() {
               void leave();
               router.back();
             }}>
-              <Text style={styles.backTopText}>← VOLTAR</Text>
+              <Text style={styles.backTopText}>← {t('onlineLab.back')}</Text>
             </Pressable>
           </View>
 
@@ -626,23 +644,23 @@ export default function WildOnlineLab() {
               {!connectedRoomId && hasTransferredRoom ? (
                 <View style={[styles.mainPanel, compact && styles.compactMainPanel]}>
                   <Text style={styles.sectionKicker}>
-                    {route.fromRaceResult === '1' ? 'PRÓXIMA CORRIDA · MESMA SALA' : 'SESSÃO EM ANDAMENTO'}
+                    {route.fromRaceResult === '1' ? t('onlineLab.nextRace') : t('onlineLab.sessionOngoing')}
                   </Text>
                   <Text style={styles.mainTitle}>
-                    {route.fromRaceResult === '1' ? 'Pronto para correr de novo?' : 'Sua corrida continua ativa'}
+                    {route.fromRaceResult === '1' ? t('onlineLab.againQuestion') : t('onlineLab.stillActive')}
                   </Text>
                   <Text style={styles.desc} numberOfLines={2}>
                     {route.fromRaceResult === '1'
-                      ? 'Seu relatório foi salvo. Volte ao mapa da mesma sala e pressione READY quando quiser.'
-                      : 'Retome a mesma conexão sem criar um jogador duplicado na AWS.'}
+                      ? t('onlineLab.sameRoomInfo')
+                      : t('onlineLab.resumeInfo')}
                   </Text>
                   <View style={styles.filler} />
                   <View style={styles.actionsRow}>
                     <Pressable style={[styles.mainAction, styles.flexGrow]} onPress={resumeTransferred}>
-                      <Text style={styles.mainActionText}>🏎️  {route.fromRaceResult === '1' ? 'VOLTAR À SALA' : 'RETOMAR CORRIDA'} →</Text>
+                      <Text style={styles.mainActionText}>🏎️  {route.fromRaceResult === '1' ? t('onlineLab.readyRematch') : t('onlineLab.resumeRace')} →</Text>
                     </Pressable>
                     <Pressable style={styles.secondaryAction} onPress={() => void endTransferred()}>
-                      <Text style={styles.secondaryActionText}>ENCERRAR SESSÃO</Text>
+                      <Text style={styles.secondaryActionText}>{t('onlineLab.endSession')}</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -651,30 +669,30 @@ export default function WildOnlineLab() {
                   <View style={styles.panelHeading}>
                     <View style={styles.headingText}>
                       <Text style={styles.sectionKicker}>01  /  MULTIPLAYER</Text>
-                      <Text style={styles.mainTitle}>ESCOLHA SUA SALA</Text>
+                      <Text style={styles.mainTitle}>{t('onlineLab.chooseRoom')}</Text>
                     </View>
-                    <View style={styles.capacityChip}><Text style={styles.capacityText}>2 PILOTOS  ·  PRIVADA</Text></View>
+                    <View style={styles.capacityChip}><Text style={styles.capacityText}>{t('onlineLab.private2')}</Text></View>
                   </View>
 
                   <View style={styles.modeRow}>
                     <Pressable style={[styles.modeTab, lobbyMode === 'create' && styles.modeTabActive]}
                       onPress={() => setLobbyMode('create')}>
-                      <Text style={[styles.modeLabel, lobbyMode === 'create' && styles.modeLabelActive]}>＋ CRIAR SALA</Text>
+                      <Text style={[styles.modeLabel, lobbyMode === 'create' && styles.modeLabelActive]}>＋ {t('onlineLab.createRoom')}</Text>
                     </Pressable>
                     <Pressable style={[styles.modeTab, lobbyMode === 'join' && styles.modeTabActive]}
                       onPress={() => setLobbyMode('join')}>
-                      <Text style={[styles.modeLabel, lobbyMode === 'join' && styles.modeLabelActive]}>↗ ENTRAR COM CÓDIGO</Text>
+                      <Text style={[styles.modeLabel, lobbyMode === 'join' && styles.modeLabelActive]}>↗ {t('onlineLab.joinCode')}</Text>
                     </Pressable>
                   </View>
 
                   {lobbyMode === 'create' ? (
                     <View style={styles.modeBody}>
-                      <Text style={styles.modeBodyTitle}>Crie uma sala só de vocês.</Text>
-                      <Text style={styles.desc} numberOfLines={2}>Compartilhe o código com um amigo e espere os dois pilotos ficarem prontos.</Text>
+                      <Text style={styles.modeBodyTitle}>{t('onlineLab.createInfoTitle')}</Text>
+                      <Text style={styles.desc} numberOfLines={2}>{t('onlineLab.createInfo')}</Text>
                     </View>
                   ) : (
                     <View style={styles.modeBodyJoin}>
-                      <Text style={styles.formLabel}>CÓDIGO DO CONVITE</Text>
+                      <Text style={styles.formLabel}>{t('onlineLab.inviteCode')}</Text>
                       <TextInput
                         style={styles.codeInput}
                         placeholder="Ex.: 3BT0b4oXx"
@@ -698,7 +716,7 @@ export default function WildOnlineLab() {
                     >
                       {busy ? <ActivityIndicator color="#101522" size="small" /> : (
                         <Text style={styles.mainActionText}>
-                          {lobbyMode === 'join' ? 'ENTRAR NA SALA  →' : 'CRIAR SALA PRIVADA  →'}
+                          {lobbyMode === 'join' ? t('onlineLab.joinRoom') : t('onlineLab.createPrivate')} →
                         </Text>
                       )}
                     </Pressable>
@@ -707,7 +725,7 @@ export default function WildOnlineLab() {
                       setPreviewOpponent(false);
                       setShowDiagnostics(false);
                     }}>
-                      <Text style={styles.secondaryActionText}>◇ PRÉVIA OFFLINE</Text>
+                      <Text style={styles.secondaryActionText}>◇ {t('onlineLab.previewOffline')}</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -715,7 +733,7 @@ export default function WildOnlineLab() {
                 <View style={[styles.mainPanel, compact && styles.compactMainPanel]}>
                   <View style={styles.roomHeading}>
                     <View style={styles.roomIdentity}>
-                      <Text style={styles.sectionKicker}>{isPreview ? 'MODO DEMONSTRAÇÃO · SEM AWS' : 'SALA PRIVADA  /  CONVITE'}</Text>
+                      <Text style={styles.sectionKicker}>{isPreview ? t('onlineLab.demoNoAws') : t('onlineLab.privateInvite')}</Text>
                       <Text style={styles.inviteCode} selectable={!isPreview} numberOfLines={1} adjustsFontSizeToFit>
                         {isPreview ? 'DEMO-LOCAL' : connectedRoomId}
                       </Text>
@@ -724,7 +742,7 @@ export default function WildOnlineLab() {
                       <Text style={styles.roomCount}>{roomPlayers}/2</Text>
                       {!isPreview && (
                         <Pressable style={styles.shareAction} onPress={() => void shareRoom()}>
-                          <Text style={styles.shareActionText}>↗ COMPARTILHAR</Text>
+                          <Text style={styles.shareActionText}>↗ {t('onlineLab.share')}</Text>
                         </Pressable>
                       )}
                     </View>
@@ -734,37 +752,37 @@ export default function WildOnlineLab() {
                     <View style={[styles.pilotCompact, styles.pilotMine]}>
                       <View style={styles.pilotNumber}><Text style={styles.pilotNumberText}>01</Text></View>
                       <View style={styles.pilotDetails}>
-                        <Text style={styles.pilotName}>VOCÊ</Text>
-                        <Text style={styles.pilotCar} numberOfLines={1}>{isPreview ? (hasGarageCar ? carId.toUpperCase() : 'SEM CARRO') : (myPlayer?.carId ?? carId).toUpperCase()}</Text>
+                        <Text style={styles.pilotName}>{t('onlineLab.you')}</Text>
+                        <Text style={styles.pilotCar} numberOfLines={1}>{isPreview ? (hasGarageCar ? carId.toUpperCase() : t('onlineLab.noCarShort')) : (myPlayer?.carId ?? carId).toUpperCase()}</Text>
                       </View>
                       <Text style={[styles.pilotReady, !(isPreview || myPlayer?.ready) && styles.pilotNotReady]}>
-                        {isPreview ? 'DEMO' : myPlayer?.ready ? '✓ READY' : 'AGUARDANDO'}
+                        {isPreview ? 'DEMO' : myPlayer?.ready ? t('onlineLab.ready') : t('onlineLab.waiting')}
                       </Text>
                     </View>
                     <View style={[styles.pilotCompact, roomPlayers < 2 && styles.pilotEmpty]}>
                       <View style={[styles.pilotNumber, styles.pilotNumberRival]}><Text style={styles.pilotNumberText}>02</Text></View>
                       <View style={styles.pilotDetails}>
-                        <Text style={styles.pilotName}>{roomPlayers >= 2 ? (isPreview ? 'RIVAL DEMO' : 'RIVAL') : 'VAGA LIVRE'}</Text>
-                        <Text style={styles.pilotCar} numberOfLines={1}>{roomPlayers >= 2 ? (isPreview ? 'FUSCA · DEMO' : (race?.players.find(p => p.sessionId !== sessionId)?.carId ?? 'RIVAL').toUpperCase()) : 'AGUARDANDO PILOTO'}</Text>
+                        <Text style={styles.pilotName}>{roomPlayers >= 2 ? (isPreview ? t('onlineLab.demoRival') : t('onlineLab.rival')) : t('onlineLab.freeSlot')}</Text>
+                        <Text style={styles.pilotCar} numberOfLines={1}>{roomPlayers >= 2 ? (isPreview ? 'FUSCA · DEMO' : (race?.players.find(p => p.sessionId !== sessionId)?.carId ?? t('onlineLab.rival')).toUpperCase()) : t('onlineLab.awaitingDriver')}</Text>
                       </View>
                       <Text style={[styles.pilotReady, styles.pilotNotReady]}>
-                        {roomPlayers >= 2 ? (isPreview ? 'DEMO' : race?.players.find(p => p.sessionId !== sessionId)?.ready ? '✓ READY' : 'NA SALA') : '○ LIVRE'}
+                        {roomPlayers >= 2 ? (isPreview ? 'DEMO' : race?.players.find(p => p.sessionId !== sessionId)?.ready ? t('onlineLab.ready') : t('onlineLab.inRoom')) : t('onlineLab.free')}
                       </Text>
                     </View>
                   </View>
 
                   <View style={styles.phaseRow}>
                     <Text style={styles.phaseLabel} numberOfLines={1}>
-                      {isPreview ? '⏳ AGUARDANDO RIVAL' : phaseText[currentPhase]}
+                      {isPreview ? `⏳ ${t('onlineLab.waitingRival')}` : t(`onlineLab.phase.${currentPhase}`)}
                     </Text>
                     {currentPhase === 'countdown' && !isPreview && <Text style={styles.countdown}>{race?.countdown ?? 3}</Text>}
                     {currentPhase === 'finished' && !isPreview && (
                       <Text style={styles.finishResult}>
-                        {race?.winnerSessionId === sessionId ? '🏆 VITÓRIA' : race?.winnerSessionId ? 'DERROTA' : 'EMPATE'}
+                        {race?.winnerSessionId === sessionId ? `🏆 ${t('onlineLab.win')}` : race?.winnerSessionId ? t('onlineLab.lose') : t('onlineLab.draw')}
                       </Text>
                     )}
                     <View style={styles.filler} />
-                    {!isPreview && currentPhase === 'waiting' && myPlayer?.ready && <Text style={styles.readyMini}>✓ PRONTO</Text>}
+                    {!isPreview && currentPhase === 'waiting' && myPlayer?.ready && <Text style={styles.readyMini}>{t('onlineLab.ready')}</Text>}
                   </View>
 
                   <View style={styles.filler} />
@@ -772,26 +790,26 @@ export default function WildOnlineLab() {
                     {isPreview ? (
                       <>
                         <Pressable style={[styles.mainAction, styles.flexGrow]} onPress={() => setPreviewOpponent(value => !value)}>
-                          <Text style={styles.mainActionText}>{previewOpponent ? '− OCULTAR RIVAL' : '＋ SIMULAR RIVAL'}</Text>
+                          <Text style={styles.mainActionText}>{previewOpponent ? '− ' : '＋ '}{previewOpponent ? t('onlineLab.hideRival') : t('onlineLab.simulateRival')}</Text>
                         </Pressable>
                         <Pressable style={styles.secondaryAction} onPress={() => setPreviewLobby(false)}>
-                          <Text style={styles.secondaryActionText}>SAIR DA PRÉVIA</Text>
+                          <Text style={styles.secondaryActionText}>{t('onlineLab.exitPreview')}</Text>
                         </Pressable>
                       </>
                     ) : (
                       <>
                         {canReady && (
                           <Pressable style={[styles.mainAction, styles.flexGrow]} onPress={() => sendRaceCommand('ready', true)}>
-                            <Text style={styles.mainActionText}>{currentPhase === 'finished' ? '↻ REVANCHE' : '✓ ESTOU PRONTO!'}</Text>
+                            <Text style={styles.mainActionText}>{currentPhase === 'finished' ? '↻ ' : '✓ '}{currentPhase === 'finished' ? t('onlineLab.rematch') : t('onlineLab.imReady')}</Text>
                           </Pressable>
                         )}
                         {!isReconnecting && (
                           <Pressable style={[styles.mapAction, !canReady && styles.flexGrow]} onPress={enterOnlineMap}>
-                            <Text style={styles.mapActionText}>🏎️ ABRIR PISTA →</Text>
+                            <Text style={styles.mapActionText}>🏎️ {t('onlineLab.openTrack')} →</Text>
                           </Pressable>
                         )}
                         <Pressable style={styles.roomLeave} onPress={() => void leave()}>
-                          <Text style={styles.roomLeaveText}>SAIR</Text>
+                          <Text style={styles.roomLeaveText}>{t('onlineLab.leave')}</Text>
                         </Pressable>
                       </>
                     )}
@@ -801,11 +819,17 @@ export default function WildOnlineLab() {
 
               <View style={styles.leftBottomBar}>
                 <Text style={styles.bottomStatus} numberOfLines={1} ellipsizeMode="tail">
-                  {isPreview ? 'Prévia local: nenhum jogador conectado à AWS.' : detail}
+                  {isPreview ? t('onlineLab.localPreviewInfo') : detail}
                 </Text>
+                {CHEST_PREVIEW_ALLOWED && !showingRoom && !hasTransferredRoom && !connectedRoomId && (
+                  <Pressable style={styles.toolsLink}
+                    onPress={() => router.push({pathname:'/ChestScreen' as any,params:{preview:'1'}})}>
+                    <Text style={styles.toolsLinkText}>🎁 {t('onlineLab.testChests')}</Text>
+                  </Pressable>
+                )}
                 {!!connectedRoomId && !isPreview && (
                   <Pressable style={styles.toolsLink} onPress={() => setShowDiagnostics(true)}>
-                    <Text style={styles.toolsLinkText}>⚙ TELEMETRIA</Text>
+                    <Text style={styles.toolsLinkText}>⚙ {t('onlineLab.telemetry')}</Text>
                   </Pressable>
                 )}
               </View>
@@ -814,40 +838,40 @@ export default function WildOnlineLab() {
             <View style={styles.rightColumn}>
               <View style={[styles.garagePanel, compact && styles.compactSidePanel]}>
                 <View style={styles.sideTitleRow}>
-                  <Text style={styles.sectionKicker}>SEU VEÍCULO</Text>
-                  <Text style={styles.sideCheck}>{hasGarageCar ? '✓ GARAGEM' : 'SEM SELEÇÃO'}</Text>
+                  <Text style={styles.sectionKicker}>{t('onlineLab.yourVehicle')}</Text>
+                  <Text style={styles.sideCheck}>{hasGarageCar ? t('onlineLab.garage') : t('onlineLab.noSelection')}</Text>
                 </View>
                 <View style={styles.carIdentity}>
                   <View style={[styles.carIconArea, compact && styles.compactCarIconArea]}><Text style={styles.carIcon}>🏎️</Text></View>
                   <View style={styles.carIdentityText}>
                     <Text style={styles.carName} numberOfLines={1} adjustsFontSizeToFit>
-                      {hasGarageCar ? carId.toUpperCase() : 'SELECIONE UM CARRO'}
+                      {hasGarageCar ? carId.toUpperCase() : t('onlineLab.selectCar')}
                     </Text>
-                    <Text style={styles.carSub} numberOfLines={1}>CAR SELECTION · VEÍCULO ATIVO</Text>
+                    <Text style={styles.carSub} numberOfLines={1}>{t('onlineLab.activeVehicle')}</Text>
                   </View>
                 </View>
                 <View style={styles.carSpecs}>
                   <View style={styles.specCol}>
-                    <Text style={styles.specLabel}>{hasOfficialStats ? 'VELOCIDADE AWS' : 'VELOCIDADE PREVISTA'}</Text>
+                    <Text style={styles.specLabel}>{hasOfficialStats ? t('onlineLab.awsSpeed') : t('onlineLab.estimatedSpeed')}</Text>
                     <Text style={styles.specNumber}>{displayedTopSpeedKmh.toFixed(0)} <Text style={styles.specUnit}>km/h</Text></Text>
                   </View>
                   <View style={styles.specDivider} />
                   <View style={styles.specCol}>
-                    <Text style={styles.specLabel}>MOTOR · VELOCIDADE</Text>
-                    <Text style={styles.specNumber}>NV. {displayedSpeedLevel}</Text>
+                    <Text style={styles.specLabel}>{t('onlineLab.engineSpeed')}</Text>
+                    <Text style={styles.specNumber}>{t('onlineLab.levelAbbr')} {displayedSpeedLevel}</Text>
                   </View>
                 </View>
                 <Text style={styles.sideCaveat} numberOfLines={compact ? 2 : 3}>
                   {hasOfficialStats
-                    ? `✓ AWS / Firestore: Acel. NV.${myPlayer.accelerationLevel} · Salto NV.${myPlayer.jumpPowerLevel} · Defesa NV.${myPlayer.defenseLevel} · ${myPlayer.maxLives} vidas`
-                    : 'Prévia do perfil local. Ao entrar na sala, a AWS verificará a Oficina no Firestore.'}
+                    ? t('onlineLab.garageStats',{accel:myPlayer.accelerationLevel,jump:myPlayer.jumpPowerLevel,defense:myPlayer.defenseLevel,lives:myPlayer.maxLives})
+                    : t('onlineLab.localProfileInfo')}
                 </Text>
               </View>
 
               <View style={[styles.deckPanel, compact && styles.compactSidePanel]}>
                 <View style={styles.sideTitleRow}>
-                  <Text style={styles.sectionKicker}>SEU DECK</Text>
-                  <Text style={styles.deckCount}>{deckReady ? '4/4 VINCULADAS' : `${equippedDeck?.length ?? 0}/4 VINCULADAS`}</Text>
+                  <Text style={styles.sectionKicker}>{t('onlineLab.yourDeck')}</Text>
+                  <Text style={styles.deckCount}>{deckReady ? `4/4 ${t('onlineLab.bound')}` : `${equippedDeck?.length ?? 0}/4 ${t('onlineLab.bound')}`}</Text>
                 </View>
                 <View style={styles.deckGrid}>
                   {[0, 1, 2, 3].map(slot => {
@@ -857,20 +881,20 @@ export default function WildOnlineLab() {
                       <View key={slot} style={styles.deckSlot}>
                         {card ? <Image source={card.image} resizeMode="contain" style={{width: 21, height: 21}} /> :
                           <Text style={styles.deckSlotIcon}>◇</Text>}
-                        <Text style={styles.deckSlotLabel} numberOfLines={1}>{card?.name ?? `SLOT 0${slot + 1}`}</Text>
+                        <Text style={styles.deckSlotLabel} numberOfLines={1}>{card?.name ?? t('onlineLab.slot',{number:slot+1})}</Text>
                       </View>
                     );
                   })}
                 </View>
                 <Text style={[styles.deckNote, !deckReady && styles.deckError]} numberOfLines={compact ? 1 : 2}>
-                  {deckValidationError ?? 'Deck salvo em DECK SELECTION. A AWS valida custos e recargas; posse Firestore será verificada antes da produção.'}
+                  {deckValidationError ?? t('onlineLab.deckInfo')}
                 </Text>
               </View>
             </View>
           </View>
           <View style={styles.footer}>
             <Text style={styles.footerBrand}>WF SOFT  /  WILD RUNNERS</Text>
-            <Text style={styles.footerInfo}>LOBBY PRIVADO • 2 JOGADORES • ALPHA 16.3</Text>
+            <Text style={styles.footerInfo}>{t('onlineLab.footer')}</Text>
           </View>
         </View>
       )}
@@ -882,33 +906,33 @@ export default function WildOnlineLab() {
           <View style={[styles.modalPanel, { maxWidth: Math.min(viewportWidth - 28, 980), maxHeight: viewportHeight - 24 }]}>
             <View style={styles.modalHeader}>
               <View>
-                <Text style={styles.sectionKicker}>SALA ONLINE / AWS</Text>
-                <Text style={styles.modalTitle}>FERRAMENTAS DE LABORATÓRIO</Text>
+                <Text style={styles.sectionKicker}>{t('onlineLab.onlineRoom')}</Text>
+                <Text style={styles.modalTitle}>{t('onlineLab.labTools')}</Text>
               </View>
               <Pressable style={styles.modalClose} onPress={() => setShowDiagnostics(false)}>
-                <Text style={styles.modalCloseText}>✕ FECHAR</Text>
+                <Text style={styles.modalCloseText}>✕ {t('onlineLab.close')}</Text>
               </Pressable>
             </View>
             <View style={styles.modalContent}>
               <View style={styles.modalTelemetry}>
-                <Text style={styles.modalSectionTitle}>POSIÇÕES OFICIAIS · {(race?.raceTime ?? 0).toFixed(1)}s</Text>
+                <Text style={styles.modalSectionTitle}>{t('onlineLab.officialPositions')} · {(race?.raceTime ?? 0).toFixed(1)}s</Text>
                 {(race?.players ?? []).map(player => {
                   const visualX = visualPositions[player.sessionId] ?? player.x;
                   const progress = Math.max(0, Math.min(100, 100 * Math.max(0, visualX - player.startX) / Math.max(1, race?.finishDistance ?? 6000)));
                   return (
                     <View key={player.sessionId} style={styles.telemetryCard}>
-                      <Text style={styles.telemetryName}>{player.sessionId === sessionId ? 'VOCÊ' : 'RIVAL'} · {player.carId.toUpperCase()} · {player.rank}º</Text>
+                      <Text style={styles.telemetryName}>{player.sessionId === sessionId ? t('onlineLab.you') : t('onlineLab.rival')} · {player.carId.toUpperCase()} · {player.rank}º</Text>
                       <View style={styles.telemetryTrack}><View style={[styles.telemetryFill, { width: `${progress}%` as `${number}%` }]} /></View>
                       <Text style={styles.telemetryData}>
-                        {progress.toFixed(0)}% · {player.speed.toFixed(0)} u/s · {player.connected ? 'CONECTADO' : 'RECONEXÃO'}
-                        {player.garageVerified ? ` · MAX ${player.maxSpeed.toFixed(0)} · MOTOR NV.${player.speedLevel} · ACEL. NV.${player.accelerationLevel}` : ''}
+                        {progress.toFixed(0)}% · {player.speed.toFixed(0)} u/s · {player.connected ? t('onlineLab.connected') : t('onlineLab.reconnection')}
+                        {player.garageVerified ? ` · ${t('onlineLab.max')} ${player.maxSpeed.toFixed(0)} · ${t('onlineLab.engineSpeed')} ${t('onlineLab.levelAbbr')}${player.speedLevel} · ${t('onlineLab.levelAbbr')}${player.accelerationLevel}` : ''}
                       </Text>
                     </View>
                   );
                 })}
               </View>
               <View style={styles.modalControlArea}>
-                <Text style={styles.modalSectionTitle}>COMANDOS DE TESTE · 30 HZ</Text>
+                <Text style={styles.modalSectionTitle}>{t('onlineLab.testCommands')}</Text>
                 <View style={styles.modalActions}>
                   <Pressable disabled={!canControl} style={[styles.modalAction, autoDrive && styles.autoEnabled, !canControl && styles.disabled]} onPress={toggleAuto}>
                     <Text style={styles.modalActionText}>AUTO {autoDrive ? 'ON' : 'OFF'}</Text>
@@ -920,17 +944,17 @@ export default function WildOnlineLab() {
                 <View style={styles.modalActions}>
                   <Pressable disabled={!canControl} style={[styles.modalAction, styles.brakeAction, !canControl && styles.disabled]}
                     onPressIn={() => holdDrive('brake', true)} onPressOut={() => holdDrive('brake', false)}>
-                    <Text style={styles.modalActionText}>FREAR</Text>
+                    <Text style={styles.modalActionText}>{t('onlineLab.brake')}</Text>
                   </Pressable>
                   <Pressable disabled={!canControl} style={[styles.modalAction, styles.accelAction, !canControl && styles.disabled]}
                     onPressIn={() => holdDrive('accel', true)} onPressOut={() => holdDrive('accel', false)}>
-                    <Text style={styles.modalActionText}>ACELERAR</Text>
+                    <Text style={styles.modalActionText}>{t('onlineLab.accelerate')}</Text>
                   </Pressable>
                 </View>
-                <Text style={styles.modalInfo} numberOfLines={2}>A AWS continua responsável pela física, posição, nitro e resultado.</Text>
+                <Text style={styles.modalInfo} numberOfLines={2}>{t('onlineLab.awsAuthority')}</Text>
               </View>
             </View>
-            <Text style={styles.modalFoot} numberOfLines={2}>SESSÃO: {sessionId || '—'}  ·  {detail}</Text>
+            <Text style={styles.modalFoot} numberOfLines={2}>{t('onlineLab.session')}: {sessionId || '—'}  ·  {detail}</Text>
           </View>
         </View>
       </Modal>
