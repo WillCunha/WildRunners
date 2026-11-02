@@ -203,7 +203,7 @@ export default function CarSelectionScreen() {
             };
         }, [])
     );
-   
+
     useEffect(() => {
         playMusic(DASHBOARD_MUSIC, { volume: 0.15, loop: true });
     }, [playMusic]);
@@ -249,7 +249,7 @@ export default function CarSelectionScreen() {
     const jumpLevel = ownedCarData?.motor?.jumpPowerLevel ?? 1;
     const defenseLevel = ownedCarData?.engrenagem?.defenseLevel ?? 1;
 
-   
+
 
     const handleOpenStore = () => {
         if (previewCar) {
@@ -261,6 +261,10 @@ export default function CarSelectionScreen() {
         }
 
         router.push('/CarStore' as any);
+    };
+
+       const handleNotificationTests = () => {
+        router.push('/push-test' as any);
     };
 
     const [loggingOut, setLoggingOut] = useState(false);
@@ -391,7 +395,20 @@ export default function CarSelectionScreen() {
                             <Text style={styles.accountValue}>🏆 {profile?.trophies ?? 0}</Text>
                         </View>
 
-  
+                        <TouchableOpacity
+                            activeOpacity={0.82}
+                            disabled={loggingOut}
+                            onPress={() => { void handleNotificationTests(); }}
+                            style={[
+                                styles.logoutButton,
+                                loggingOut && styles.logoutButtonDisabled,
+                            ]}
+                        >
+                            <Text style={styles.logoutButtonLabel}>
+                                🔔 NOTIFICATION TESTS
+                            </Text>
+                        </TouchableOpacity>
+
                         <TouchableOpacity
                             activeOpacity={0.82}
                             disabled={loggingOut}

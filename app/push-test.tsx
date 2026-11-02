@@ -4,7 +4,7 @@
  * Acesse a rota push-test no app de testes (ex.: deep link runnergame://push-test).
  * Sem Firebase Admin SDK, Firestore, credenciais privadas ou envios automáticos.
  */
-import { requestWildPushTokenAsync } from '@/src/services/firebase/wildNotifications';
+import { requestWildPushTokenAsync } from '@/src/services/notifications/wildNotifications';
 import React, { useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 

@@ -2,8 +2,8 @@ import LoadingOverlay from '@/components/LoadingOverlay';
 import { AudioProvider } from '@/context/AudioContext';
 import { CarProvider } from '@/context/CarContext';
 import { LanguageProvider } from '@/context/LanguageContext';
-import { prepareWildNotifications } from '@/src/services/firebase/wildNotifications';
 import { useLoadingStore } from '@/src/store/LoadingStore';
+import { prepareWildNotifications } from '@/src/services/notifications/wildNotifications';
 
 import { useFonts } from 'expo-font';
 import * as NavigationBar from 'expo-navigation-bar';

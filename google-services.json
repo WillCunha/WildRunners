@@ -1,0 +1,34 @@
+{
+  "project_info": {
+    "project_number": "576818209504",
+    "project_id": "wfsoft-wild-runners",
+    "storage_bucket": "wfsoft-wild-runners.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:576818209504:android:415ddf313b1729a0d6e685",
+        "android_client_info": {
+          "package_name": "com.wfsoft.wildrunners"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBgt5DQOxC9wyzTfxDhG_bNDNdye0xsKto"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "576818209504-b2oham9i0u8q3h1abfu1nlgldjplqc55.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
