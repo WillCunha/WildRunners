@@ -28,6 +28,7 @@ import { useTutorialStore } from '@/src/store/tutorialStore';
 import { ALL_CARDS, CARD_CATEGORIES, CARD_MAP, getCardDefinition, type CardId } from '@/src/utils/cardMap';
 import { carMaps } from '@/src/utils/carMaps';
 import { clearWildAlpha9Room, getWildAlpha9Room } from '@/src/online/wildOnlineAlpha9Session';
+import { getOfflineRaceSelection, getOnlineRaceMapSelection } from '@/src/online/selectedRaceMap';
 import { WILD_CAR_IDS, type WildCarId } from '@/src/online/wildOnlineCarStats';
 import { WildPositionSmoother } from '@/src/online/wildOnlineSmoothing';
 import {
@@ -189,8 +190,11 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
   }>();
 
   const isTutorial = params.mode === 'tutorial';
-  const selectedMapId = (params.mapId as CenarioId) || 'sao_paulo';
-  const selectedSkyTheme = (params.skyTheme as SkyTheme) || 'day';
+  // Replay offline (RaceResult -> /mapa) não recebe parâmetros da rota.
+  // Nunca aplicar seleção prévia ao tutorial de um cadastro novo.
+  const offlineReplay = isTutorial ? null : getOfflineRaceSelection();
+  const selectedMapId = (params.mapId as CenarioId) || offlineReplay?.mapId || 'sao_paulo';
+  const selectedSkyTheme = (params.skyTheme as SkyTheme) || offlineReplay?.skyTheme || 'day';
 
   const markTutorialCompleted = useTutorialStore(
     state => state.markCompleted,
@@ -260,7 +264,12 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
   const fallbackDeck = ['swap', 'bullet', 'chains', 'tnt'];
   // Um parâmetro de rota corrompido não deve derrubar o tutorial ou o modo offline.
   const finalDeck: string[] = (() => {
-    if (!params.deck) return fallbackDeck;
+    if (!params.deck) {
+      const replayDeck = offlineReplay?.deck;
+      return replayDeck?.length === 4 &&
+        replayDeck.every(id => typeof id === 'string' && !!getCardDefinition(id))
+        ? replayDeck : fallbackDeck;
+    }
     try {
       const parsed: unknown = JSON.parse(params.deck as string);
       return Array.isArray(parsed) && parsed.length === 4 &&
@@ -6637,7 +6646,7 @@ useEffect(() => {
         raceId:receipt.raceId,roomId:receipt.roomId,position,totalRacers,
         carId:receipt.carId,finishedAt:receipt.finishedAt,wallet,
       },{
-        mapId:params.mapId || 'sao_paulo',
+        mapId:params.mapId || getOnlineRaceMapSelection()?.mapId || 'sao_paulo',
         colorFront:me.colorFront,colorBack:me.colorBack,
       });
       if (!mountedRef.current || roomRef.current !== currentRoom) return;
@@ -6825,8 +6834,8 @@ useEffect(() => {
   return (
     <View style={styles.container}>
       <MemoCenarioBackground
-        mapId={(params.mapId as CenarioId) || 'sao_paulo'}
-        skyTheme={(params.skyTheme as SkyTheme) || 'day'}
+        mapId={(params.mapId as CenarioId) || getOnlineRaceMapSelection()?.mapId || 'sao_paulo'}
+        skyTheme={(params.skyTheme as SkyTheme) || getOnlineRaceMapSelection()?.skyTheme || 'day'}
         groundY={groundY}
         isMoving={phase === 'racing' && !dropped}
         travelX={sceneryTravel}

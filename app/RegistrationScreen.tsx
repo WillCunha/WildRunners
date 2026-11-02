@@ -6,8 +6,8 @@ import {
   validAccountEmail,
   validAccountPassword,
 } from '@/src/services/firebase/firebaseAuth';
-import { createNewPlayerCloudSave, loadCurrentPlayerCloudSave } from '@/src/services/firebase/playerCloud';
 import { auth } from '@/src/services/firebase/firebaseClient';
+import { createNewPlayerCloudSave, loadCurrentPlayerCloudSave } from '@/src/services/firebase/playerCloud';
 import { useTutorialStore } from '@/src/store/tutorialStore';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useRef, useState } from 'react';
@@ -374,13 +374,7 @@ export default function RegistrationScreen() {
       void createConfirmedProfile();
       return;
     }
-    Alert.alert('NOVO PILOTO — WILD',
-      'Vamos criar uma conta Firebase e um save novo para este piloto. ' +
-      'Se você já possui uma conta Wild, use ENTRAR para carregar o save existente.', [
-      { text: 'CANCELAR', style: 'cancel' },
-      { text: 'JÁ TENHO CONTA', onPress: () => switchMode('login') },
-      { text: 'CRIAR NOVO PILOTO', onPress: () => void createConfirmedProfile() },
-    ]);
+    console.log("registro criado")
   };
 
   return (

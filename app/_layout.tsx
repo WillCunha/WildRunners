@@ -2,6 +2,7 @@ import LoadingOverlay from '@/components/LoadingOverlay';
 import { AudioProvider } from '@/context/AudioContext';
 import { CarProvider } from '@/context/CarContext';
 import { LanguageProvider } from '@/context/LanguageContext';
+import { prepareWildNotifications } from '@/src/services/firebase/wildNotifications';
 import { useLoadingStore } from '@/src/store/LoadingStore';
 
 import { useFonts } from 'expo-font';
@@ -85,6 +86,14 @@ export default function Layout() {
       subscription.remove();
     };
   }, [enterImmersiveMode]);
+
+  // Configura as notificações sem solicitar permissão ao abrir o jogo.
+  // O consentimento e a coleta do token ficam para uma ação explícita futura.
+  useEffect(() => {
+    void prepareWildNotifications().catch(error => {
+      console.warn('[WildNotifications] Preparação falhou:', String(error));
+    });
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {

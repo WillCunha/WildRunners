@@ -3,8 +3,7 @@ import { ALL_CARDS, MAX_DECK_SIZE, getCardDefinition, type CardCategory, type Ca
 import { useLanguage } from '@/context/LanguageContext';
 import { getDeckStoreCopy } from '@/src/utils/deckStoreText';
 import { usePlayerStore } from '@/src/store/playerStore';
-import { beginOnlinePlayerMutation, confirmOnlinePlayerMutation } from '@/src/services/sync/onlinePlayerMutation';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -19,48 +18,20 @@ import {
 } from 'react-native';
 
 const EMPTY_CARD_IDS: string[] = [];
-// ALPHA 15 — 17 cartas habilitadas no PvP (9 anteriores + 8 novas).
-// Esta lista espelha WildRaceRoom / WildAlpha15Rules no WildServer.
-// O inventário continua vindo de profile.unlocks.cards: habilitada não significa comprada.
-const ENABLED_ONLINE_CARDS = new Set<string>([
-  'slow_slow', 'nitro_power', 'shield', 'bullet', 'chains', 'tnt', 'oil_spit',
-  'quick_repair', 'emp_pulse',
-  'swap', 'magnet', 'blind', 'tornado', 'bubble_lift', 'armor', 'ghost', 'second_chance',
-]);
-
-// Custos específicos do PvP: manter sincronizados com as regras autoritativas da AWS.
-// As outras 7 cartas antigas continuam usando os custos do cardMap.
-const ONLINE_BATTLE_COST: Record<string, number> = {
-  quick_repair: 5,
-  emp_pulse: 6,
-  swap: 5,
-  magnet: 4,
-  blind: 4,
-  tornado: 6,
-  bubble_lift: 5,
-  armor: 4,
-  ghost: 5,
-  second_chance: 6,
-};
-
 export default function DeckSelection() {
-  const { next } = useLocalSearchParams<{ next?: string }>();
-  const onlineFlow = next !== 'offline';
   const { width, height } = useWindowDimensions();
 
   const { t, language } = useLanguage();
   const shopText = getDeckStoreCopy(String(language));
   const profile = usePlayerStore(state => state.profile);
   const equippedDeck = usePlayerStore(state => state.equippedDeck);
-  const setEquippedDeck = usePlayerStore(state => state.setEquippedDeck);
   const [hydrated, setHydrated] = useState(() => usePlayerStore.persist.hasHydrated());
 
   useEffect(() => usePlayerStore.persist.onFinishHydration(() => setHydrated(true)), []);
 
   const ownedCardIds = profile?.unlocks?.cards ?? EMPTY_CARD_IDS;
   const ownedSet = useMemo(() => new Set(ownedCardIds), [ownedCardIds]);
-  const ownedCards = useMemo(() => ALL_CARDS.filter(card => ownedSet.has(card.id) &&
-    (!onlineFlow || ENABLED_ONLINE_CARDS.has(card.id))), [ownedSet, onlineFlow]);
+  const ownedCards = useMemo(() => ALL_CARDS.filter(card => ownedSet.has(card.id)), [ownedSet]);
 
   const [activeCategory, setActiveCategory] = useState<CardCategory>('attack');
   const [selectedDeck, setSelectedDeck] = useState<string[]>([]);
@@ -69,9 +40,8 @@ export default function DeckSelection() {
   // Após o AsyncStorage hidratar, mostra o deck salvo. Nunca sobrescreve o save vazio na partida.
   useEffect(() => {
     if (!hydrated) return;
-    setSelectedDeck(equippedDeck.filter(id => ownedSet.has(id) && !!getCardDefinition(id) &&
-      (!onlineFlow || ENABLED_ONLINE_CARDS.has(id))));
-  }, [hydrated, profile?.id, equippedDeck, ownedSet, onlineFlow]);
+    setSelectedDeck(equippedDeck.filter(id => ownedSet.has(id) && !!getCardDefinition(id)));
+  }, [hydrated, profile?.id, equippedDeck, ownedSet]);
 
   const isCompactLandscape = height < 420;
   const columns = width >= 1180 ? 4 : width >= 760 ? 3 : 2;
@@ -98,7 +68,7 @@ export default function DeckSelection() {
   );
 
   const toggleCard = (cardId: string) => {
-    if (!hydrated || !profile || !ownedSet.has(cardId) || (onlineFlow && !ENABLED_ONLINE_CARDS.has(cardId))) return;
+    if (!hydrated || !profile || !ownedSet.has(cardId)) return;
     setOpenDescriptionId(null);
 
     if (selectedDeck.includes(cardId)) {
@@ -119,57 +89,31 @@ export default function DeckSelection() {
     setSelectedDeck(current => [...current, cardId]);
   };
 
-  const handleConfirm = async () => {
+  // A escolha online/offline só acontece na MapSelection.
+  // Não sincronizar o deck aqui: o usuário pode estar sem internet a bordo.
+  // O deck de corrida é passado por params; no online, a MapSelection
+  // faz a mutação autenticada somente se o deck precisar ser atualizado.
+  const handleConfirm = () => {
     if (!hydrated || !profile) return;
     if (!isDeckComplete) {
       Alert.alert(
         t('deckSelection.incompleteDeckTitle'),
-        t('deckSelection.incompleteDeckMessage', {
-          count: MAX_DECK_SIZE,
-        }),
+        t('deckSelection.incompleteDeckMessage', { count: MAX_DECK_SIZE }),
       );
       return;
     }
 
-    const start = await beginOnlinePlayerMutation();
-    if (!start.online) {
-      Alert.alert(
-        'WILD NETWORK',
-        'Para trocar o deck é necessário estar online. Você ainda pode correr offline com o último deck sincronizado.',
-      );
-      return;
-    }
-
-    // Persistir apenas no confirmar; mudanças locais incompletas não alteram o deck salvo.
-    if (!setEquippedDeck(selectedDeck)) {
-      Alert.alert(t('deckSelection.incompleteDeckTitle'), t('deckSelection.incompleteDeckMessage', { count: MAX_DECK_SIZE }));
-      return;
-    }
-
-    if (!(await confirmOnlinePlayerMutation(start.before))) {
-      Alert.alert(
-        'WILD NETWORK',
-        'O deck não foi confirmado no servidor e foi restaurado para a última configuração salva.',
-      );
-      return;
-    }
-
-    if (onlineFlow) {
-      router.navigate('/OnlineLab' as any);
-    } else {
-      router.navigate({
-        pathname: '/MapSelectionScreen',
-        params: { deck: JSON.stringify(selectedDeck) },
-      });
-    }
+    router.navigate({
+      pathname: '/MapSelectionScreen',
+      params: { deck: JSON.stringify(selectedDeck) },
+    } as any);
   };
 
   const attackCount = ownedCards.filter(card => card.category === 'attack').length;
   const defenseCount = ownedCards.filter(card => card.category === 'defense').length;
   const isDeckComplete = selectedDeck.length === MAX_DECK_SIZE &&
     new Set(selectedDeck).size === MAX_DECK_SIZE &&
-    selectedDeck.every(id => ownedSet.has(id) && !!getCardDefinition(id) &&
-      (!onlineFlow || ENABLED_ONLINE_CARDS.has(id)));
+    selectedDeck.every(id => ownedSet.has(id) && !!getCardDefinition(id));
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -210,7 +154,7 @@ export default function DeckSelection() {
             <View style={styles.availableTopRow}>
               <View>
                 <Text style={styles.sectionTitle}>{t('deckSelection.availableCards')}</Text>
-                <Text style={styles.sectionHint}>{onlineFlow ? 'CARTAS HABILITADAS NO MULTIPLAYER' : t('deckSelection.availableHint')}</Text>
+                <Text style={styles.sectionHint}>{t('deckSelection.availableHint')}</Text>
               </View>
 
               <View style={styles.categoryTabs}>
@@ -290,7 +234,7 @@ export default function DeckSelection() {
                   >
                     <View style={styles.cardTopRow}>
                       <View style={[styles.costBadge, { borderColor: card.color }]}>
-                        <Text style={styles.costText}>💧 {onlineFlow ? (ONLINE_BATTLE_COST[card.id] ?? card.cost) : card.cost}</Text>
+                        <Text style={styles.costText}>💧 {card.cost}</Text>
                       </View>
 
                       {isSelected && (
@@ -419,7 +363,7 @@ export default function DeckSelection() {
                           `deckSelection.categories.${card.category}`
                         )}
                         {' • 💧 '}
-                        {onlineFlow ? (ONLINE_BATTLE_COST[card.id] ?? card.cost) : card.cost}
+                        {card.cost}
                       </Text>
                     </View>
 

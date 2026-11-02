@@ -1520,7 +1520,7 @@ export default function RaceResultScreen() {
                                         });
                                     }}
                                 >
-                                    <Text style={styles.buttonText}>{t('raceResult.surpriseChest')}</Text>
+                                    <Text style={styles.buttonText}>🎁 SURPRESA! ABRIR BAÚ</Text>
                                 </TouchableOpacity>
                             )}
                             <TouchableOpacity

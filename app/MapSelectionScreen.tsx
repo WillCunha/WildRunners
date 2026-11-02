@@ -1,13 +1,19 @@
+import type { CenarioId, SkyTheme } from '@/components/Cenarios/CenarioBackground';
 import WildBackButton from '@/components/ui/WildBackButton';
 import { AudioContext } from '@/context/AudioContext';
 import { useLanguage } from '@/context/LanguageContext';
+import { setOfflineRaceSelection, setOnlineRaceMapSelection } from '@/src/online/selectedRaceMap';
+import { beginOnlinePlayerMutation, confirmOnlinePlayerMutation } from '@/src/services/sync/onlinePlayerMutation';
 import { usePlayerStore } from '@/src/store/playerStore';
+import { MAX_DECK_SIZE, getCardDefinition } from '@/src/utils/cardMap';
 import { CITY_MAPS } from '@/src/utils/cityMaps';
 import { getPlayerLevel, normalizeLegacyLevelRequirement } from '@/src/utils/progression';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useContext, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
+  FlatList,
   Image,
   ImageBackground,
   ImageSourcePropType,
@@ -23,21 +29,68 @@ type CityMap = (typeof CITY_MAPS)[number];
 type CarouselItem = CityMap | { id: string; city?: undefined };
 
 const ACCENT = '#FFD60A';
+const ONLINE_CARDS = new Set([
+  'slow_slow', 'nitro_power', 'shield', 'bullet', 'chains', 'tnt', 'oil_spit',
+  'quick_repair', 'emp_pulse', 'swap', 'magnet', 'blind', 'tornado',
+  'bubble_lift', 'armor', 'ghost', 'second_chance',
+]);
+
+// O catálogo legado usa 'saopaulo'; o cenário 2.5D usa 'sao_paulo'.
+function getCenarioId(map: CityMap): CenarioId {
+  return (map.id === 'saopaulo' ? 'sao_paulo' : map.id) as CenarioId;
+}
+
 
 export default function MapSelectionScreen() {
   const { width, height } = useWindowDimensions();
   const isCompactLandscape = height < 430;
 
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  // Texto local temporário para não exigir mudanças nos três arquivos i18n.
+  const locale = String(language).toLowerCase();
+  const copy = locale.startsWith('es') ? {
+    online: 'JUGAR ONLINE', onlineHint: 'Sala multijugador • requiere internet',
+    offline: 'JUGAR OFFLINE', offlineHint: 'Carrera con bots • sin internet',
+    preparing: 'PREPARANDO...', invalidDeck: 'Mazo inválido. Vuelve y selecciona cuatro cartas desbloqueadas.',
+    unsupported: 'Este mazo contiene una carta que todavía no está habilitada en multijugador.',
+    disconnected: 'Sin conexión para sincronizar el mazo. Elige OFFLINE para correr contra bots.',
+    equipError: 'No se pudieron equipar las cartas seleccionadas.',
+    syncError: 'El servidor no confirmó el mazo. Se restauró el guardado anterior.',
+    startError: 'No se pudo preparar la carrera. Puedes elegir OFFLINE para jugar sin conexión.',
+  } : locale.startsWith('en') ? {
+    online: 'PLAY ONLINE', onlineHint: 'Multiplayer lobby • internet required',
+    offline: 'PLAY OFFLINE', offlineHint: 'Race with bots • no internet',
+    preparing: 'PREPARING...', invalidDeck: 'Invalid deck. Go back and select four unlocked cards.',
+    unsupported: 'This deck has a card that is not enabled in multiplayer yet.',
+    disconnected: 'Cannot sync your deck without internet. Choose OFFLINE to race bots.',
+    equipError: 'Could not equip the selected cards.',
+    syncError: 'The server did not confirm your deck. Your previous save was restored.',
+    startError: 'Could not prepare the race. Choose OFFLINE to play without internet.',
+  } : {
+    online: 'JOGAR ONLINE', onlineHint: 'Lobby multiplayer • requer internet',
+    offline: 'JOGAR OFFLINE', offlineHint: 'Corrida com bots • sem internet',
+    preparing: 'PREPARANDO...', invalidDeck: 'Deck inválido. Volte à seleção e escolha quatro cartas desbloqueadas.',
+    unsupported: 'Seu deck contém uma carta que ainda não está habilitada no multiplayer.',
+    disconnected: 'Sem conexão para sincronizar o deck online. Escolha OFFLINE para correr contra bots.',
+    equipError: 'Não foi possível equipar as cartas selecionadas.',
+    syncError: 'O servidor não confirmou o deck. O save anterior foi restaurado.',
+    startError: 'Não foi possível preparar a corrida. Para jogar sem internet, escolha OFFLINE.',
+  };
 
   const itemSize = Math.min(width * 0.37, 440);
   const spacerSize = Math.max(0, (width - itemSize) / 2);
 
   const scrollX = useRef(new Animated.Value(0)).current;
+  const carouselRef = useRef<FlatList<CarouselItem>>(null);
+  const launchLock = useRef(false);
   const params = useLocalSearchParams<{ deck?: string }>();
   const profile = usePlayerStore(state => state.profile);
+  const savedDeck = usePlayerStore(state => state.equippedDeck);
+  const setEquippedDeck = usePlayerStore(state => state.setEquippedDeck);
   const { pauseMusic } = useContext(AudioContext);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [modeMenuOpen, setModeMenuOpen] = useState(false);
+  const [launching, setLaunching] = useState(false);
 
   const dataWithSpacers: CarouselItem[] = [
     { id: 'left-spacer' },
@@ -49,18 +102,93 @@ export default function MapSelectionScreen() {
   const trophies = profile?.trophies ?? 0;
   const playerLevel = getPlayerLevel(profile?.xp ?? 0);
 
-  const startRace = (item: CityMap) => {
-    const requiredLevel = normalizeLegacyLevelRequirement(item.levelRequired);
+  const selectMap = (index: number) => {
+    setModeMenuOpen(false);
+    setActiveIndex(index);
+    carouselRef.current?.scrollToOffset({ offset: index * itemSize, animated: true });
+  };
+
+  const readSelectedDeck = (): string[] | null => {
+    let deck: unknown = savedDeck;
+    if (params.deck !== undefined) {
+      try { deck = JSON.parse(params.deck); }
+      catch { return null; }
+    }
+    if (!Array.isArray(deck) || deck.length !== MAX_DECK_SIZE ||
+      new Set(deck).size !== MAX_DECK_SIZE ||
+      !deck.every(id => typeof id === 'string' && !!getCardDefinition(id) &&
+        profile?.unlocks?.cards?.includes(id))) return null;
+    return deck as string[];
+  };
+
+  const startRace = async (mode: 'online' | 'offline') => {
+    if (launchLock.current || !activeMap) return;
+    const requiredLevel = normalizeLegacyLevelRequirement(activeMap.levelRequired);
     if (playerLevel < requiredLevel) return;
 
-    pauseMusic();
-    router.replace({
-      pathname: '/mapa',
-      params: {
-        deck: params.deck,
-        mapImage: item.background,
-      },
-    });
+    const deck = readSelectedDeck();
+    if (!deck) {
+      Alert.alert('WILD RUNNERS', copy.invalidDeck);
+      return;
+    }
+
+    launchLock.current = true;
+    setLaunching(true);
+    try {
+      const mapId = getCenarioId(activeMap);
+      const skyTheme: SkyTheme = 'day';
+      if (mode === 'offline') {
+        setOfflineRaceSelection({ mapId, skyTheme, deck });
+        setModeMenuOpen(false);
+        pauseMusic();
+        // O modo offline não consulta Firebase nem a AWS, mesmo com deck editado.
+        router.replace({
+          pathname: '/mapa',
+          params: { mode: 'offline', deck: JSON.stringify(deck), mapId, skyTheme },
+        } as any);
+        return;
+      }
+
+      if (deck.some(id => !ONLINE_CARDS.has(id))) {
+        Alert.alert('WILD NETWORK', copy.unsupported);
+        return;
+      }
+
+      // Não enviar gravação desnecessária quando o deck já estiver sincronizado.
+      const deckAlreadySaved = savedDeck.length === deck.length &&
+        savedDeck.every((id, index) => id === deck[index]);
+      if (!deckAlreadySaved) {
+        const start = await beginOnlinePlayerMutation();
+        if (!start.online) {
+          Alert.alert('WILD NETWORK', copy.disconnected);
+          return;
+        }
+        if (!setEquippedDeck(deck)) {
+          Alert.alert('WILD NETWORK', copy.equipError);
+          return;
+        }
+        if (!(await confirmOnlinePlayerMutation(start.before))) {
+          Alert.alert('WILD NETWORK', copy.syncError);
+          return;
+        }
+      }
+
+      // A seleção em memória acompanha o handoff OnlineLab -> Mapa,
+      // que atualmente não encaminha mapId ao abrir a corrida.
+      setOnlineRaceMapSelection({ mapId, skyTheme });
+      setModeMenuOpen(false);
+      pauseMusic();
+      router.navigate({
+        pathname: '/OnlineLab',
+        params: { mapId, skyTheme },
+      } as any);
+    } catch (error) {
+      console.warn('[WILD MAP] Falha ao preparar corrida:', error);
+      Alert.alert('WILD NETWORK', copy.startError);
+    } finally {
+      launchLock.current = false;
+      setLaunching(false);
+    }
   };
 
   const renderItem = ({ item, index }: { item: CarouselItem; index: number }) => {
@@ -104,7 +232,7 @@ export default function MapSelectionScreen() {
         >
           <TouchableOpacity
             activeOpacity={0.9}
-            onPress={() => startRace(item)}
+            onPress={() => selectMap(realIndex)}
             style={styles.cardVisual}
           >
             <View style={styles.cardAccent} />
@@ -210,6 +338,7 @@ export default function MapSelectionScreen() {
             <View style={styles.frameLineBottom} />
 
             <Animated.FlatList
+              ref={carouselRef}
               data={dataWithSpacers}
               keyExtractor={item => item.id}
               horizontal
@@ -229,6 +358,7 @@ export default function MapSelectionScreen() {
                 setActiveIndex(
                   Math.max(0, Math.min(CITY_MAPS.length - 1, nextIndex)),
                 );
+                setModeMenuOpen(false);
               }}
               scrollEventThrottle={16}
               renderItem={renderItem}
@@ -253,27 +383,52 @@ export default function MapSelectionScreen() {
               </Text>
             </View>
 
-            <TouchableOpacity
-              activeOpacity={activeUnlocked ? 0.86 : 1}
-              onPress={() => activeMap && startRace(activeMap)}
-              style={[
-                styles.continueButton,
-                !activeUnlocked && styles.continueButtonLocked,
-              ]}
-            >
-              <Text
+            <View style={styles.playActionWrap}>
+              {modeMenuOpen && activeUnlocked && !launching && (
+                <View style={styles.modeMenu}>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    activeOpacity={0.85}
+                    style={styles.modeOption}
+                    onPress={() => void startRace('online')}
+                  >
+                    <Text style={styles.modeOptionTitle}>🌐  {copy.online}</Text>
+                    <Text style={styles.modeOptionHint}>{copy.onlineHint}</Text>
+                  </TouchableOpacity>
+                  <View style={styles.modeDivider} />
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    activeOpacity={0.85}
+                    style={styles.modeOption}
+                    onPress={() => void startRace('offline')}
+                  >
+                    <Text style={styles.modeOptionTitle}>🏁  {copy.offline}</Text>
+                    <Text style={styles.modeOptionHint}>{copy.offlineHint}</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              <TouchableOpacity
+                accessibilityRole="button"
+                disabled={!activeUnlocked || launching}
+                activeOpacity={activeUnlocked ? 0.86 : 1}
+                onPress={() => setModeMenuOpen(open => !open)}
                 style={[
-                  styles.continueButtonText,
-                  !activeUnlocked && styles.continueButtonTextLocked,
+                  styles.continueButton,
+                  !activeUnlocked && styles.continueButtonLocked,
                 ]}
               >
-                {activeUnlocked
-                  ? t('mapSelection.raceOnTrack')
-                  : t('mapSelection.lockedButton', {
-                    level: activeRequiredLevel,
-                  })}
-              </Text>
-            </TouchableOpacity>
+                <Text
+                  style={[
+                    styles.continueButtonText,
+                    !activeUnlocked && styles.continueButtonTextLocked,
+                  ]}
+                >
+                  {launching ? copy.preparing : activeUnlocked
+                    ? `${t('mapSelection.raceOnTrack')}  ▴`
+                    : t('mapSelection.lockedButton', { level: activeRequiredLevel })}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </SafeAreaView>
@@ -419,6 +574,8 @@ const styles = StyleSheet.create({
   metaValueReady: { color: '#32D74B' },
   metaDivider: { width: StyleSheet.hairlineWidth, height: 23, backgroundColor: 'rgba(255,255,255,0.20)', marginHorizontal: 9 },
   footer: {
+    zIndex: 20,
+    overflow: 'visible',
     minHeight: 57,
     flexDirection: 'row',
     alignItems: 'center',
@@ -426,6 +583,12 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   selectedMapInfo: { flex: 1, minWidth: 0 },
+  playActionWrap: { position: 'relative', zIndex: 20 },
+  modeMenu: { position: 'absolute', bottom: 52, right: 0, width: 260, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,214,10,0.6)', backgroundColor: '#212125', paddingVertical: 4, zIndex: 25, elevation: 15 },
+  modeOption: { minHeight: 51, paddingHorizontal: 14, paddingVertical: 8, justifyContent: 'center' },
+  modeOptionTitle: { color: '#FFFFFF', fontSize: 12, fontWeight: '900' },
+  modeOptionHint: { color: '#AAAAB2', fontSize: 9, marginTop: 3 },
+  modeDivider: { backgroundColor: 'rgba(255,255,255,0.16)', height: 1 },
   selectedMapLabel: { color: '#85858C', fontSize: 8, fontWeight: '900', letterSpacing: 1.1 },
   selectedMapName: { color: '#FFFFFF', fontSize: 19, fontWeight: '900', fontStyle: 'italic', marginTop: -1 },
   continueButton: {

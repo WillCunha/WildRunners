@@ -320,8 +320,8 @@ export default function CarSelectionScreen() {
         setSelectedColorBack(previewColorBack);
         setSelectedFinishId(previewFinishId);
         setSelectedEquipment(previewEquipment);
-        // ALPHA 13: fluxo oficial — garagem > deck > lobby online.
-        router.navigate({ pathname: '/deckselection', params: { next: 'online' } } as any);
+        // Fluxo único: garagem > deck > seleção do mapa > modo da corrida.
+        router.navigate('/deckselection' as any);
     };
 
     const testRaceResult = () => {
