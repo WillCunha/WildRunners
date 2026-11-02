@@ -517,6 +517,13 @@ const ptBR = {
     emailHint:
       'No MVP ele fica salvo localmente. Depois será migrado para sua conta no servidor.',
 
+    messageTitle: 'NOVO PILOTO',
+    messageStart: 'Vamos criar uma conta WF ID e um save novo para este piloto.',
+    messageEnd: 'Se você já possui uma conta com este mesmo e- mail, use ENTRAR para carregar o save existente.',
+    confirmation: 'CONTINUAR',
+    cancelation: 'CANCELAR',
+    already: 'JÁ TENHO CONTA',
+
     driverReady: 'PILOTO PRONTO',
     startAdventure: 'COMEÇAR AVENTURA',
 
@@ -748,7 +755,7 @@ const ptBR = {
     "accelerate": "ACELERAR",
     "awsAuthority": "A Servidor da WF continua responsável pela física, posição, nitro e resultado.",
     "session": "SESSÃO"
-,
+    ,
     'firebaseAuthMissing': 'Sessão Firebase não encontrada. Faça login novamente antes de correr online.',
     'garageNotOwned': 'O carro selecionado não está na garagem confirmada no Firestore.',
     'cloudSaveMissing': 'Seu save não foi encontrado no Firebase. Sincronize o perfil antes de entrar.',
@@ -814,7 +821,7 @@ const ptBR = {
     "win": "🏆 VITÓRIA!",
     "loss": "🏁 DERROTA",
     "draw": "🏁 EMPATE"
-,
+    ,
     'disconnectCard': 'Conexão interrompida. Aguarde a reconexão.',
     'beforeStart': 'Disponível somente depois da largada (fase: %{phase}).',
     'waitCard': 'Aguardando confirmação da carta anterior pelo Servidor da WF.',

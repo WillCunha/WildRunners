@@ -170,7 +170,7 @@ export default function RegistrationScreen() {
   const registeringRef = useRef(false);
   // Se Auth criar o UID e o Firestore falhar, reintenta SOMENTE o save
   // associado à mesma conta recém-criada nesta sessão. Nunca sobrescreve saves.
-  const pendingRegistrationRef = useRef<{uid:string;username:string;email:string}|null>(null);
+  const pendingRegistrationRef = useRef<{ uid: string; username: string; email: string } | null>(null);
   const loginBusyRef = useRef(false);
   const [mode, setMode] = useState<AuthMode>('login');
   const [loginBusy, setLoginBusy] = useState(false);
@@ -319,7 +319,7 @@ export default function RegistrationScreen() {
       if (pending) {
         // Nunca executar o retry para outra conta ou outro formulário.
         if (pending.uid !== auth.currentUser?.uid ||
-            pending.email !== safeEmail || pending.username !== safeUsername) {
+          pending.email !== safeEmail || pending.username !== safeUsername) {
           throw new Error('WILD_PENDING_REGISTRATION_MISMATCH');
         }
       } else {
@@ -374,7 +374,17 @@ export default function RegistrationScreen() {
       void createConfirmedProfile();
       return;
     }
-    console.log("registro criado")
+
+    Alert.alert(
+      t('registration.messageTitle'),
+      `${t('registration.messageStart')}\n\n${t('registration.messageEnd')}`,
+      [
+        { text: t('registration.cancelation'), style: 'cancel' },
+        { text: t('registration.already'), onPress: () => switchMode('login') },
+        { text: t('registration.confirmation'), onPress: () => void createConfirmedProfile() },
+      ]
+    );
+
   };
 
   return (
@@ -461,309 +471,309 @@ export default function RegistrationScreen() {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-            <View
-              style={[
-                styles.formPanel,
-                isCompactLandscape && styles.formPanelCompact,
-                isNarrow && styles.formPanelNarrow,
-              ]}
-            >
-              <View style={styles.panelAccent} />
-              <View style={styles.authTabs}>
-                <TouchableOpacity
-                  accessibilityRole="tab" accessibilityState={{ selected: mode === 'login' }}
-                  activeOpacity={0.85} disabled={authBusy} onPress={() => switchMode('login')}
-                  style={[styles.authTab, mode === 'login' && styles.authTabSelected]}
-                >
-                  <Text style={[styles.authTabText, mode === 'login' && styles.authTabTextSelected]}>{labels.login}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  accessibilityRole="tab" accessibilityState={{ selected: mode === 'register' }}
-                  activeOpacity={0.85} disabled={authBusy} onPress={() => switchMode('register')}
-                  style={[styles.authTab, mode === 'register' && styles.authTabSelected]}
-                >
-                  <Text style={[styles.authTabText, mode === 'register' && styles.authTabTextSelected]}>{labels.register}</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.panelHeader}>
-                <View style={styles.panelHeaderText}>
-                  <Text style={styles.panelEyebrow}>
-                    {mode === 'login' ? labels.loginEyebrow : t('registration.newDriver')}
-                  </Text>
-
-                  <Text style={styles.panelTitle}>
-                    {mode === 'login' ? labels.loginTitle : t('registration.createIdentity')}
-                  </Text>
+              <View
+                style={[
+                  styles.formPanel,
+                  isCompactLandscape && styles.formPanelCompact,
+                  isNarrow && styles.formPanelNarrow,
+                ]}
+              >
+                <View style={styles.panelAccent} />
+                <View style={styles.authTabs}>
+                  <TouchableOpacity
+                    accessibilityRole="tab" accessibilityState={{ selected: mode === 'login' }}
+                    activeOpacity={0.85} disabled={authBusy} onPress={() => switchMode('login')}
+                    style={[styles.authTab, mode === 'login' && styles.authTabSelected]}
+                  >
+                    <Text style={[styles.authTabText, mode === 'login' && styles.authTabTextSelected]}>{labels.login}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    accessibilityRole="tab" accessibilityState={{ selected: mode === 'register' }}
+                    activeOpacity={0.85} disabled={authBusy} onPress={() => switchMode('register')}
+                    style={[styles.authTab, mode === 'register' && styles.authTabSelected]}
+                  >
+                    <Text style={[styles.authTabText, mode === 'register' && styles.authTabTextSelected]}>{labels.register}</Text>
+                  </TouchableOpacity>
                 </View>
 
-                <View style={styles.panelBranding}>
-                  <View style={styles.driverBadge}>
-                    <Text style={styles.driverBadgeTop}>
-                      WF
+                <View style={styles.panelHeader}>
+                  <View style={styles.panelHeaderText}>
+                    <Text style={styles.panelEyebrow}>
+                      {mode === 'login' ? labels.loginEyebrow : t('registration.newDriver')}
                     </Text>
-                    <Text style={styles.driverBadgeBottom}>
-                      ID
+
+                    <Text style={styles.panelTitle}>
+                      {mode === 'login' ? labels.loginTitle : t('registration.createIdentity')}
                     </Text>
                   </View>
 
-                  <Image
-                    source={require('@/assets/images/logo1024v1.png')}
-                    resizeMode="contain"
-                    style={styles.wfLogo}
-                  />
-                </View>
-              </View>
+                  <View style={styles.panelBranding}>
+                    <View style={styles.driverBadge}>
+                      <Text style={styles.driverBadgeTop}>
+                        WF
+                      </Text>
+                      <Text style={styles.driverBadgeBottom}>
+                        ID
+                      </Text>
+                    </View>
 
-              <View style={styles.divider} />
-
-              {mode === 'login' ? (
-                <View>
-                  <Text style={styles.loginIntro}>{labels.loginSubtitle}</Text>
-                  <View style={styles.fieldBlock}>
-                    <Text style={styles.fieldLabel}>{labels.email}</Text>
-                    <TextInput value={loginEmail} onChangeText={value => { setLoginEmail(value); setLoginError(null); }}
-                      style={[styles.inputShell, styles.authPasswordInput, styles.authInput]}
-                      placeholder="email@exemplo.com" placeholderTextColor="rgba(255,255,255,0.35)"
-                      keyboardType="email-address" autoCapitalize="none" autoCorrect={false}
-                      textContentType="emailAddress" autoComplete="email" maxLength={254}
-                      editable={!loginBusy} returnKeyType="next" />
+                    <Image
+                      source={require('@/assets/images/logo1024v1.png')}
+                      resizeMode="contain"
+                      style={styles.wfLogo}
+                    />
                   </View>
-                  <View style={styles.fieldBlock}>
-                    <Text style={styles.fieldLabel}>{labels.password}</Text>
-                    <TextInput value={loginPassword} onChangeText={value => { setLoginPassword(value); setLoginError(null); }}
-                      style={[styles.inputShell, styles.authPasswordInput, styles.authInput]}
-                      placeholder={labels.password} placeholderTextColor="rgba(255,255,255,0.35)"
-                      secureTextEntry={!loginVisible} textContentType="password"
-                      autoComplete="current-password" autoCapitalize="none" autoCorrect={false}
-                      maxLength={128} editable={!loginBusy} returnKeyType="done"
-                      onSubmitEditing={() => { void handleLogin(); }} />
-                    <TouchableOpacity disabled={loginBusy} onPress={() => setLoginVisible(v => !v)} style={styles.loginInlineAction}>
-                      <Text style={styles.loginLink}>{loginVisible ? labels.hide : labels.reveal}</Text>
+                </View>
+
+                <View style={styles.divider} />
+
+                {mode === 'login' ? (
+                  <View>
+                    <Text style={styles.loginIntro}>{labels.loginSubtitle}</Text>
+                    <View style={styles.fieldBlock}>
+                      <Text style={styles.fieldLabel}>{labels.email}</Text>
+                      <TextInput value={loginEmail} onChangeText={value => { setLoginEmail(value); setLoginError(null); }}
+                        style={[styles.inputShell, styles.authPasswordInput, styles.authInput]}
+                        placeholder="email@exemplo.com" placeholderTextColor="rgba(255,255,255,0.35)"
+                        keyboardType="email-address" autoCapitalize="none" autoCorrect={false}
+                        textContentType="emailAddress" autoComplete="email" maxLength={254}
+                        editable={!loginBusy} returnKeyType="next" />
+                    </View>
+                    <View style={styles.fieldBlock}>
+                      <Text style={styles.fieldLabel}>{labels.password}</Text>
+                      <TextInput value={loginPassword} onChangeText={value => { setLoginPassword(value); setLoginError(null); }}
+                        style={[styles.inputShell, styles.authPasswordInput, styles.authInput]}
+                        placeholder={labels.password} placeholderTextColor="rgba(255,255,255,0.35)"
+                        secureTextEntry={!loginVisible} textContentType="password"
+                        autoComplete="current-password" autoCapitalize="none" autoCorrect={false}
+                        maxLength={128} editable={!loginBusy} returnKeyType="done"
+                        onSubmitEditing={() => { void handleLogin(); }} />
+                      <TouchableOpacity disabled={loginBusy} onPress={() => setLoginVisible(v => !v)} style={styles.loginInlineAction}>
+                        <Text style={styles.loginLink}>{loginVisible ? labels.hide : labels.reveal}</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <TouchableOpacity activeOpacity={0.88} disabled={loginBusy || !loginEmail.trim() || !loginPassword}
+                      onPress={() => { void handleLogin(); }}
+                      style={[styles.submitButton, (loginBusy || !loginEmail.trim() || !loginPassword) && styles.submitButtonInactive]}>
+                      <Text style={styles.submitKicker}>WILD NETWORK</Text>
+                      <Text style={styles.submitText}>{loginBusy ? labels.entering : labels.enter}</Text>
                     </TouchableOpacity>
-                  </View>
-                  <TouchableOpacity activeOpacity={0.88} disabled={loginBusy || !loginEmail.trim() || !loginPassword}
-                    onPress={() => { void handleLogin(); }}
-                    style={[styles.submitButton, (loginBusy || !loginEmail.trim() || !loginPassword) && styles.submitButtonInactive]}>
-                    <Text style={styles.submitKicker}>WILD NETWORK</Text>
-                    <Text style={styles.submitText}>{loginBusy ? labels.entering : labels.enter}</Text>
-                  </TouchableOpacity>
-                  {loginBusy && <ActivityIndicator color={ACCENT} style={styles.loginSpinner} />}
-                  {loginError && (
-                    <Text selectable style={styles.authErrorText}>
-                      {loginError}
-                    </Text>
-                  )}
-                  <TouchableOpacity disabled={loginBusy} onPress={handlePasswordReset} style={styles.loginInlineAction}>
-                    <Text style={styles.loginLink}>{labels.forgot}</Text>
-                  </TouchableOpacity>
-                  {loginNotice && <Text selectable style={styles.loginNotice}>{loginNotice}</Text>}
-                  <Text style={styles.loginSmallNote}>{labels.mailHint}</Text>
-                  <TouchableOpacity disabled={loginBusy} onPress={() => router.replace('/LoadingScreen')} style={styles.loginInlineAction}>
-                    <Text style={styles.loginLink}>{labels.return}</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <>
-                  <View style={styles.fieldBlock}>
-                    <View style={styles.fieldHeader}>
-                      <Text style={styles.fieldLabel}>
-                        {t('registration.usernameLabel')}
-                      </Text>
-
-                      <Text style={styles.fieldCounter}>
-                        {username.length}/12
-                      </Text>
-                    </View>
-
-                    <View
-                      style={[
-                        styles.inputShell,
-                        usernameFocused &&
-                        styles.inputShellFocused,
-                        usernameTouched &&
-                        !usernameIsValid &&
-                        styles.inputShellError,
-                      ]}
-                    >
-                      <Text style={styles.inputPrefix}>
-                        @
-                      </Text>
-
-                      <TextInput
-                        value={username}
-                        onChangeText={value => {
-                          setUsername(
-                            value.replace(/\s/g, ''),
-                          );
-                        }}
-                        onFocus={() =>
-                          setUsernameFocused(true)
-                        }
-                        onBlur={() => {
-                          setUsernameFocused(false);
-                          setUsernameTouched(true);
-                        }}
-                        placeholder={t('registration.usernamePlaceholder')}
-                        placeholderTextColor="rgba(255,255,255,0.28)"
-                        style={styles.input}
-                        maxLength={12}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        returnKeyType="next"
-                      />
-                    </View>
-
-                    {usernameTouched &&
-                      !usernameIsValid ? (
-                      <Text style={styles.errorText}>
-                        {t('registration.usernameError')}
-                      </Text>
-                    ) : (
-                      <Text style={styles.hintText}>
-                        {t('registration.usernameHint')}
+                    {loginBusy && <ActivityIndicator color={ACCENT} style={styles.loginSpinner} />}
+                    {loginError && (
+                      <Text selectable style={styles.authErrorText}>
+                        {loginError}
                       </Text>
                     )}
+                    <TouchableOpacity disabled={loginBusy} onPress={handlePasswordReset} style={styles.loginInlineAction}>
+                      <Text style={styles.loginLink}>{labels.forgot}</Text>
+                    </TouchableOpacity>
+                    {loginNotice && <Text selectable style={styles.loginNotice}>{loginNotice}</Text>}
+                    <Text style={styles.loginSmallNote}>{labels.mailHint}</Text>
+                    <TouchableOpacity disabled={loginBusy} onPress={() => router.replace('/LoadingScreen')} style={styles.loginInlineAction}>
+                      <Text style={styles.loginLink}>{labels.return}</Text>
+                    </TouchableOpacity>
                   </View>
+                ) : (
+                  <>
+                    <View style={styles.fieldBlock}>
+                      <View style={styles.fieldHeader}>
+                        <Text style={styles.fieldLabel}>
+                          {t('registration.usernameLabel')}
+                        </Text>
 
-                  <View style={styles.fieldBlock}>
-                    <View style={styles.fieldHeader}>
-                      <Text style={styles.fieldLabel}>
-                        {t('registration.emailLabel')}
-                      </Text>
+                        <Text style={styles.fieldCounter}>
+                          {username.length}/12
+                        </Text>
+                      </View>
 
-                      <Text
+                      <View
                         style={[
-                          styles.validationState,
-                          emailTouched &&
-                            emailIsValid
-                            ? styles.validationStateOk
-                            : undefined,
+                          styles.inputShell,
+                          usernameFocused &&
+                          styles.inputShellFocused,
+                          usernameTouched &&
+                          !usernameIsValid &&
+                          styles.inputShellError,
                         ]}
                       >
-                        {emailTouched &&
-                          emailIsValid
-                          ? t('registration.validated')
-                          : t('registration.account')}
-                      </Text>
+                        <Text style={styles.inputPrefix}>
+                          @
+                        </Text>
+
+                        <TextInput
+                          value={username}
+                          onChangeText={value => {
+                            setUsername(
+                              value.replace(/\s/g, ''),
+                            );
+                          }}
+                          onFocus={() =>
+                            setUsernameFocused(true)
+                          }
+                          onBlur={() => {
+                            setUsernameFocused(false);
+                            setUsernameTouched(true);
+                          }}
+                          placeholder={t('registration.usernamePlaceholder')}
+                          placeholderTextColor="rgba(255,255,255,0.28)"
+                          style={styles.input}
+                          maxLength={12}
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          returnKeyType="next"
+                        />
+                      </View>
+
+                      {usernameTouched &&
+                        !usernameIsValid ? (
+                        <Text style={styles.errorText}>
+                          {t('registration.usernameError')}
+                        </Text>
+                      ) : (
+                        <Text style={styles.hintText}>
+                          {t('registration.usernameHint')}
+                        </Text>
+                      )}
                     </View>
 
-                    <View
+                    <View style={styles.fieldBlock}>
+                      <View style={styles.fieldHeader}>
+                        <Text style={styles.fieldLabel}>
+                          {t('registration.emailLabel')}
+                        </Text>
+
+                        <Text
+                          style={[
+                            styles.validationState,
+                            emailTouched &&
+                              emailIsValid
+                              ? styles.validationStateOk
+                              : undefined,
+                          ]}
+                        >
+                          {emailTouched &&
+                            emailIsValid
+                            ? t('registration.validated')
+                            : t('registration.account')}
+                        </Text>
+                      </View>
+
+                      <View
+                        style={[
+                          styles.inputShell,
+                          emailFocused &&
+                          styles.inputShellFocused,
+                          emailTouched &&
+                          !emailIsValid &&
+                          styles.inputShellError,
+                        ]}
+                      >
+                        <Text style={styles.mailIcon}>
+                          ✉
+                        </Text>
+
+                        <TextInput
+                          value={email}
+                          onChangeText={value => { setEmail(value); setRegisterError(null); }}
+                          onFocus={() =>
+                            setEmailFocused(true)
+                          }
+                          onBlur={() => {
+                            setEmailFocused(false);
+                            setEmailTouched(true);
+                          }}
+                          placeholder={t('registration.emailPlaceholder')}
+                          placeholderTextColor="rgba(255,255,255,0.28)"
+                          style={styles.input}
+                          maxLength={254}
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          keyboardType="email-address"
+                          textContentType="emailAddress"
+                          autoComplete="email"
+                          returnKeyType="done"
+                          onSubmitEditing={() => { }}
+                        />
+                      </View>
+
+                      {emailTouched &&
+                        !emailIsValid ? (
+                        <Text style={styles.errorText}>
+                          {t('registration.emailError')}
+                        </Text>
+                      ) : (
+                        <Text style={styles.hintText}>
+                          {t('registration.emailHint')}
+                        </Text>
+                      )}
+                    </View>
+
+                    <View style={styles.fieldBlock}>
+                      <Text style={styles.fieldLabel}>SENHA · MÍNIMO 8 CARACTERES</Text>
+                      <TextInput value={password} onChangeText={value => { setPassword(value); setRegisterError(null); }}
+                        style={[styles.inputShell, styles.authPasswordInput]} placeholder="Crie sua senha"
+                        placeholderTextColor="rgba(255,255,255,0.35)" secureTextEntry={!passwordVisible}
+                        textContentType="newPassword" autoComplete="new-password" autoCapitalize="none"
+                        autoCorrect={false} maxLength={128} />
+                      <TouchableOpacity onPress={() => setPasswordVisible(x => !x)} accessibilityRole="button">
+                        <Text style={styles.hintText}>{passwordVisible ? 'OCULTAR SENHA' : 'MOSTRAR SENHA'}</Text>
+                      </TouchableOpacity>
+                      <TextInput value={confirmPassword} onChangeText={value => { setConfirmPassword(value); setRegisterError(null); }}
+                        style={[styles.inputShell, styles.authPasswordInput]} placeholder="Confirme a senha"
+                        placeholderTextColor="rgba(255,255,255,0.35)" secureTextEntry={!passwordVisible}
+                        textContentType="newPassword" autoComplete="new-password" autoCapitalize="none"
+                        autoCorrect={false} maxLength={128} />
+                      {confirmPassword.length > 0 && !passwordIsValid &&
+                        <Text style={styles.errorText}>Senha mínima de 8 caracteres e confirmação idêntica.</Text>}
+                      <Text style={styles.hintText}>A senha fica no Firebase Authentication; não é salva no Wild.</Text>
+                    </View>
+
+                    <TouchableOpacity
+                      activeOpacity={0.88}
+                      onPress={handleRegister}
+                      disabled={!formIsValid || registering}
                       style={[
-                        styles.inputShell,
-                        emailFocused &&
-                        styles.inputShellFocused,
-                        emailTouched &&
-                        !emailIsValid &&
-                        styles.inputShellError,
+                        styles.submitButton,
+                        (!formIsValid || registering) &&
+                        styles.submitButtonInactive,
                       ]}
                     >
-                      <Text style={styles.mailIcon}>
-                        ✉
+                      <View style={styles.submitCornerLeft} />
+                      <View style={styles.submitCornerRight} />
+
+                      <Text style={styles.submitKicker}>
+                        {t('registration.driverReady')}
+                      </Text>
+                      <Text style={styles.submitText}>
+                        {registering
+                          ? (String(language).startsWith('en') ? 'SAVING...' : String(language).startsWith('es') ? 'GUARDANDO...' : 'SALVANDO...')
+                          : t('registration.startAdventure')}
                       </Text>
 
-                      <TextInput
-                        value={email}
-                        onChangeText={value => { setEmail(value); setRegisterError(null); }}
-                        onFocus={() =>
-                          setEmailFocused(true)
-                        }
-                        onBlur={() => {
-                          setEmailFocused(false);
-                          setEmailTouched(true);
-                        }}
-                        placeholder={t('registration.emailPlaceholder')}
-                        placeholderTextColor="rgba(255,255,255,0.28)"
-                        style={styles.input}
-                        maxLength={254}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        keyboardType="email-address"
-                        textContentType="emailAddress"
-                        autoComplete="email"
-                        returnKeyType="done"
-                        onSubmitEditing={() => { }}
-                      />
-                    </View>
-
-                    {emailTouched &&
-                      !emailIsValid ? (
-                      <Text style={styles.errorText}>
-                        {t('registration.emailError')}
+                      <Text style={styles.submitArrow}>
+                        ››
                       </Text>
-                    ) : (
-                      <Text style={styles.hintText}>
-                        {t('registration.emailHint')}
+                    </TouchableOpacity>
+
+                    {registerError && (
+                      <Text selectable style={styles.authErrorText}>
+                        {registerError}
                       </Text>
                     )}
-                  </View>
 
-                  <View style={styles.fieldBlock}>
-                    <Text style={styles.fieldLabel}>SENHA · MÍNIMO 8 CARACTERES</Text>
-                    <TextInput value={password} onChangeText={value => { setPassword(value); setRegisterError(null); }}
-                      style={[styles.inputShell, styles.authPasswordInput]} placeholder="Crie sua senha"
-                      placeholderTextColor="rgba(255,255,255,0.35)" secureTextEntry={!passwordVisible}
-                      textContentType="newPassword" autoComplete="new-password" autoCapitalize="none"
-                      autoCorrect={false} maxLength={128} />
-                    <TouchableOpacity onPress={() => setPasswordVisible(x => !x)} accessibilityRole="button">
-                      <Text style={styles.hintText}>{passwordVisible ? 'OCULTAR SENHA' : 'MOSTRAR SENHA'}</Text>
-                    </TouchableOpacity>
-                    <TextInput value={confirmPassword} onChangeText={value => { setConfirmPassword(value); setRegisterError(null); }}
-                      style={[styles.inputShell, styles.authPasswordInput]} placeholder="Confirme a senha"
-                      placeholderTextColor="rgba(255,255,255,0.35)" secureTextEntry={!passwordVisible}
-                      textContentType="newPassword" autoComplete="new-password" autoCapitalize="none"
-                      autoCorrect={false} maxLength={128} />
-                    {confirmPassword.length > 0 && !passwordIsValid &&
-                      <Text style={styles.errorText}>Senha mínima de 8 caracteres e confirmação idêntica.</Text>}
-                    <Text style={styles.hintText}>A senha fica no Firebase Authentication; não é salva no Wild.</Text>
-                  </View>
-
-                  <TouchableOpacity
-                    activeOpacity={0.88}
-                    onPress={handleRegister}
-                    disabled={!formIsValid || registering}
-                    style={[
-                      styles.submitButton,
-                      (!formIsValid || registering) &&
-                      styles.submitButtonInactive,
-                    ]}
-                  >
-                    <View style={styles.submitCornerLeft} />
-                    <View style={styles.submitCornerRight} />
-
-                    <Text style={styles.submitKicker}>
-                      {t('registration.driverReady')}
+                    <Text style={{ color: '#FFD60A', fontSize: 11, lineHeight: 17, marginTop: 12, textAlign: 'center' }}>
+                      Digite uma senha nova somente para NOVO piloto. O e-mail de um save anônimo antigo não transfere aquele UID.
                     </Text>
-                    <Text style={styles.submitText}>
-                      {registering
-                        ? (String(language).startsWith('en') ? 'SAVING...' : String(language).startsWith('es') ? 'GUARDANDO...' : 'SALVANDO...')
-                        : t('registration.startAdventure')}
+                    <Text style={styles.localNote}>
+                      {String(language).startsWith('en')
+                        ? 'Your profile is saved in the cloud before the race starts.'
+                        : String(language).startsWith('es')
+                          ? 'Tu perfil se guarda en la nube antes de empezar la carrera.'
+                          : 'Seu perfil é salvo na nuvem antes de iniciar a corrida.'}
                     </Text>
-
-                    <Text style={styles.submitArrow}>
-                      ››
-                    </Text>
-                  </TouchableOpacity>
-
-                  {registerError && (
-                    <Text selectable style={styles.authErrorText}>
-                      {registerError}
-                    </Text>
-                  )}
-
-                  <Text style={{ color: '#FFD60A', fontSize: 11, lineHeight: 17, marginTop: 12, textAlign: 'center' }}>
-                    Digite uma senha nova somente para NOVO piloto. O e-mail de um save anônimo antigo não transfere aquele UID.
-                  </Text>
-                  <Text style={styles.localNote}>
-                    {String(language).startsWith('en')
-                      ? 'Your profile is saved in the cloud before the race starts.'
-                      : String(language).startsWith('es')
-                        ? 'Tu perfil se guarda en la nube antes de empezar la carrera.'
-                        : 'Seu perfil é salvo na nuvem antes de iniciar a corrida.'}
-                  </Text>
-                </>
-              )}
-            </View>
+                  </>
+                )}
+              </View>
             </ScrollView>
           </View>
         </KeyboardAvoidingView>

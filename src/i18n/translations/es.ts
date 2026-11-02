@@ -637,6 +637,14 @@ const es = {
     driverReady: 'PILOTO LISTO',
     startAdventure: 'COMENZAR AVENTURA',
 
+
+    messageTitle: 'NUEVO PILOTO',
+    messageStart: 'Vamos a crear una cuenta WF ID y un nuevo progreso guardado para este piloto.',
+    messageEnd: 'Si ya tienes una cuenta con este mismo correo electrónico, selecciona INICIAR SESIÓN para cargar tu progreso guardado.',
+    confirmation: 'CREAR NUEVO PILOTO',
+    cancelation: 'CANCELAR',
+    already: 'YA TENGO UNA CUENTA',
+
     localNote:
       'Tus datos y tu progreso permanecen en este dispositivo durante el MVP.',
   },
@@ -835,7 +843,7 @@ const es = {
     "accelerate": "ACELERAR",
     "awsAuthority": "Servidor de WF sigue siendo responsable de física, posición, nitro y resultados.",
     "session": "SESIÓN"
-,
+    ,
     'firebaseAuthMissing': 'No se encontró la sesión de Firebase. Inicia sesión de nuevo antes de correr online.',
     'garageNotOwned': 'El coche seleccionado no está en tu garaje verificado de Firestore.',
     'cloudSaveMissing': 'No se encontró tu partida en Firebase. Sincroniza el perfil antes de entrar.',
@@ -901,7 +909,7 @@ const es = {
     "win": "🏆 ¡VICTORIA!",
     "loss": "🏁 DERROTA",
     "draw": "🏁 EMPATE"
-,
+    ,
     'disconnectCard': 'Conexión perdida. Espera a la reconexión.',
     'beforeStart': 'Disponible solo después de la salida (fase: %{phase}).',
     'waitCard': 'Esperando la confirmación de Servidor de WF de la carta anterior.',

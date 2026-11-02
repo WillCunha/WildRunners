@@ -520,6 +520,14 @@ const en = {
     driverReady: 'DRIVER READY',
     startAdventure: 'START ADVENTURE',
 
+    messageTitle: 'NEW PILOT',
+    messageStart: 'We are about to create a WF ID account and a new save for this pilot.',
+    messageEnd: 'If you already have an account with this email address, select LOG IN to load your existing save.',
+    confirmation: 'CREATE NEW PILOT',
+    cancelation: 'CANCEL',
+    already: 'I ALREADY HAVE AN ACCOUNT',
+
+
     localNote:
       'Your data and progress remain on this device during the MVP.',
   },
@@ -718,7 +726,7 @@ const en = {
     "accelerate": "ACCELERATE",
     "awsAuthority": "WF Server remains responsible for physics, position, nitro and results.",
     "session": "SESSION"
-,
+    ,
     'firebaseAuthMissing': 'Firebase session not found. Log in again before racing online.',
     'garageNotOwned': 'The selected car is not in your verified Firestore garage.',
     'cloudSaveMissing': 'Your save was not found in Firebase. Sync your profile before joining.',
@@ -784,7 +792,7 @@ const en = {
     "win": "🏆 VICTORY!",
     "loss": "🏁 DEFEAT",
     "draw": "🏁 DRAW"
-,
+    ,
     'disconnectCard': 'Connection lost. Wait for reconnection.',
     'beforeStart': 'Available only after the start (phase: %{phase}).',
     'waitCard': 'Waiting for WF Server to confirm the previous card.',
