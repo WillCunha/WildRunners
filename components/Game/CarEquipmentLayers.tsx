@@ -35,6 +35,7 @@ export default React.memo(function CarEquipmentLayers({
   // Ordem de desenho: os últimos ficam visualmente por cima dos anteriores.
   const ids = [
     equipped.sideSkirt,
+    equipped.decalque,
     equipped.frontBumper,
     equipped.rearBumper,
     equipped.spoiler,
@@ -62,7 +63,11 @@ export default React.memo(function CarEquipmentLayers({
             source={item.image}
             resizeMode="contain"
             fadeDuration={0}
-            style={styles.equipmentLayer}
+            style={[
+              styles.equipmentLayer,
+              // PNG branco + alpha transparente: permite trocar a cor sem duplicar assets.
+              id === equipped.decalque ? { tintColor: equipped.decalColor ?? '#FFFFFF' } : null,
+            ]}
           />
         );
       })}

@@ -4,8 +4,8 @@ import SkiaCarBody from '@/components/Game/SkiaCarBody';
 import WildBackButton from '@/components/ui/WildBackButton';
 import { useCarSelection } from '@/context/CarContext';
 import { useLanguage } from '@/context/LanguageContext';
-import { usePlayerStore } from '@/src/store/playerStore';
 import { beginOnlinePlayerMutation, confirmOnlinePlayerMutation } from '@/src/services/sync/onlinePlayerMutation';
+import { usePlayerStore } from '@/src/store/playerStore';
 import type { EquippedCarEquipment, PaintFinishId } from '@/src/types/playerTypes';
 import { getAvailableEquipmentCategories, type EquipmentCategory } from '@/src/utils/carEquipments';
 import { carMaps } from '@/src/utils/carMaps';
@@ -29,6 +29,11 @@ import {
 const MAX_LEVEL = 10;
 const BASE_COST = 50;
 const ACCENT = '#FFD60A';
+// Paleta simples para o decalque. O branco é a opção padrão.
+const DECAL_COLORS = [
+    '#FFFFFF', '#111827', '#A855F7', '#FFD60A', '#FF3B30',
+    '#FF8A00', '#32D74B', '#00C2FF', '#FF4DCC', '#C0C0C0',
+] as const;
 
 type CarKey = keyof typeof carMaps;
 type PartCategory = 'motor' | 'spray' | 'engrenagem';
@@ -163,6 +168,7 @@ export default function OficinaScreen() {
     const applyCarPaint = usePlayerStore(state => state.applyCarPaint);
     const purchaseAndEquipEquipment = usePlayerStore(state => state.purchaseAndEquipEquipment);
     const setEquippedEquipment = usePlayerStore(state => state.setEquippedEquipment);
+    const setDecalColor = usePlayerStore(state => state.setDecalColor);
 
     const carId = selectedCar as CarKey;
     const carData = carMaps[carId];
@@ -174,6 +180,8 @@ export default function OficinaScreen() {
         rearBumper: null,
         spoiler: null,
         sideSkirt: null,
+        decalque: null,
+        decalColor: '#FFFFFF',
     };
 
     const savedPaint = ownedCar?.customization?.paint ?? {
@@ -516,6 +524,44 @@ export default function OficinaScreen() {
         const nextEquipment = { ...previewEquipment, [category.slot]: item.id };
         setPreviewEquipment(nextEquipment);
         setSelectedEquipment(nextEquipment);
+    };
+
+    // O toque no desenho/cor é somente uma PRÉVIA. Um único clique neste botão
+    // compra (se necessário), equipa e salva a cor numa mesma confirmação cloud.
+    const handleApplyDecal = async (category: ReturnType<typeof getAvailableEquipmentCategories>[number]) => {
+        const decalId = previewEquipment.decalque;
+        const item = category.items.find(candidate => candidate.id === decalId);
+        if (!item) return;
+
+        const color = previewEquipment.decalColor ?? '#FFFFFF';
+        const before = await beginWorkshopMutation();
+        if (!before) return;
+
+        const owned = ownedCar.customization?.ownedEquipment?.includes(item.id) ?? false;
+        const result = owned
+            ? (setEquippedEquipment(String(carId), 'decalque', item.id) ? 'equipped' : 'invalid')
+            : purchaseAndEquipEquipment(String(carId), 'decalque', item.id, item.requiredLevel, item.price);
+
+        if (result === 'level_locked') {
+            Alert.alert(t('workshop.partLockedTitle'), t('workshop.availableFromLevel', { level: item.requiredLevel }));
+            return;
+        }
+        if (result === 'insufficient_spray') {
+            Alert.alert(t('workshop.insufficientSprayTitle'), t('workshop.insufficientSprayMessage', { price: item.price }));
+            return;
+        }
+        if (result === 'invalid' || result === 'car_not_owned' || result === 'no_profile' || !setDecalColor(String(carId), color)) {
+            Alert.alert(t('workshop.equipErrorTitle'), t('workshop.equipErrorMessage'));
+            return;
+        }
+
+        if (!(await confirmWorkshopMutation(before))) return;
+        // Atualiza o contexto usado pelo mapa offline apenas após confirmação.
+        const confirmedEquipment = usePlayerStore.getState().profile?.garage?.[carId]?.customization?.equipment;
+        if (confirmedEquipment) {
+            setPreviewEquipment(confirmedEquipment);
+            setSelectedEquipment(confirmedEquipment);
+        }
     };
 
     const openCustomization = () => {
@@ -894,9 +940,10 @@ export default function OficinaScreen() {
                                                         {category.items.map(item => {
                                                             const owned = ownedCar.customization?.ownedEquipment?.includes(item.id) ?? false;
                                                             const equipped = ownedCar.customization?.equipment?.[category.slot] === item.id;
+                                                            const previewed = previewEquipment[category.slot] === item.id;
                                                             const locked = playerLevel < item.requiredLevel;
                                                             return (
-                                                                <View key={item.id} style={[styles.equipmentCard, equipped && styles.equipmentCardSelected]}>
+                                                                <View key={item.id} style={[styles.equipmentCard, equipped && styles.equipmentCardSelected, previewed && styles.equipmentCardPreview]}>
                                                                     <TouchableOpacity
                                                                         style={styles.equipmentPreviewButton}
                                                                         onPress={() => setPreviewEquipment(current => ({ ...current, [category.slot]: item.id }))}
@@ -909,16 +956,62 @@ export default function OficinaScreen() {
                                                                             </Text>
                                                                         </View>
                                                                     </TouchableOpacity>
-                                                                    <TouchableOpacity
-                                                                        disabled={locked || equipped}
-                                                                        style={[styles.equipmentAction, (locked || equipped) && styles.equipmentActionDisabled]}
-                                                                        onPress={() => handleEquipmentAction(category, item)}
-                                                                    >
-                                                                        <Text style={styles.equipmentActionText}>{equipped ? 'OK' : owned ? ` ${t('workshop.equip')}` : ` ${t('workshop.buy')}`}</Text>
-                                                                    </TouchableOpacity>
+                                                                    {category.key !== 'decalques' && (
+                                                                        <TouchableOpacity
+                                                                            disabled={locked || equipped}
+                                                                            style={[styles.equipmentAction, (locked || equipped) && styles.equipmentActionDisabled]}
+                                                                            onPress={() => handleEquipmentAction(category, item)}
+                                                                        >
+                                                                            <Text style={styles.equipmentActionText}>{equipped ? 'OK' : owned ? ` ${t('workshop.equip')}` : ` ${t('workshop.buy')}`}</Text>
+                                                                        </TouchableOpacity>
+                                                                    )}
                                                                 </View>
                                                             );
                                                         })}
+                                                        {category.key === 'decalques' && (
+                                                            <View style={styles.decalEditor}>
+                                                                <Text style={styles.customSectionTitle}>COR DO DECALQUE</Text>
+                                                                <View style={styles.decalColorRow}>
+                                                                    {DECAL_COLORS.map(color => {
+                                                                        const selected = (previewEquipment.decalColor ?? '#FFFFFF').toUpperCase() === color;
+                                                                        return (
+                                                                            <TouchableOpacity
+                                                                                key={color}
+                                                                                accessibilityRole="button"
+                                                                                accessibilityLabel={`Cor do decalque ${color}`}
+                                                                                onPress={() => setPreviewEquipment(current => ({ ...current, decalColor: color }))}
+                                                                                style={[styles.decalColorButton, selected && styles.decalColorButtonSelected]}
+                                                                            >
+                                                                                <View style={[styles.decalColorSquare, { backgroundColor: color }]} />
+                                                                            </TouchableOpacity>
+                                                                        );
+                                                                    })}
+                                                                </View>
+                                                                {(() => {
+                                                                    const item = category.items.find(candidate => candidate.id === previewEquipment.decalque);
+                                                                    const currentEquipment = ownedCar.customization?.equipment;
+                                                                    const unchanged = item?.id === currentEquipment?.decalque &&
+                                                                        (previewEquipment.decalColor ?? '#FFFFFF').toUpperCase() ===
+                                                                        (currentEquipment?.decalColor ?? '#FFFFFF').toUpperCase();
+                                                                    const locked = item ? playerLevel < item.requiredLevel : true;
+                                                                    const disabled = !item || locked || unchanged;
+                                                                    const owned = item ? (ownedCar.customization?.ownedEquipment?.includes(item.id) ?? false) : false;
+                                                                    return (
+                                                                        <TouchableOpacity
+                                                                            disabled={disabled}
+                                                                            onPress={() => handleApplyDecal(category)}
+                                                                            style={[styles.applyCustomizationButton, disabled && styles.equipmentActionDisabled]}
+                                                                        >
+                                                                            <Text style={styles.applyCustomizationButtonText}>
+                                                                                {!item ? 'SELECIONE UM DECALQUE' : locked
+                                                                                    ? `🔒 NÍVEL ${item.requiredLevel}` : unchanged ? 'DECALQUE INSTALADO'
+                                                                                    : owned ? 'SALVAR DECALQUE E COR' : `COMPRAR E APLICAR • 🎨 ${item.price}`}
+                                                                            </Text>
+                                                                        </TouchableOpacity>
+                                                                    );
+                                                                })()}
+                                                            </View>
+                                                        )}
                                                     </View>
                                                 ))}
                                         </>
@@ -1487,6 +1580,7 @@ const styles = StyleSheet.create({
         padding: 7, marginBottom: 7, flexDirection: 'row', alignItems: 'center', gap: 7,
     },
     equipmentCardSelected: { borderColor: '#32D74B' },
+    equipmentCardPreview: { borderColor: ACCENT },
     equipmentPreviewButton: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
     equipmentThumb: { width: 68, height: 40 },
     equipmentName: { color: '#FFFFFF', fontSize: 9, fontWeight: '900' },
@@ -1496,6 +1590,17 @@ const styles = StyleSheet.create({
     },
     equipmentActionDisabled: { backgroundColor: '#3A3A3F' },
     equipmentActionText: { color: '#111113', fontSize: 7, fontWeight: '900' },
+    decalEditor: { gap: 9, marginTop: 7, marginBottom: 10 },
+    decalColorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    decalColorButton: {
+        padding: 3, borderRadius: 8, borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.18)', backgroundColor: '#222226',
+    },
+    decalColorButtonSelected: { borderColor: ACCENT },
+    decalColorSquare: {
+        width: 25, height: 25, borderRadius: 4,
+        borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)',
+    },
 
     errorContainer: {
         flex: 1,

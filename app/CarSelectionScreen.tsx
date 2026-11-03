@@ -182,6 +182,7 @@ export default function CarSelectionScreen() {
     const [previewFinishId, setPreviewFinishId] = useState<PaintFinishId>('solid');
     const [previewEquipment, setPreviewEquipment] = useState<EquippedCarEquipment>({
         frontBumper: null, rearBumper: null, spoiler: null, sideSkirt: null,
+        decalque: null, decalColor: '#FFFFFF',
     });
 
     useFocusEffect(
@@ -226,6 +227,7 @@ export default function CarSelectionScreen() {
         setPreviewFinishId(paint.finishId);
         setPreviewEquipment(owned?.customization?.equipment ?? {
             frontBumper: null, rearBumper: null, spoiler: null, sideSkirt: null,
+        decalque: null, decalColor: '#FFFFFF',
         });
     }, [previewCar, profile]);
 

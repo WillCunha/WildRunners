@@ -63,7 +63,8 @@
           "color": "#FFD60A",
           "defaultChannel": "wild-runners-general"
         }
-      ]
+      ],
+      "./plugins/withRemoveUnusedAudioServices"
     ],
     "experiments": {
       "typedRoutes": true,

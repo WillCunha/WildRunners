@@ -11,6 +11,10 @@ export type EquippedCarEquipment = {
   rearBumper: string | null;
   spoiler: string | null;
   sideSkirt: string | null;
+  /** ID do desenho aplicado (um decalque por carro). Opcional para saves antigos. */
+  decalque?: string | null;
+  /** Cor sólida aplicada ao PNG branco. */
+  decalColor?: string;
 };
 
 export type CarPaintConfiguration = {
@@ -76,7 +80,8 @@ export type CarStat =
 
 export type PartCategory = 'motor' | 'spray' | 'engrenagem';
 
-export type EquipmentSlot = keyof EquippedCarEquipment;
+// Cor é propriedade visual, não é um slot de equipamento.
+export type EquipmentSlot = Exclude<keyof EquippedCarEquipment, 'decalColor'>;
 
 export type CustomizationPurchaseResult =
   | 'success'

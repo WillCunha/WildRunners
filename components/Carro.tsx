@@ -191,6 +191,8 @@ function arePropsEqual(prev: CarroProps, next: CarroProps) {
     prev.equipment?.rearBumper === next.equipment?.rearBumper &&
     prev.equipment?.spoiler === next.equipment?.spoiler &&
     prev.equipment?.sideSkirt === next.equipment?.sideSkirt &&
+    prev.equipment?.decalque === next.equipment?.decalque &&
+    prev.equipment?.decalColor === next.equipment?.decalColor &&
     prev.renderWidth === next.renderWidth &&
     getSpeedBand(prev.speed) === getSpeedBand(next.speed)
   );

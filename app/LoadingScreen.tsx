@@ -2,11 +2,12 @@ import EntryAssetPreloader from '@/components/EntryAssetPreloader';
 import { useLanguage } from '@/context/LanguageContext';
 import { waitForAuthReady } from '@/src/services/firebase/firebaseAuth';
 import { loadCurrentPlayerCloudSave } from '@/src/services/firebase/playerCloud';
+import { requestWildPushTokenAsync } from '@/src/services/notifications/wildNotifications';
+import { isWildOnline } from '@/src/services/sync/networkState';
 import {
   pendingRaceClaimCount,
   replayPendingRaceClaimsLocally,
 } from '@/src/services/sync/offlineOutbox';
-import { isWildOnline } from '@/src/services/sync/networkState';
 import {
   flushWildOutbox,
   startWildSyncCoordinator,
@@ -45,6 +46,7 @@ type Phase =
 const COPY = {
   pt: {
     network: 'WILD NETWORK',
+    offlineLabel: 'MODO OFFLINE',
     connecting: 'Conectando-se ao servidor da WF...',
     syncing: 'Sincronizando progresso pendente...',
     ready: 'Dados recuperados!',
@@ -60,6 +62,7 @@ const COPY = {
   },
   en: {
     network: 'WILD NETWORK',
+    offlineLabel: 'OFFLINE MODE',
     connecting: "Connecting to WF's server...",
     syncing: 'Syncing pending progress...',
     ready: 'Player data restored!',
@@ -75,6 +78,7 @@ const COPY = {
   },
   es: {
     network: 'WILD NETWORK',
+    offlineLabel: 'MODO SIN CONEXIÓN',
     connecting: 'Conectando con el servidor de WF...',
     syncing: 'Sincronizando progreso pendiente...',
     ready: '¡Datos recuperados!',
@@ -108,8 +112,8 @@ export default function LoadingScreen() {
   const [pendingCount, setPendingCount] = useState(0);
   const [cloudRetry, setCloudRetry] = useState(0);
 
-  const mountedRef = useRef(false);
   const navigationStartedRef = useRef(false);
+  const pushAttemptedForUidRef = useRef<string | null>(null);
   const progress = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(0.35)).current;
 
@@ -154,7 +158,6 @@ export default function LoadingScreen() {
   }, [progress]);
 
   useEffect(() => {
-    mountedRef.current = true;
     setTipKey(getRandomLoadingTipKey());
     startWildSyncCoordinator();
 
@@ -165,10 +168,52 @@ export default function LoadingScreen() {
     animation.start();
 
     return () => {
-      mountedRef.current = false;
       animation.stop();
     };
   }, [pulse]);
+
+  // Push registration is independent of the cloud save bootstrap. A temporary
+  // Firestore/sync failure must not stop the device from obtaining its push token.
+  // It is best-effort: no permission dialog, network request or error may block
+  // the LoadingScreen navigation.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function initializePush() {
+      try {
+        const user = await waitForAuthReady();
+        if (cancelled || !user || pushAttemptedForUidRef.current === user.uid) return;
+
+        // Fetching an Expo token requires connectivity. An offline launch is
+        // allowed to continue normally; a later LoadingScreen visit can retry.
+        const online = await isWildOnline();
+        if (cancelled || !online) return;
+
+        pushAttemptedForUidRef.current = user.uid;
+        try {
+          const token = await requestWildPushTokenAsync();
+          if (__DEV__ && !cancelled) {
+            console.info('[WILD PUSH] Automatic registration:', token ? 'token available' : 'token unavailable');
+          }
+        } catch (error) {
+          // Allow an explicit LoadingScreen retry if token registration failed.
+          if (pushAttemptedForUidRef.current === user.uid) {
+            pushAttemptedForUidRef.current = null;
+          }
+          if (!cancelled) {
+            console.warn('[WILD PUSH] Automatic registration failed:', error);
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('[WILD PUSH] Initialization postponed:', error);
+        }
+      }
+    }
+
+    void initializePush();
+    return () => { cancelled = true; };
+  }, [cloudRetry]);
 
   useEffect(() => {
     let cancelled = false;
@@ -195,7 +240,9 @@ export default function LoadingScreen() {
         await replayPendingRaceClaimsLocally(user.uid);
         if (cancelled) return;
 
-        setPendingCount(await pendingRaceClaimCount(user.uid));
+        const pending = await pendingRaceClaimCount(user.uid);
+        if (cancelled) return;
+        setPendingCount(pending);
 
         const online = await isWildOnline();
         if (cancelled) return;
@@ -241,10 +288,13 @@ export default function LoadingScreen() {
         if (cancelled) return;
 
         const user = await waitForAuthReady().catch(() => null);
+        if (cancelled) return;
         const local = usePlayerStore.getState().profile;
 
         if (user && local?.id === user.uid) {
-          setPendingCount(await pendingRaceClaimCount(user.uid).catch(() => 0));
+          const pending = await pendingRaceClaimCount(user.uid).catch(() => 0);
+          if (cancelled) return;
+          setPendingCount(pending);
           setPhase('offline_ready');
           return;
         }
@@ -354,7 +404,7 @@ export default function LoadingScreen() {
 
           {phase === 'offline_ready' && pendingCount > 0 && (
             <View style={styles.cloudNotice}>
-              <Text style={styles.cloudNoticeTitle}>OFFLINE MODE</Text>
+              <Text style={styles.cloudNoticeTitle}>{copy.offlineLabel}</Text>
               <Text style={styles.cloudNoticeText}>{copy.pending(pendingCount)}</Text>
               <Text style={styles.cloudNoticeText}>
                 {copy.offlinePendingDetail}

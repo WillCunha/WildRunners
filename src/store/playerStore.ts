@@ -138,6 +138,9 @@ type PlayerState = {
     itemId: string | null,
   ) => boolean;
 
+  /** Apenas altera o estado local; confirmar no Firestore via confirmOnlinePlayerMutation. */
+  setDecalColor: (carId: string, color: string) => boolean;
+
   upgradeCar: (
     carId: string,
     partCategory: PartCategory,
@@ -173,6 +176,8 @@ const createBaseGarageCar = (): CarUpgrades => ({
       rearBumper: null,
       spoiler: null,
       sideSkirt: null,
+      decalque: null,
+      decalColor: '#FFFFFF',
     },
     ownedEquipment: [],
   },
@@ -238,6 +243,12 @@ const normalizeCustomization = (car: any): CarUpgrades => ({
       rearBumper: car?.customization?.equipment?.rearBumper ?? null,
       spoiler: car?.customization?.equipment?.spoiler ?? null,
       sideSkirt: car?.customization?.equipment?.sideSkirt ?? null,
+      decalque: typeof car?.customization?.equipment?.decalque === 'string'
+        ? car.customization.equipment.decalque
+        : null,
+      decalColor: isValidHexColor(car?.customization?.equipment?.decalColor)
+        ? car.customization.equipment.decalColor.toUpperCase()
+        : '#FFFFFF',
     },
     ownedEquipment: Array.isArray(car?.customization?.ownedEquipment)
       ? car.customization.ownedEquipment
@@ -1022,6 +1033,39 @@ export const usePlayerStore = create<PlayerState>()(
                     equipment: {
                       ...nextCar.customization.equipment,
                       [slot]: itemId,
+                    },
+                  },
+                },
+              },
+              updatedAt: nextProfileUpdatedAt(state.profile.updatedAt),
+            },
+          };
+        });
+        return true;
+      },
+
+      setDecalColor: (carId, color) => {
+        const profile = get().profile;
+        if (!profile?.garage?.[carId] || !isValidHexColor(color)) return false;
+        const normalizedColor = color.toUpperCase();
+        set(state => {
+          if (!state.profile) return state;
+          const currentCar = state.profile.garage?.[carId];
+          if (!currentCar) return state;
+          const nextCar = normalizeCustomization(currentCar);
+          if (nextCar.customization.equipment.decalColor === normalizedColor) return state;
+          return {
+            profile: {
+              ...state.profile,
+              garage: {
+                ...state.profile.garage,
+                [carId]: {
+                  ...nextCar,
+                  customization: {
+                    ...nextCar.customization,
+                    equipment: {
+                      ...nextCar.customization.equipment,
+                      decalColor: normalizedColor,
                     },
                   },
                 },

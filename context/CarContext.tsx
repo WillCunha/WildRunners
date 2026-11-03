@@ -9,6 +9,8 @@ const EMPTY_EQUIPMENT: EquippedCarEquipment = {
   rearBumper: null,
   spoiler: null,
   sideSkirt: null,
+  decalque: null,
+  decalColor: '#FFFFFF',
 };
 
 interface CarContextType {
