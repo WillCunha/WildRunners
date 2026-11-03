@@ -24,7 +24,7 @@
   "submit": {
     "production": {
       "android": {
-        "track": "beta",
+        "track": "alpha",
         "releaseStatus": "completed"
       }
     }
