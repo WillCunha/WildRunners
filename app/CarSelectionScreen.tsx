@@ -5,6 +5,10 @@ import { useCarSelection } from '@/context/CarContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { signOutWildAccount } from '@/src/services/firebase/firebaseAuth';
 import { raceRewardsService } from '@/src/services/raceRewardsService';
+import {
+    cancelWildReturnNotificationsAsync,
+    requestWildNotificationPermissionOnEntryAsync,
+} from '@/src/utils/wildNotifications';
 import { usePlayerStore } from '@/src/store/playerStore';
 import type { EquippedCarEquipment, PaintFinishId } from '@/src/types/playerTypes';
 import { carMaps } from '@/src/utils/carMaps';
@@ -185,6 +189,15 @@ export default function CarSelectionScreen() {
         decalque: null, decalColor: '#FFFFFF',
     });
 
+    // Ao abrir a garagem, o sistema operacional pede permissão apenas se
+    // for o primeiro acesso e ela ainda não tiver sido respondida.
+    // Se já houver permissão, renovamos os lembretes de inatividade.
+    useFocusEffect(useCallback(() => {
+        void requestWildNotificationPermissionOnEntryAsync().catch(error => {
+            console.warn('[WildNotifications] Falha na inicialização:', error);
+        });
+    }, []));
+
     useFocusEffect(
         useCallback(() => {
             const subscription =
@@ -265,10 +278,6 @@ export default function CarSelectionScreen() {
         router.push('/CarStore' as any);
     };
 
-       const handleNotificationTests = () => {
-        router.push('/push-test' as any);
-    };
-
     const [loggingOut, setLoggingOut] = useState(false);
 
     const handleLogout = async () => {
@@ -278,6 +287,11 @@ export default function CarSelectionScreen() {
 
         try {
             await signOutWildAccount();
+            try {
+                await cancelWildReturnNotificationsAsync();
+            } catch (notificationError) {
+                console.warn('[WildNotifications] Cancelamento no logout:', notificationError);
+            }
 
             // Remove only the local snapshot from the previous account.
             // The Firestore playerSaves/{uid} document is not deleted.
@@ -396,20 +410,6 @@ export default function CarSelectionScreen() {
                             <Text style={styles.accountLabel}>{t('carSelection.trophies')}</Text>
                             <Text style={styles.accountValue}>🏆 {profile?.trophies ?? 0}</Text>
                         </View>
-
-                        <TouchableOpacity
-                            activeOpacity={0.82}
-                            disabled={loggingOut}
-                            onPress={() => { void handleNotificationTests(); }}
-                            style={[
-                                styles.logoutButton,
-                                loggingOut && styles.logoutButtonDisabled,
-                            ]}
-                        >
-                            <Text style={styles.logoutButtonLabel}>
-                                🔔 NOTIFICATION TESTS
-                            </Text>
-                        </TouchableOpacity>
 
                         <TouchableOpacity
                             activeOpacity={0.82}
