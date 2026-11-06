@@ -93,6 +93,8 @@ type PlayerView = {
   nitroCooldown: number;
 };
 type Phase = 'waiting' | 'countdown' | 'racing' | 'paused' | 'finished';
+type EntryState = {stage: 'idle' | 'countdown' | 'loading'; remaining: number; epoch: number};
+const INITIAL_ENTRY_STATE: EntryState = {stage: 'idle', remaining: 0, epoch: 0};
 type RaceView = {
   phase: Phase;
   countdown: number;
@@ -187,10 +189,14 @@ export default function WildOnlineLab() {
   const [autoDrive, setAutoDrive] = useState(false);
   const [ping, setPing] = useState<number | null>(null);
   const [race, setRace] = useState<RaceView | null>(null);
+  const [entry, setEntry] = useState<EntryState>(INITIAL_ENTRY_STATE);
   const [visualPositions, setVisualPositions] = useState<Record<string, number>>({});
 
   const mounted = useRef(true);
   const roomRef = useRef<OnlineRoom | null>(null);
+  const enterOnlineMapRef = useRef<() => void>(() => {});
+  const autoEnterRef = useRef(false);
+  const rematchEnterRef = useRef(false);
   const inputRef = useRef<OnlineInput | null>(null);
   const driveRef = useRef(0);
   const accelHeldRef = useRef(false);
@@ -289,6 +295,7 @@ export default function WildOnlineLab() {
     setAutoDrive(false);
     setPing(null);
     setRace(null);
+    setEntry(INITIAL_ENTRY_STATE);
     setSessionId('');
     setConnectedRoomId('');
     setBusy(false);
@@ -311,6 +318,8 @@ export default function WildOnlineLab() {
 
   const attachRoom = useCallback((joined: OnlineRoom) => {
     roomRef.current = joined;
+    autoEnterRef.current = false;
+    setEntry(INITIAL_ENTRY_STATE);
     droppedRef.current = false;
     setConnectedRoomId(joined.roomId);
     setSessionId(joined.sessionId);
@@ -341,6 +350,22 @@ export default function WildOnlineLab() {
     });
     // Esses eventos são NOTIFICAÇÕES. O Schema da AWS continua sendo a verdade.
     // Antes, os listeners só existiam no multiplayerClient, não neste Lab.
+    const onEntryStatus = (state: EntryState) => {
+      if (!mounted.current || roomRef.current !== joined || !state) return;
+      if (!['idle', 'countdown', 'loading'].includes(state.stage)) return;
+      setEntry({stage: state.stage, remaining: Number(state.remaining) || 0,
+        epoch: Number(state.epoch) || 0});
+      // Se o evento de navegação foi perdido, o status reenviado resolve.
+      if (state.stage === 'loading' && !droppedRef.current) enterOnlineMapRef.current();
+    };
+    joined.onMessage('wild-entry-state', onEntryStatus);
+    joined.onMessage('wild-enter-map', () => {
+      if (mounted.current && roomRef.current === joined && !droppedRef.current) {
+        enterOnlineMapRef.current();
+      }
+    });
+    try { joined.send('wild-entry-status-request', {}); } catch { /* reconexão resolve */ }
+
     joined.onMessage('race-ready', () => {
       if (mounted.current && roomRef.current === joined) console.log('[WILD ALPHA 8] Sala completa.');
     });
@@ -384,6 +409,7 @@ export default function WildOnlineLab() {
       setRace(recovered);
       setVisualPositions(smoothingRef.current.frame(Date.now()));
       startTimers(joined);
+      try { joined.send('wild-entry-status-request', {}); } catch { /* aguardando transporte */ }
     });
     joined.onLeave((code: number) => {
       if (!mounted.current || roomRef.current !== joined) return;
@@ -474,16 +500,50 @@ export default function WildOnlineLab() {
   // The LAB stops its own 30Hz sender BEFORE the online map starts another one.
   const enterOnlineMap = () => {
     const room = roomRef.current;
-    if (!room || droppedRef.current) return;
+    if (!room || droppedRef.current || autoEnterRef.current) return;
+    autoEnterRef.current = true;
     stopTimers();
     autoDriveRef.current = false;
     driveRef.current = 0;
     try { handoffWildAlpha9Room(room); }
-    catch (error) { setDetail(String(error)); return; }
+    catch (error) {
+      autoEnterRef.current = false;
+      startTimers(room);
+      setDetail(String(error)); return;
+    }
     // Prevent the Lab's screen cleanup/onLeave callback from disconnecting the transferred room.
     resetUI();
     router.push({ pathname: '/mapa', params: { mode: 'onlineAlpha9' } });
   };
+
+  enterOnlineMapRef.current = enterOnlineMap;
+
+  // Revanche mantém a mesma Room sem abrir o Mapa antes da contagem do lobby.
+  useEffect(() => {
+    if (route.fromRaceResult !== '1') return;
+    const transferred = getWildAlpha9Room();
+    if (!transferred) return;
+    rematchEnterRef.current = false;
+    const onStatus = (state: EntryState) => {
+      if (!mounted.current || !state ||
+          !['idle', 'countdown', 'loading'].includes(state.stage)) return;
+      setEntry({stage: state.stage, remaining: Number(state.remaining) || 0,
+        epoch: Number(state.epoch) || 0});
+      if (state.stage === 'loading' && !rematchEnterRef.current) {
+        rematchEnterRef.current = true;
+        router.push({pathname:'/mapa', params:{mode:'onlineAlpha9'}});
+      }
+    };
+    const unsubscribe: unknown = transferred.onMessage('wild-entry-state', onStatus);
+    const reconnectUnsubscribe: unknown = transferred.onReconnect(() => {
+      try { transferred.send('wild-entry-status-request', {}); } catch { /* reconexão em curso */ }
+    });
+    try { transferred.send('wild-entry-status-request', {}); } catch { /* reconexão em curso */ }
+    return () => {
+      if (typeof unsubscribe === 'function') (unsubscribe as () => void)();
+      if (typeof reconnectUnsubscribe === 'function') (reconnectUnsubscribe as () => void)();
+    };
+  }, [route.fromRaceResult, router]);
 
   const resumeTransferred = () => {
     const transferred = getWildAlpha9Room();
@@ -514,8 +574,10 @@ export default function WildOnlineLab() {
         return;
       }
     }
-    // O mapa escuta o Schema autoritativo (WAITING/COUNTDOWN/RACING).
-    // A conexão transferida permanece ativa e o Room ID não muda.
+    // Na revanche a contagem do lobby é obrigatória também. O listener
+    // wild-entry-state navegará quando a AWS declarar stage=loading.
+    if (route.fromRaceResult === '1') return;
+    // Retomar uma corrida já ativa continua sendo navegação direta.
     router.push({ pathname: '/mapa', params: { mode: 'onlineAlpha9' } });
   };
   const endTransferred = async () => {
@@ -569,7 +631,7 @@ export default function WildOnlineLab() {
   const hasOfficialStats = myPlayer?.garageVerified === true;
   const displayedTopSpeedKmh = hasOfficialStats ? myPlayer.maxSpeed : localTopSpeedKmh;
   const displayedSpeedLevel = hasOfficialStats ? myPlayer.speedLevel : safeSpeedLevel;
-  const canReady = Boolean(roomRef.current && !droppedRef.current && (
+  const canReady = entry.stage === 'idle' && Boolean(roomRef.current && !droppedRef.current && (
     race?.phase === 'finished' || (race?.phase === 'waiting' && !myPlayer?.ready)
   ));
   const canControl = Boolean(connectedRoomId && !droppedRef.current && race?.phase === 'racing');
@@ -656,8 +718,13 @@ export default function WildOnlineLab() {
                   </Text>
                   <View style={styles.filler} />
                   <View style={styles.actionsRow}>
-                    <Pressable style={[styles.mainAction, styles.flexGrow]} onPress={resumeTransferred}>
-                      <Text style={styles.mainActionText}>🏎️  {route.fromRaceResult === '1' ? t('onlineLab.readyRematch') : t('onlineLab.resumeRace')} →</Text>
+                    <Pressable style={[styles.mainAction, styles.flexGrow]} onPress={resumeTransferred}
+                      disabled={route.fromRaceResult === '1' && entry.stage !== 'idle'}>
+                      <Text style={styles.mainActionText}>🏎️ {route.fromRaceResult === '1' && entry.stage === 'countdown'
+                        ? `${entry.remaining}  ·  ENTRANDO NA CORRIDA...`
+                        : route.fromRaceResult === '1' && entry.stage === 'loading'
+                        ? 'ABRINDO A PISTA...'
+                        : `${route.fromRaceResult === '1' ? t('onlineLab.readyRematch') : t('onlineLab.resumeRace')} →`}</Text>
                     </Pressable>
                     <Pressable style={styles.secondaryAction} onPress={() => void endTransferred()}>
                       <Text style={styles.secondaryActionText}>{t('onlineLab.endSession')}</Text>
@@ -720,13 +787,6 @@ export default function WildOnlineLab() {
                         </Text>
                       )}
                     </Pressable>
-                    <Pressable style={styles.secondaryAction} onPress={() => {
-                      setPreviewLobby(true);
-                      setPreviewOpponent(false);
-                      setShowDiagnostics(false);
-                    }}>
-                      <Text style={styles.secondaryActionText}>◇ {t('onlineLab.previewOffline')}</Text>
-                    </Pressable>
                   </View>
                 </View>
               ) : (
@@ -775,7 +835,8 @@ export default function WildOnlineLab() {
                     <Text style={styles.phaseLabel} numberOfLines={1}>
                       {isPreview ? `⏳ ${t('onlineLab.waitingRival')}` : t(`onlineLab.phase.${currentPhase}`)}
                     </Text>
-                    {currentPhase === 'countdown' && !isPreview && <Text style={styles.countdown}>{race?.countdown ?? 3}</Text>}
+                    {entry.stage === 'countdown' && !isPreview &&
+                      <Text style={styles.countdown}>{entry.remaining}</Text>}
                     {currentPhase === 'finished' && !isPreview && (
                       <Text style={styles.finishResult}>
                         {race?.winnerSessionId === sessionId ? `🏆 ${t('onlineLab.win')}` : race?.winnerSessionId ? t('onlineLab.lose') : t('onlineLab.draw')}
@@ -798,15 +859,22 @@ export default function WildOnlineLab() {
                       </>
                     ) : (
                       <>
-                        {canReady && (
+                        {entry.stage === 'countdown' ? (
+                          <View style={[styles.mainAction, styles.flexGrow]}>
+                            <Text style={styles.mainActionText}>🏎️ {entry.remaining}  ·  ENTRANDO NA CORRIDA...</Text>
+                          </View>
+                        ) : entry.stage === 'loading' ? (
+                          <View style={[styles.mainAction, styles.flexGrow]}>
+                            <Text style={styles.mainActionText}>🏁 ABRINDO A PISTA...</Text>
+                          </View>
+                        ) : canReady ? (
                           <Pressable style={[styles.mainAction, styles.flexGrow]} onPress={() => sendRaceCommand('ready', true)}>
                             <Text style={styles.mainActionText}>{currentPhase === 'finished' ? '↻ ' : '✓ '}{currentPhase === 'finished' ? t('onlineLab.rematch') : t('onlineLab.imReady')}</Text>
                           </Pressable>
-                        )}
-                        {!isReconnecting && (
-                          <Pressable style={[styles.mapAction, !canReady && styles.flexGrow]} onPress={enterOnlineMap}>
-                            <Text style={styles.mapActionText}>🏎️ {t('onlineLab.openTrack')} →</Text>
-                          </Pressable>
+                        ) : (
+                          <View style={[styles.mainAction, styles.flexGrow]}>
+                            <Text style={styles.mainActionText}>✓ {myPlayer?.ready ? 'AGUARDANDO OUTROS PILOTOS...' : 'AGUARDANDO SERVIDOR...'}</Text>
+                          </View>
                         )}
                         <Pressable style={styles.roomLeave} onPress={() => void leave()}>
                           <Text style={styles.roomLeaveText}>{t('onlineLab.leave')}</Text>

@@ -5633,6 +5633,10 @@ function OnlineAlpha9Mapa() {
   // O laboratório transferiu a própria Room. NÃO conectar/join novamente aqui.
   const roomRef = useRef<Alpha9Room | null>(getWildAlpha9Room());
   const [race, setRace] = useState<Alpha9Race | null>(null);
+  const [onlineTrackLaidOut, setOnlineTrackLaidOut] = useState(false);
+  const [onlineEntry, setOnlineEntry] = useState<{
+    stage: 'idle' | 'countdown' | 'loading'; epoch: number; loadedSessions: string[];
+  }>({stage: 'idle', epoch: 0, loadedSessions: []});
   const [dropped, setDropped] = useState(false);
   const [problem, setProblem] = useState('');
   const [ping, setPing] = useState<number | null>(null);
@@ -6182,6 +6186,14 @@ if (self && (snapshot.phase === 'countdown' || snapshot.phase === 'racing' || sn
 
     applySnapshot(true);
     collectCleanup(room.onStateChange(() => applySnapshot()));
+    collectCleanup(room.onMessage('wild-entry-state', (state: {
+      stage?: 'idle' | 'countdown' | 'loading'; epoch?: number; loadedSessions?: string[];
+    }) => {
+      if (!mountedRef.current || roomRef.current !== room || !state) return;
+      if (!['idle', 'countdown', 'loading'].includes(state.stage ?? '')) return;
+      setOnlineEntry({stage: state.stage!, epoch: Number(state.epoch) || 0,
+        loadedSessions: Array.isArray(state.loadedSessions) ? state.loadedSessions : []});
+    }));
     collectCleanup(room.onDrop(() => {
       if (!mountedRef.current || roomRef.current !== room) return;
       droppedRef.current = true;
@@ -6197,7 +6209,11 @@ if (self && (snapshot.phase === 'countdown' || snapshot.phase === 'racing' || sn
       setProblem('');
       setPing(null);
       applySnapshot(true);
-      try { room.send('wild-build-check', {}); room.send('wild-loot-request-sync', {}); }
+      try {
+        room.send('wild-build-check', {});
+        room.send('wild-loot-request-sync', {});
+        room.send('wild-entry-status-request', {});
+      }
       catch (error) { console.warn('[WILD MAP] Re-sync após reconexão falhou', error); }
       startSenders();
     }));
@@ -6230,7 +6246,7 @@ if (self && (snapshot.phase === 'countdown' || snapshot.phase === 'racing' || sn
       setServerBuild(name);
       console.log('[WILD MAP] AWS BUILD CONFIRMADA:', name, 'checkpoints:', message?.checkpoints);
     }));
-    try { room.send('wild-build-check', {}); }
+    try { room.send('wild-build-check', {}); room.send('wild-entry-status-request', {}); }
     catch (error) { console.warn('[WILD MAP] Falha ao consultar build AWS', error); }
 
     collectCleanup(room.onMessage('race-physics-warning', (event: {
@@ -6831,8 +6847,37 @@ useEffect(() => {
     }
   }, [pauseMusic]);
 
+  // Aguardamos renderização/layout, jogadores no Schema e confirmação de entrada
+  // da AWS. ACK repetido até o servidor confirmar; duplicatas são idempotentes.
+  useEffect(() => {
+    const room = roomRef.current;
+    if (!room || !onlineTrackLaidOut || dropped || onlineEntry.stage !== 'loading' ||
+        !race || !race.players.some(p => p.sessionId === room.sessionId) ||
+        race.players.length < 2 || onlineEntry.loadedSessions.includes(room.sessionId)) return;
+    let frameOne: number | null = null;
+    let frameTwo: number | null = null;
+    let retry: ReturnType<typeof setInterval> | null = null;
+    const acknowledge = () => {
+      if (roomRef.current !== room || droppedRef.current) return;
+      try { room.send('wild-map-loaded', {epoch: onlineEntry.epoch}); }
+      catch (error) { console.warn('[WILD MAP] ACK de carregamento não enviado:', error); }
+    };
+    // Dois frames dão oportunidade para o React Native pintar o cenário.
+    frameOne = requestAnimationFrame(() => {
+      frameTwo = requestAnimationFrame(() => {
+        acknowledge();
+        retry = setInterval(acknowledge, 1800);
+      });
+    });
+    return () => {
+      if (frameOne !== null) cancelAnimationFrame(frameOne);
+      if (frameTwo !== null) cancelAnimationFrame(frameTwo);
+      if (retry) clearInterval(retry);
+    };
+  }, [onlineTrackLaidOut, onlineEntry, race?.players.length, dropped]);
+
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onLayout={() => setOnlineTrackLaidOut(true)}>
       <MemoCenarioBackground
         mapId={(params.mapId as CenarioId) || getOnlineRaceMapSelection()?.mapId || 'sao_paulo'}
         skyTheme={(params.skyTheme as SkyTheme) || getOnlineRaceMapSelection()?.skyTheme || 'day'}
@@ -7216,7 +7261,12 @@ useEffect(() => {
       )}
       {phase === 'waiting' && me?.ready && (
         <View style={onlineMapStyles.centerNotice} pointerEvents="none">
-          <Text style={onlineMapStyles.noticeText}>{t('onlineMap.waitingDriver')}</Text>
+          <Text style={onlineMapStyles.noticeText}>
+            {onlineEntry.stage === 'loading' ? '🏎️ AGUARDANDO OS MAPAS CARREGAREM...' : t('onlineMap.waitingDriver')}
+          </Text>
+          {onlineEntry.stage === 'loading' && <Text style={onlineMapStyles.noticeDetail}>
+            {onlineEntry.loadedSessions.length} de {race?.players.length ?? 2} pilotos prontos na pista
+          </Text>}
         </View>
       )}
 
