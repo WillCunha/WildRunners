@@ -1,6 +1,7 @@
-import React, { useMemo, useRef } from 'react';
+import React, { memo, useMemo, useRef } from 'react';
 import {
   Animated,
+  Image,
   ImageSourcePropType,
   StyleSheet,
   useWindowDimensions,
@@ -240,6 +241,17 @@ const CenarioBackground: React.FC<CenarioBackgroundProps> = ({
   const travel = travelX ?? fallbackTravelX;
   const loopWidth = Math.max(1, SCREEN_WIDTH);
 
+  // Só recalculamos os estilos geométricos quando a tela/solo mudarem.
+  // Deslocamento de parallax permanece inteiramente no Animated.Value externo.
+  const skyStyle = useMemo(
+    () => [styles.fullScreen, { width: SCREEN_WIDTH, height: SCREEN_HEIGHT }],
+    [SCREEN_WIDTH, SCREEN_HEIGHT],
+  );
+  const clipStyle = useMemo(
+    () => [styles.cityClip, { height: groundY }],
+    [groundY],
+  );
+
   const cenario =
     CENARIOS[mapId] ??
     CENARIOS.sao_paulo!;
@@ -300,27 +312,17 @@ const CenarioBackground: React.FC<CenarioBackgroundProps> = ({
   return (
     <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
       {/* CÉU permanece parado: é nossa referência visual de profundidade. */}
-      <Animated.Image
+      <Image
         source={skySource}
         resizeMode="cover"
-        style={[
-          styles.fullScreen,
-          {
-            width: SCREEN_WIDTH,
-            height: SCREEN_HEIGHT,
-          },
-        ]}
+        fadeDuration={0}
+        style={skyStyle}
       />
 
       {/* ÁREA RECORTADA: nada passa da linha da pista */}
       <View
         pointerEvents="none"
-        style={[
-          styles.cityClip,
-          {
-            height: groundY,
-          },
-        ]}
+        style={clipStyle}
       >
         <ParallaxLayer
           source={cenario.farCity}
@@ -356,87 +358,47 @@ const CenarioBackground: React.FC<CenarioBackgroundProps> = ({
 ========================================================= */
 
 interface ParallaxLayerProps {
-
   source: ImageSourcePropType;
-
-  translateX: any;
-
+  // O nó é produzido por Animated.multiply (e inclui Animated.modulo).
+  translateX: ReturnType<typeof Animated.multiply>;
   width: number;
-
   height: number;
-
   opacity?: number;
-
 }
 
-
-const ParallaxLayer: React.FC<ParallaxLayerProps> = ({
-
+/**
+ * Apenas o CONTÊINER se move. As duas cópias da imagem são estáticas.
+ * React.memo evita remonta-las quando a tela-pai atualiza o HUD/estado.
+ * O efeito de loop e a posição/escala dos PNGs continuam os mesmos.
+ */
+const ParallaxLayer = memo(function ParallaxLayer({
   source,
-
   translateX,
-
   width,
-
   height,
-
   opacity = 1,
-
-}) => {
-
-  return (
-
-    <Animated.View
-
-      style={[
-        styles.parallaxStrip,
-
-        {
-          width: width * 2,
-
-          height,
-
-          opacity,
-
-          transform: [
-            {
-              translateX,
-            },
-          ],
-        },
-      ]}
-
-    >
-
-      <Animated.Image
-
-        source={source}
-
-        resizeMode="cover"
-
-        style={{
-          width,
-          height,
-        }}
-
-      />
-
-
-      <Animated.Image
-        source={source}
-        resizeMode="cover"
-        style={{
-          width,
-          height,
-        }}
-
-      />
-
-    </Animated.View>
-
+}: ParallaxLayerProps) {
+  const imageStyle = useMemo(() => ({ width, height }), [width, height]);
+  const stripStyle = useMemo(
+    () => [
+      styles.parallaxStrip,
+      {
+        width: width * 2,
+        height,
+        opacity,
+        transform: [{ translateX }],
+      },
+    ],
+    [width, height, opacity, translateX],
   );
 
-};
+  return (
+    <Animated.View style={stripStyle} pointerEvents="none">
+      <Image source={source} resizeMode="cover" fadeDuration={0} style={imageStyle} />
+      <Image source={source} resizeMode="cover" fadeDuration={0} style={imageStyle} />
+    </Animated.View>
+  );
+});
 
 
 /* =========================================================
@@ -466,4 +428,4 @@ const styles = StyleSheet.create({
 });
 
 
-export default CenarioBackground;
+export default memo(CenarioBackground);

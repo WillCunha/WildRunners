@@ -73,6 +73,9 @@ const MAP_MUSIC = require(
 // O cenário não precisa renderizar novamente a cada snapshot da física.
 // Ele só atualiza quando isMoving ou mapImage realmente mudam.
 const MemoCenarioBackground = React.memo(CenarioBackground);
+// As carrocerias são caras para React reconstruir a cada atualização do HUD.
+// O deslocamento real continua sendo controlado pelos Animated.Value externos.
+const MemoOfflineCarro = React.memo(Carro);
 
 
 
@@ -414,6 +417,9 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
   const velocity = useRef(0);
   const isGrounded = useRef(false);
   const gameTime = useRef(0);
+  // Relógio independente dos FPS: o tempo da corrida é medido em milissegundos
+  // efetivamente transcorridos, sem contar as pausas explicativas do tutorial.
+  const raceElapsedMsRef = useRef(0);
 
   const raceTimeRef = useRef(0);
   const timeRemainingRef = useRef(0);
@@ -498,7 +504,9 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
 
   const getRandomColor = () => AVAILABLE_BOT_COLORS[Math.floor(Math.random() * AVAILABLE_BOT_COLORS.length)];
 
-  const botsRef = useRef(
+  // Inicialização LAZY: antes, os 5 decks/stats/cores eram sorteados em
+  // TODA renderização do Mapa, mesmo sendo ignorados pelo useRef.
+  const [initialBots] = useState(() =>
     ['bot1', 'bot2', 'bot3', 'bot4', 'bot5'].map((id, index) => {
       const bStats = generateBotsStats(carStats, BOT_DIFFICULTIES[index] ?? 'balanced');
       const skins = ['default', 'gangster', 'ninja', 'pirate', 'surger'];
@@ -529,7 +537,8 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
         carColorBack: getRandomColor(),
       }
     })
-  )
+  );
+  const botsRef = useRef(initialBots);
 
 
   // ---- CRONOMETRO DA PARTIDA ---- //
@@ -1138,6 +1147,7 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
     analogInputRef.current = 0;
     analogKnobX.setValue(0);
     gameTime.current = 0;
+    raceElapsedMsRef.current = 0;
     racePerformanceRef.current = {
       successfulAttacks: 0,
       successfulDefenses: 0,
@@ -1534,7 +1544,11 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
     let animationFrameId = 0;
     let previousFrameAt = 0;
     let accumulator = 0;
+    let lastVisualAt = 0;
+    let lastHudSnapshotAt = 0;
+    let lastDynamicSnapshotAt = 0;
     const FIXED_STEP_MS = 1000 / 60;
+    const VISUAL_STEP_MS = 1000 / 30; // máximo 30 atualizações visuais por segundo
 
     const stepGame = () => {
       gameTime.current += 1;
@@ -1549,23 +1563,8 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
         playerStatus.current.invincibleTimer -= 1;
       }
 
-      // ================= 1. LÓGICA DO TIMER =================
-      const elapsedSeconds = Math.floor((gameTime.current * 16) / 1000);
-      const currentSecs = raceTimeRef.current - elapsedSeconds;
-      const CAMERA_OFFSET_X = SCREEN_WIDTH * 0.35;
-
-
-      if (currentSecs !== timeRemainingRef.current) {
-        timeRemainingRef.current = currentSecs;
-        setTimeRemaining(currentSecs);
-      }
-
-      // Fim de jogo pelo tempo esgotado
-      if (currentSecs <= 0 && !gameOver) {
-        setGameOver(true);
-        return;
-      }
-
+      // O cronômetro roda no RAF (tempo real), não nesta física fixa de 60 Hz.
+      // Quando a CPU atrasa, o jogo pode descartar ticks; o relógio NÃO atrasa.
       if (!isCameraLocked) {
         const CAMERA_OFFSET_X = SCREEN_WIDTH * 0.35;
 
@@ -1690,11 +1689,11 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
 
         nitroCharge.current += 0.8;
         if (nitroCharge.current >= 100) { nitroCharge.current = 100; if (!isNitroReadyRef.current) setNitroReady(true); }
-        if (gameTime.current % 5 === 0) setNitroPercent(nitroCharge.current);
+        if (gameTime.current % 10 === 0) setNitroPercent(nitroCharge.current);
       } else if (!isDrafting && !isNitroActive.current && nitroCharge.current > 0) {
         nitroCharge.current = Math.max(nitroCharge.current - 0.2, 0);
         if (nitroCharge.current < 100 && isNitroReadyRef.current) setNitroReady(false);
-        if (gameTime.current % 5 === 0) setNitroPercent(nitroCharge.current);
+        if (gameTime.current % 10 === 0) setNitroPercent(nitroCharge.current);
       }
 
       // Placar e Efeitos (Mantidos Iguais)
@@ -2321,13 +2320,15 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
         scenarioTravelRef.current +=
           Math.max(0, playerSpeed.current) * SCENARIO_TRAVEL_SCALE;
 
-        // O fundo não precisa de 60 atualizações JS/native por segundo.
-        // A distância continua acumulada a 60 Hz, mas é publicada a 30 Hz.
-        if (gameTime.current % 2 === 0) {
-          scenarioTravelAnim.setValue(scenarioTravelRef.current);
-        }
+        // Publicação para Animated feita no syncOfflineVisuals, no máximo 1x/RAF.
       }
 
+    };
+
+    // Renderização separada da física: mesmo com até 3 subpassos num frame,
+    // publicamos apenas UMA atualização dos carros, cenário e HUD por RAF.
+    const syncOfflineVisuals = (timestamp: number) => {
+      scenarioTravelAnim.setValue(scenarioTravelRef.current);
       // ============================================================
       // RENDER VISUAL
       // ============================================================
@@ -2398,15 +2399,16 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
         }
       });
 
-      // HUD, minimapa, status e efeitos presos aos corredores não precisam de 60 FPS.
-      // 60 / 6 = ~10 snapshots React por segundo.
-      if (gameTime.current % 6 === 0) {
+      // HUD completo: até ~6 snapshots/s REAIS, não por passo de física.
+      if (lastHudSnapshotAt === 0 || timestamp - lastHudSnapshotAt >= 150) {
+        lastHudSnapshotAt = timestamp;
         setRaceSnapshotTick(tick => tick + 1);
       }
 
-      // Projéteis/loot continuam em 30 FPS SOMENTE enquanto realmente existem.
-      // Quando passam de 1+ para 0, enviamos um último [] para removê-los do JSX.
-      if (gameTime.current % 2 === 0) {
+      // Projéteis/loot: até 15 snapshots/s reais, só quando existem.
+      // Um último [] remove os objetos quando saem da arena.
+      if (lastDynamicSnapshotAt === 0 || timestamp - lastDynamicSnapshotAt >= 1000 / 15) {
+        lastDynamicSnapshotAt = timestamp;
         const counts = lastDynamicRenderCountRef.current;
 
         const piecesCount = activePiecesRef.current.length;
@@ -2442,8 +2444,8 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
     };
 
     const loop = (timestamp: number) => {
-      // Pausa real do tutorial: mantemos o RAF vivo para não desmontar a engine,
-      // mas descartamos o tempo parado. Ao continuar não existe catch-up de física.
+      // No tutorial congelamos TUDO, inclusive o relógio.
+      // A referência é reajustada para não acumular tempo durante a explicação.
       if (tutorialPausedRef.current) {
         previousFrameAt = timestamp;
         accumulator = 0;
@@ -2452,12 +2454,26 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
       }
 
       if (previousFrameAt === 0) previousFrameAt = timestamp;
-
-      const frameDelta = Math.min(timestamp - previousFrameAt, 50);
+      const elapsedRealMs = Math.max(0, timestamp - previousFrameAt);
       previousFrameAt = timestamp;
-      accumulator += frameDelta;
 
-      // Limita a recuperação a três passos para evitar a espiral de travamento.
+      // Tempo real de corrida: não depende de 60 FPS, de setInterval ou da AWS.
+      raceElapsedMsRef.current += elapsedRealMs;
+      const remaining = Math.max(0,
+        raceTimeRef.current - Math.floor(raceElapsedMsRef.current / 1000));
+      if (remaining !== timeRemainingRef.current) {
+        timeRemainingRef.current = remaining;
+        setTimeRemaining(remaining);
+      }
+      if (remaining <= 0) {
+        setGameOver(true);
+        return; // Não agenda outro RAF; o effect faz o cleanup.
+      }
+
+      // Física continua com passo fixo. Não processamos atraso ilimitado:
+      // o app não entra numa espiral de 100+ ticks para recuperar um travamento.
+      const frameDelta = Math.min(elapsedRealMs, 50);
+      accumulator += frameDelta;
       let steps = 0;
       while (accumulator >= FIXED_STEP_MS && steps < 3) {
         stepGame();
@@ -2465,6 +2481,12 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
         steps += 1;
       }
 
+      // Uma publicação visual por RAF, limitada a 30 Hz. A física pode executar
+      // vários subpassos sem reconstruir o mapa no meio desses subpassos.
+      if (steps > 0 && (lastVisualAt === 0 || timestamp - lastVisualAt >= VISUAL_STEP_MS)) {
+        lastVisualAt = timestamp;
+        syncOfflineVisuals(timestamp);
+      }
       animationFrameId = requestAnimationFrame(loop);
     };
 
@@ -2472,13 +2494,23 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
     return () => cancelAnimationFrame(animationFrameId);
   }, [started, gameOver, SCREEN_WIDTH, SCREEN_HEIGHT]);
 
-  /* ================= GERENCIADOR ÚNICO DE COOLDOWNS (UI) ================= */
+  /* ================= COOLDOWNS (tempo real, UI leve) ================= */
   useEffect(() => {
     if (!started || gameOver) return;
 
-    const tick = (value: number) => value > 0 ? Math.max(0, value - 100) : value;
+    // Os 16 estados não precisam provocar trabalho 10 vezes por segundo.
+    // Mesmo em um celular com poucos FPS, descontamos o tempo de fato transcorrido.
+    let lastCooldownAt = Date.now();
     const globalInterval = setInterval(() => {
-      if (tutorialPausedRef.current) return;
+      const now = Date.now();
+      if (tutorialPausedRef.current) {
+        lastCooldownAt = now;
+        return;
+      }
+      const elapsedMs = Math.max(0, now - lastCooldownAt);
+      lastCooldownAt = now;
+      if (!elapsedMs) return;
+      const tick = (value: number) => value > 0 ? Math.max(0, value - elapsedMs) : value;
 
       setSwapCooldown(tick);
       setChainsCooldown(tick);
@@ -2496,7 +2528,7 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
       setGhostCooldown(tick);
       setSecondChanceCooldown(tick);
       setArmorCooldown(tick);
-    }, 100);
+    }, 250);
 
     return () => clearInterval(globalInterval);
   }, [started, gameOver]);
@@ -4280,11 +4312,11 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
                   event={defenseVisualEvents[bot.id]}
                 >
                   <View style={{ width: '200%', alignItems: 'center' }}>
-                    <Carro
+                    <MemoOfflineCarro
                       carType={bot.carType}
                       carColorFront={bot.carColorFront}
                       carColorBack={bot.carColorBack}
-                      speed={bot.speed}
+                      speed={Math.round(bot.speed * 2) / 2}
                       skin={bot.skin}
                       renderWidth={180}
                     />
@@ -4361,13 +4393,13 @@ function OfflineMapa({ initialDeck = ['swap', 'bullet', 'chains', 'tnt'] }: Mapa
               event={defenseVisualEvents.player}
             >
               <View style={{ width: '200%', alignItems: 'center' }}>
-                <Carro
+                <MemoOfflineCarro
                   carType={selectedCar}
                   carColorFront={selectedColorFront}
                   carColorBack={selectedColorBack}
                   paintFinishId={selectedFinishId}
                   equipment={selectedEquipment}
-                  speed={playerSpeed.current}
+                  speed={Math.round(playerSpeed.current * 2) / 2}
                   skin="default"
                   renderWidth={180}
                 />

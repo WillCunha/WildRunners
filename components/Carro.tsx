@@ -6,6 +6,11 @@ import { Animated, Easing, StyleSheet, View } from 'react-native';
 import CarEquipmentLayers from './Game/CarEquipmentLayers';
 import SkiaCarBody from './Game/SkiaCarBody';
 
+// Evita refazer a árvore Skia/equipamentos quando apenas a faixa das rodas muda.
+// As cores, acabamentos, peças e decalques continuam reativos.
+const MemoSkiaCarBody = memo(SkiaCarBody);
+const MemoCarEquipmentLayers = memo(CarEquipmentLayers);
+
 type CarKey = keyof typeof carMaps;
 
 interface CarroProps {
@@ -97,11 +102,23 @@ function Carro({
   const scaleX = RENDER_WIDTH / BASE_WIDTH;
   const scaleY = RENDER_HEIGHT / BASE_HEIGHT;
 
-  // Mantemos exatamente a geometria usada atualmente no Mapa para não deslocar as rodas.
-  const frontOffsetX = (car.wheels.mapa.rodaFrente.x || 0) * scaleX;
-  const frontOffsetY = (car.wheels.mapa.rodaFrente.y || 0) * scaleY;
-  const rearOffsetX = (car.wheels.mapa.rodaTras.x || 0) * scaleX;
-  const rearOffsetY = (car.wheels.mapa.rodaTras.y || 0) * scaleY;
+  // Estilos das rodas mantêm a MESMA geometria atual. Atualizam somente se
+  // modelo/largura mudarem, não em cada atualização de velocidade/estado.
+  const wheelStyles = useMemo(() => {
+    const wheelWidth = WHEEL_DIAMETER * scaleX;
+    const wheelHeight = WHEEL_DIAMETER * scaleY;
+    const makeWheelStyle = (position: { x: number; y: number }) => ({
+      width: wheelWidth,
+      height: wheelHeight,
+      left: position.x * scaleX * 2 - wheelWidth / 2,
+      bottom: position.y * scaleY * 2 - wheelHeight / 2,
+      transform: [{ rotate: spin }],
+    });
+    return {
+      rear: [styles.wheel, makeWheelStyle(car.wheels.mapa.rodaTras)],
+      front: [styles.wheel, makeWheelStyle(car.wheels.mapa.rodaFrente)],
+    };
+  }, [car, scaleX, scaleY, WHEEL_DIAMETER, spin]);
 
   return (
     <View
@@ -118,7 +135,7 @@ function Carro({
         Skia preserva a luminância da arte grayscale.
         Sombras e highlights continuam visíveis depois da recoloração.
       */}
-      <SkiaCarBody
+      <MemoSkiaCarBody
         carId={carType}
         width={RENDER_WIDTH}
         primaryColor={carColorFront}
@@ -127,7 +144,7 @@ function Carro({
         style={styles.carBase}
       />
 
-      <CarEquipmentLayers
+      <MemoCarEquipmentLayers
         carId={carType}
         width={RENDER_WIDTH}
         height={RENDER_HEIGHT}
@@ -138,43 +155,13 @@ function Carro({
       <Animated.Image
         source={car.wheelImage}
         resizeMode="contain"
-        style={[
-          styles.wheel,
-          {
-            width: WHEEL_DIAMETER * scaleX,
-            height: WHEEL_DIAMETER * scaleY,
-            left:
-              car.wheels.mapa.rodaTras.x * scaleX +
-              rearOffsetX -
-              (WHEEL_DIAMETER * scaleX) / 2,
-            bottom:
-              car.wheels.mapa.rodaTras.y * scaleY +
-              rearOffsetY -
-              (WHEEL_DIAMETER * scaleY) / 2,
-            transform: [{ rotate: spin }],
-          },
-        ]}
+        style={wheelStyles.rear}
       />
 
       <Animated.Image
         source={car.wheelImage}
         resizeMode="contain"
-        style={[
-          styles.wheel,
-          {
-            width: WHEEL_DIAMETER * scaleX,
-            height: WHEEL_DIAMETER * scaleY,
-            left:
-              car.wheels.mapa.rodaFrente.x * scaleX +
-              frontOffsetX -
-              (WHEEL_DIAMETER * scaleX) / 2,
-            bottom:
-              car.wheels.mapa.rodaFrente.y * scaleY +
-              frontOffsetY -
-              (WHEEL_DIAMETER * scaleY) / 2,
-            transform: [{ rotate: spin }],
-          },
-        ]}
+        style={wheelStyles.front}
       />
     </View>
   );
