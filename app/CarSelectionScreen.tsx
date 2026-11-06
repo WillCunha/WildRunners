@@ -4,11 +4,11 @@ import { AudioContext } from '@/context/AudioContext';
 import { useCarSelection } from '@/context/CarContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { signOutWildAccount } from '@/src/services/firebase/firebaseAuth';
-import { raceRewardsService } from '@/src/services/raceRewardsService';
 import {
     cancelWildReturnNotificationsAsync,
     requestWildNotificationPermissionOnEntryAsync,
-} from '@/src/utils/wildNotifications';
+} from '@/src/services/notifications/wildNotifications';
+import { raceRewardsService } from '@/src/services/raceRewardsService';
 import { usePlayerStore } from '@/src/store/playerStore';
 import type { EquippedCarEquipment, PaintFinishId } from '@/src/types/playerTypes';
 import { carMaps } from '@/src/utils/carMaps';
